@@ -73,6 +73,9 @@ final class ExportTests: XCTestCase {
     }
 
     func testExportMatchesTrim() async throws {
+        // GitHub's macOS VMs have no hardware scaler/encoder (AppleM2ScalerParavirtDriver missing) and the
+        // video pipeline hangs there; these run locally on real hardware.
+        try XCTSkipIf(ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] != nil, "no video hardware on CI VMs")
         let mov = Self.outDir.appendingPathComponent("synthetic.mov")
         try await Self.writeSyntheticMovie(to: mov)
         let project = makeProject()
@@ -159,6 +162,9 @@ final class ExportTests: XCTestCase {
 
     /// Clips [1,3] and [5,8] concatenated: 5.0 s, and composition 2.0 s is recording 5.0 s.
     func testExportConcatenatesClips() async throws {
+        // GitHub's macOS VMs have no hardware scaler/encoder (AppleM2ScalerParavirtDriver missing) and the
+        // video pipeline hangs there; these run locally on real hardware.
+        try XCTSkipIf(ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] != nil, "no video hardware on CI VMs")
         let mov = Self.outDir.appendingPathComponent("synthetic-cuts.mov")
         try await Self.writeSyntheticMovie(to: mov, staticScreen: false)   // every frame shows its own time
         var project = makeProject()
