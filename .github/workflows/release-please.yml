@@ -1,0 +1,42 @@
+name: release-please
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.rp.outputs.release_created }}
+      tag_name: ${{ steps.rp.outputs.tag_name }}
+    steps:
+      - id: rp
+        uses: googleapis/release-please-action@v5
+
+  build-macos:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - run: ./build.sh
+      - name: Guard against debug/dev-path builds
+        run: "! strings dist/Loupecast.app/Contents/MacOS/Loupecast | grep -E '/Users/[^/]+/'"
+      - name: Zip
+        env:
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          cd dist
+          ditto -c -k --keepParent Loupecast.app "Loupecast-$TAG.zip"
+          cp "Loupecast-$TAG.zip" Loupecast.zip
+          shasum -a 256 ./*.zip > SHA256SUMS.txt
+      - uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ needs.release-please.outputs.tag_name }}
+          files: |
+            dist/*.zip
+            dist/SHA256SUMS.txt

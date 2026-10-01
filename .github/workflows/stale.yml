@@ -1,0 +1,20 @@
+name: stale
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+permissions:
+  issues: write
+  pull-requests: write
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/stale@v11
+        with:
+          days-before-stale: 30
+          days-before-close: 14
+          exempt-issue-labels: 'pinned,security,good first issue'
+          exempt-pr-labels: 'pinned,security'
+          stale-issue-message: 'No activity for 30 days. This will close in 14 days unless there is new activity.'
+          stale-pr-message: 'No activity for 30 days. This will close in 14 days unless it is updated.'

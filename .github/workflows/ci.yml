@@ -1,0 +1,26 @@
+name: ci
+on:
+  pull_request:
+  push:
+    branches: [main]
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+jobs:
+  build-test:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - run: swift --version
+      - name: Test
+        run: swift test
+      - name: Build app (release)
+        run: ./build.sh
+      - name: No developer paths in the shipped binary
+        run: |
+          if strings dist/Loupecast.app/Contents/MacOS/Loupecast | grep -E '/Users/[^/]+/'; then
+            echo "::error::absolute developer path found in release binary"; exit 1
+          fi

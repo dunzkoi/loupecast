@@ -1,0 +1,17 @@
+name: welcome
+on:
+  issues:
+    types: [opened]
+  pull_request_target:
+    types: [opened]
+permissions:
+  issues: write
+  pull-requests: write
+jobs:
+  greet:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/first-interaction@v3
+        with:
+          issue_message: 'Thanks for opening your first issue! Please make sure the template is filled in so we can reproduce it.'
+          pr_message: 'Thanks for your first PR! CI and an automated review will run shortly. Please keep the PR title in Conventional Commits form (e.g. `fix: ...`).'

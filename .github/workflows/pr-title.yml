@@ -1,0 +1,14 @@
+name: pr-title
+on:
+  pull_request_target:
+    types: [opened, edited, synchronize, reopened]
+permissions:
+  pull-requests: read
+jobs:
+  conventional:
+    runs-on: ubuntu-latest
+    steps:
+      # Reads only the PR title via API. Never checks out PR code.
+      - uses: amannn/action-semantic-pull-request@v6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
