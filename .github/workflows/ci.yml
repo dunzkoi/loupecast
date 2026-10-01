@@ -21,7 +21,9 @@ jobs:
         timeout-minutes: 5
         run: swift test --skip-build --filter LoupecastCoreTests
       - name: Render tests
-        timeout-minutes: 10
+        timeout-minutes: 6
+        env:
+          NSUnbufferedIO: "YES"
         run: swift test --skip-build --filter LoupecastRenderTests
       - name: Build app (release)
         run: ./build.sh
