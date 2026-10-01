@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://dunzkoi.github.io/loupecast/sitemap.xml
