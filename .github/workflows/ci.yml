@@ -15,8 +15,14 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: swift --version
-      - name: Test
-        run: swift test
+      - name: Build tests
+        run: swift build --build-tests
+      - name: Core tests
+        timeout-minutes: 5
+        run: swift test --skip-build --filter LoupecastCoreTests
+      - name: Render tests
+        timeout-minutes: 10
+        run: swift test --skip-build --filter LoupecastRenderTests
       - name: Build app (release)
         run: ./build.sh
       - name: No developer paths in the shipped binary
