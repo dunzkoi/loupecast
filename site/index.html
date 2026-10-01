@@ -1,0 +1,562 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Loupecast · 클릭하면 확대되는 무료 Mac 화면 녹화</title>
+<meta name="description" content="Loupecast는 클릭한 곳을 자동으로 확대하고 필요 없는 구간을 잘라 1080p60 MP4로 내보내는 무료 오픈소스 macOS 메뉴바 녹화 앱입니다.">
+<meta name="keywords" content="Loupecast, 맥 화면 녹화, macOS 화면 녹화, 자동 줌, 스크린 레코더, 무료 화면 녹화, 오픈소스, Screen Studio 대안, 메뉴바 앱, 1080p60">
+<link rel="canonical" href="https://dunzkoi.github.io/loupecast/">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fafaf9" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0e0f11" media="(prefers-color-scheme: dark)">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Loupecast">
+<meta property="og:locale" content="ko_KR">
+<meta property="og:locale:alternate" content="en_US">
+<meta property="og:title" content="Loupecast · 클릭하면 확대되는 무료 Mac 화면 녹화">
+<meta property="og:description" content="클릭한 곳을 자동으로 확대하고, 필요 없는 구간을 잘라 1080p60 MP4로 내보내는 무료 오픈소스 macOS 녹화 앱.">
+<meta property="og:url" content="https://dunzkoi.github.io/loupecast/">
+<meta property="og:image" content="https://dunzkoi.github.io/loupecast/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Loupecast 편집 화면 일러스트와 '클릭하면 확대되는 무료 Mac 화면 녹화' 문구">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Loupecast · 클릭하면 확대되는 무료 Mac 화면 녹화">
+<meta name="twitter:description" content="클릭한 곳을 자동으로 확대하고, 필요 없는 구간을 잘라 1080p60 MP4로 내보내는 무료 오픈소스 macOS 녹화 앱.">
+<meta name="twitter:image" content="https://dunzkoi.github.io/loupecast/og.png">
+
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="site.webmanifest">
+
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Loupecast",
+  "description": "클릭한 곳을 자동으로 확대하고, 필요 없는 구간을 잘라 1080p60 MP4로 내보내는 무료 오픈소스 macOS 메뉴바 화면 녹화 앱.",
+  "url": "https://dunzkoi.github.io/loupecast/",
+  "downloadUrl": "https://github.com/dunzkoi/loupecast/releases/latest/download/Loupecast.zip",
+  "applicationCategory": "MultimediaApplication",
+  "operatingSystem": "macOS 15 or later",
+  "processorRequirements": "Apple Silicon",
+  "isAccessibleForFree": true,
+  "license": "https://opensource.org/licenses/MIT",
+  "image": "https://dunzkoi.github.io/loupecast/og.png",
+  "inLanguage": "ko",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "author": { "@type": "Person", "name": "Dunz Koi", "url": "https://github.com/dunzkoi" },
+  "sameAs": ["https://github.com/dunzkoi/loupecast"]
+}
+</script>
+
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: light-dark(#fafaf9, #0e0f11);
+  --surface: light-dark(#ffffff, #16181b);
+  --surface-2: light-dark(#f2f2f0, #1d1f23);
+  --line: light-dark(#e2e2df, #2a2c31);
+  --text: light-dark(#18181b, #ececed);
+  --muted: light-dark(#55555d, #a3a3ab);
+  --accent: light-dark(#cf3d14, #ff6a3d);
+  --accent-soft: light-dark(#fde7df, #3a1a10);
+  --on-accent: light-dark(#ffffff, #1b0e09);
+  --code-bg: light-dark(#18181b, #1d1f23);
+  --code-text: #ececed;
+  --radius: 14px;
+  --font: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.65 var(--font);
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+h1, h2, h3 { line-height: 1.25; letter-spacing: -0.02em; text-wrap: balance; margin: 0; }
+p { margin: 0; }
+a { color: inherit; }
+.wrap { max-width: 1160px; margin-inline: auto; padding-inline: 20px; }
+.icon { width: 1.1em; height: 1.1em; fill: currentColor; flex: none; }
+kbd {
+  font: 600 0.85em/1 var(--mono);
+  padding: 0.25em 0.5em;
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  background: var(--surface);
+}
+code { font-family: var(--mono); font-size: 0.92em; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 6px; }
+
+/* nav */
+.nav { position: sticky; top: 0; z-index: 10; background: color-mix(in oklch, var(--bg) 86%, transparent); backdrop-filter: blur(12px); border-bottom: 1px solid var(--line); }
+.nav .wrap { display: flex; align-items: center; gap: 28px; height: 60px; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; text-decoration: none; font-size: 17px; }
+.brand svg { width: 26px; height: 26px; }
+.nav ul { display: flex; gap: 22px; list-style: none; margin: 0 0 0 auto; padding: 0; font-size: 15px; }
+.nav ul a { text-decoration: none; color: var(--muted); }
+.nav ul a:hover { color: var(--text); }
+.nav .gh { display: inline-flex; align-items: center; gap: 6px; text-decoration: none; font-size: 15px; font-weight: 600; }
+@media (max-width: 720px) { .nav ul { display: none; } .nav .gh { margin-left: auto; } }
+
+/* buttons */
+.btn {
+  display: inline-flex; align-items: center; gap: 8px; white-space: nowrap;
+  height: 48px; padding-inline: 22px; border-radius: 999px;
+  font: 650 16px/1 var(--font); text-decoration: none; border: 1px solid transparent; cursor: pointer;
+  transition: transform .15s ease, background-color .15s ease;
+}
+.btn:active { transform: translateY(1px) scale(.98); }
+.btn-primary { background: var(--accent); color: var(--on-accent); }
+.btn-primary:hover { background: color-mix(in oklch, var(--accent) 88%, var(--text)); }
+.btn-ghost { border-color: var(--line); background: var(--surface); color: var(--text); }
+.btn-ghost:hover { border-color: var(--muted); }
+
+.cmd {
+  display: flex; align-items: center; gap: 10px; min-width: 0;
+  background: var(--code-bg); color: var(--code-text);
+  border-radius: 12px; padding: 6px 6px 6px 16px;
+}
+.cmd code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; padding-block: 8px; scrollbar-width: none; }
+.cmd code::before { content: "$ "; color: #8b8b93; }
+.copy {
+  display: inline-flex; align-items: center; gap: 6px; flex: none;
+  height: 36px; padding-inline: 12px; border-radius: 8px; border: 0; cursor: pointer;
+  background: #2c2e33; color: var(--code-text); font: 600 14px/1 var(--font);
+}
+.copy:hover { background: #3a3c42; }
+.copy[data-done] { color: #7ee2a8; }
+.copy .i-done, .copy[data-done] .i-idle { display: none; }
+.copy[data-done] .i-done { display: inline; }
+
+/* hero */
+.hero { padding-block: clamp(40px, 7vw, 88px) clamp(48px, 7vw, 96px); }
+.hero .wrap { display: grid; grid-template-columns: 1fr 1.15fr; gap: clamp(32px, 5vw, 64px); align-items: center; }
+.hero h1 { font-size: clamp(34px, 4.6vw, 54px); font-weight: 760; }
+.hero h1 em { font-style: normal; color: var(--accent); }
+.hero .lead { margin-top: 20px; font-size: clamp(17px, 1.6vw, 19px); color: var(--muted); max-width: 34em; }
+.hero .actions { margin-top: 32px; display: grid; gap: 14px; max-width: 520px; }
+.hero .actions .btn { justify-self: start; }
+.editor { width: 100%; height: auto; display: block; filter: drop-shadow(0 24px 48px light-dark(rgb(60 30 20 / .12), rgb(0 0 0 / .5))); }
+@media (max-width: 880px) {
+  .hero .wrap { grid-template-columns: 1fr; }
+}
+
+/* editor illustration */
+.ed-win { fill: var(--surface); stroke: var(--line); }
+.ed-bar { fill: var(--surface-2); }
+.ed-line { stroke: var(--line); }
+.ed-screen { fill: light-dark(#f6f6f4, #22252a); }
+.ed-block { fill: light-dark(#e6e6e2, #30333a); }
+.ed-block-2 { fill: light-dark(#d9d9d4, #3b3f47); }
+.ed-track { fill: var(--surface-2); }
+.ed-clip { fill: light-dark(#d4d8de, #39404b); }
+.ed-cap { fill: var(--accent-soft); stroke: var(--accent); }
+.ed-cap-g { fill: var(--accent); }
+.ed-hatch { stroke: var(--accent); }
+.ed-cut { fill: color-mix(in oklch, var(--accent) 8%, transparent); stroke: var(--accent); }
+.ed-play { fill: var(--text); stroke: var(--text); }
+.ed-muted { fill: var(--muted); }
+.ed-cursor { fill: var(--text); stroke: var(--surface); }
+@media (prefers-reduced-motion: no-preference) {
+  .ed-playhead { animation: sweep 7s cubic-bezier(.45, 0, .55, 1) infinite alternate; }
+  .ed-lens { animation: breathe 3.5s ease-in-out infinite; transform-origin: 400px 150px; transform-box: view-box; }
+}
+@keyframes sweep { from { transform: translateX(0); } to { transform: translateX(380px); } }
+@keyframes breathe { 50% { transform: scale(1.04); } }
+
+/* sections */
+section { padding-block: clamp(56px, 8vw, 104px); scroll-margin-top: 60px; }
+.sec-head { max-width: 640px; margin-bottom: clamp(28px, 4vw, 44px); }
+.sec-head h2 { font-size: clamp(27px, 3.2vw, 38px); font-weight: 740; }
+.sec-head p { margin-top: 12px; color: var(--muted); font-size: 17px; }
+.alt { background: var(--surface); border-block: 1px solid var(--line); }
+
+/* features bento */
+.bento { display: grid; grid-template-columns: 1.25fr 1fr; grid-template-rows: auto auto; gap: 16px; }
+.tile { border: 1px solid var(--line); border-radius: var(--radius); padding: 28px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
+.tile h3 { font-size: 21px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+.tile h3 .icon { color: var(--accent); width: 22px; height: 22px; }
+.tile p { color: var(--muted); }
+.tile-zoom { grid-row: span 2; background:
+  radial-gradient(120% 90% at 100% 100%, color-mix(in oklch, var(--accent) 22%, transparent), transparent 60%),
+  var(--surface); }
+.tile-zoom svg { margin-top: auto; width: 100%; height: auto; }
+.tile-cut { background:
+  repeating-linear-gradient(135deg, transparent 0 9px, color-mix(in oklch, var(--accent) 9%, transparent) 9px 11px),
+  var(--surface); }
+.tile-menu { background: var(--surface-2); }
+.keys { display: flex; flex-wrap: wrap; gap: 8px 14px; margin-top: 8px; font-size: 15px; color: var(--muted); }
+.keys span { display: inline-flex; align-items: center; gap: 6px; }
+.menu-mock { margin-top: 8px; display: grid; gap: 2px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 6px; font-size: 14.5px; }
+.menu-mock div { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 7px 10px; border-radius: 6px; }
+.menu-mock .hot { font-weight: 600; }
+.menu-mock .hot kbd { font-size: 12px; }
+.menu-mock hr { border: 0; border-top: 1px solid var(--line); margin: 3px 6px; }
+.sw { width: 30px; height: 18px; border-radius: 999px; background: var(--line); position: relative; flex: none; }
+.sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / .2); }
+.sw.on { background: var(--accent); }
+.sw.on::after { left: 14px; }
+@media (max-width: 820px) {
+  .bento { grid-template-columns: 1fr; }
+  .tile-zoom { grid-row: auto; }
+  .tile { padding: 22px; }
+}
+
+/* compare */
+.compare { display: grid; grid-template-columns: 1fr 1.5fr; gap: clamp(28px, 5vw, 64px); align-items: start; }
+.compare .sec-head { margin-bottom: 0; }
+.table-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg); }
+table { width: 100%; border-collapse: collapse; font-size: 15.5px; min-width: 460px; }
+th, td { text-align: left; padding: 14px 18px; vertical-align: top; }
+thead th { font-size: 14px; color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--line); }
+thead th.us { color: var(--accent); }
+tbody th { font-weight: 600; color: var(--muted); white-space: nowrap; }
+tbody tr + tr > * { border-top: 1px solid color-mix(in oklch, var(--line) 60%, transparent); }
+td.us { font-weight: 650; background: color-mix(in oklch, var(--accent) 6%, transparent); }
+@media (max-width: 880px) { .compare { grid-template-columns: 1fr; } }
+@media (max-width: 560px) { table { min-width: 0; font-size: 14.5px; } th, td { padding: 12px 10px; } tbody th { white-space: normal; } }
+
+/* install */
+.install { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.path { border: 1px solid var(--line); border-radius: var(--radius); padding: 26px; background: var(--surface); display: grid; gap: 14px; align-content: start; }
+.path h3 { font-size: 19px; }
+.path p { color: var(--muted); }
+.path ol { margin: 0; padding-left: 1.3em; color: var(--muted); display: grid; gap: 6px; }
+.after { margin-top: 16px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.note { border-radius: var(--radius); padding: 24px 26px; display: grid; gap: 12px; align-content: start; }
+.note h3 { font-size: 17px; }
+.note p { color: var(--muted); font-size: 15.5px; }
+.note-warn { background: var(--accent-soft); }
+.note-warn p { color: var(--text); }
+.note-perm { border: 1px dashed var(--line); }
+@media (max-width: 820px) { .install, .after { grid-template-columns: 1fr; } .path { padding: 22px; } }
+
+/* faq */
+.faq { max-width: 760px; }
+.faq details { border-bottom: 1px solid var(--line); }
+.faq summary { cursor: pointer; list-style: none; padding: 20px 36px 20px 0; font-weight: 650; font-size: 17.5px; position: relative; }
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::after { content: "+"; position: absolute; right: 4px; top: 50%; translate: 0 -50%; font-size: 24px; font-weight: 400; color: var(--muted); transition: rotate .2s ease; }
+.faq details[open] summary::after { rotate: 45deg; }
+.faq details p { padding: 0 0 22px; color: var(--muted); max-width: 65ch; }
+
+/* github band */
+.gh-band .wrap { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 24px; }
+.gh-band h2 { font-size: clamp(24px, 2.8vw, 32px); font-weight: 720; }
+.gh-band p { margin-top: 8px; color: var(--muted); }
+
+.en { padding-block: 40px; border-top: 1px solid var(--line); }
+.en h2 { font-size: 18px; margin-bottom: 8px; }
+.en p { color: var(--muted); max-width: 70ch; font-size: 15.5px; }
+
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+footer { padding-block: 28px 40px; color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); }
+footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 20px; justify-content: space-between; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+<symbol id="i-check" viewBox="0 0 256 256"><path d="M229.66,77.66l-128,128a8,8,0,0,1-11.32,0l-56-56a8,8,0,0,1,11.32-11.32L96,188.69,218.34,66.34a8,8,0,0,1,11.32,11.32Z"/></symbol>
+<symbol id="i-copy" viewBox="0 0 256 256"><path d="M216,32H88a8,8,0,0,0-8,8V80H40a8,8,0,0,0-8,8V216a8,8,0,0,0,8,8H168a8,8,0,0,0,8-8V176h40a8,8,0,0,0,8-8V40A8,8,0,0,0,216,32ZM160,208H48V96H160Zm48-48H176V88a8,8,0,0,0-8-8H96V48H208Z"/></symbol>
+<symbol id="i-download-simple" viewBox="0 0 256 256"><path d="M224,144v64a8,8,0,0,1-8,8H40a8,8,0,0,1-8-8V144a8,8,0,0,1,16,0v56H208V144a8,8,0,0,1,16,0Zm-101.66,5.66a8,8,0,0,0,11.32,0l40-40a8,8,0,0,0-11.32-11.32L136,124.69V32a8,8,0,0,0-16,0v92.69L93.66,98.34a8,8,0,0,0-11.32,11.32Z"/></symbol>
+<symbol id="i-github-logo" viewBox="0 0 256 256"><path d="M208.31,75.68A59.78,59.78,0,0,0,202.93,28,8,8,0,0,0,196,24a59.75,59.75,0,0,0-48,24H124A59.75,59.75,0,0,0,76,24a8,8,0,0,0-6.93,4,59.78,59.78,0,0,0-5.38,47.68A58.14,58.14,0,0,0,56,104v8a56.06,56.06,0,0,0,48.44,55.47A39.8,39.8,0,0,0,96,192v8H72a24,24,0,0,1-24-24A40,40,0,0,0,8,136a8,8,0,0,0,0,16,24,24,0,0,1,24,24,40,40,0,0,0,40,40H96v16a8,8,0,0,0,16,0V192a24,24,0,0,1,48,0v40a8,8,0,0,0,16,0V192a39.8,39.8,0,0,0-8.44-24.53A56.06,56.06,0,0,0,216,112v-8A58.14,58.14,0,0,0,208.31,75.68ZM200,112a40,40,0,0,1-40,40H112a40,40,0,0,1-40-40v-8a41.74,41.74,0,0,1,6.9-22.48A8,8,0,0,0,80,73.83a43.81,43.81,0,0,1,.79-33.58,43.88,43.88,0,0,1,32.32,20.06A8,8,0,0,0,119.82,64h32.35a8,8,0,0,0,6.74-3.69,43.87,43.87,0,0,1,32.32-20.06A43.81,43.81,0,0,1,192,73.83a8.09,8.09,0,0,0,1,7.65A41.72,41.72,0,0,1,200,104Z"/></symbol>
+<symbol id="i-magnifying-glass-plus" viewBox="0 0 256 256"><path d="M152,112a8,8,0,0,1-8,8H120v24a8,8,0,0,1-16,0V120H80a8,8,0,0,1,0-16h24V80a8,8,0,0,1,16,0v24h24A8,8,0,0,1,152,112Zm77.66,117.66a8,8,0,0,1-11.32,0l-50.06-50.07a88.11,88.11,0,1,1,11.31-11.31l50.07,50.06A8,8,0,0,1,229.66,229.66ZM112,184a72,72,0,1,0-72-72A72.08,72.08,0,0,0,112,184Z"/></symbol>
+<symbol id="i-scissors" viewBox="0 0 256 256"><path d="M157.73,113.13A8,8,0,0,1,159.82,102L227.48,55.7a8,8,0,0,1,9,13.21l-67.67,46.3a7.92,7.92,0,0,1-4.51,1.4A8,8,0,0,1,157.73,113.13Zm80.87,85.09a8,8,0,0,1-11.12,2.08L136,137.7,93.49,166.78a36,36,0,1,1-9-13.19L121.83,128,84.44,102.41a35.86,35.86,0,1,1,9-13.19l143,97.87A8,8,0,0,1,238.6,198.22ZM80,180a20,20,0,1,0-5.86,14.14A19.85,19.85,0,0,0,80,180ZM74.14,90.13a20,20,0,1,0-28.28,0A19.85,19.85,0,0,0,74.14,90.13Z"/></symbol>
+<symbol id="i-sliders-horizontal" viewBox="0 0 256 256"><path d="M40,88H73a32,32,0,0,0,62,0h81a8,8,0,0,0,0-16H135a32,32,0,0,0-62,0H40a8,8,0,0,0,0,16Zm64-24A16,16,0,1,1,88,80,16,16,0,0,1,104,64ZM216,168H199a32,32,0,0,0-62,0H40a8,8,0,0,0,0,16h97a32,32,0,0,0,62,0h17a8,8,0,0,0,0-16Zm-48,24a16,16,0,1,1,16-16A16,16,0,0,1,168,192Z"/></symbol>
+<symbol id="logo" viewBox="0 0 64 64"><circle cx="27" cy="27" r="19" fill="none" stroke="currentColor" stroke-width="7"/><circle cx="27" cy="27" r="8" fill="#ff5a2a"/><path d="M41 41 56 56" stroke="currentColor" stroke-width="8" stroke-linecap="round"/></symbol>
+</svg>
+
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="./"><svg aria-hidden="true"><use href="#logo"/></svg>Loupecast</a>
+    <ul>
+      <li><a href="#features">기능</a></li>
+      <li><a href="#compare">비교</a></li>
+      <li><a href="#install">설치</a></li>
+      <li><a href="#faq">FAQ</a></li>
+    </ul>
+    <a class="gh" href="https://github.com/dunzkoi/loupecast"><svg class="icon" aria-hidden="true"><use href="#i-github-logo"/></svg>GitHub</a>
+  </div>
+</header>
+
+<main>
+<section class="hero">
+  <div class="wrap">
+    <div>
+      <h1>클릭한 곳이 <em>알아서 커지는</em> Mac 화면 녹화</h1>
+      <p class="lead">Loupecast는 무료 오픈소스 macOS 메뉴바 녹화 앱입니다. 필요 없는 구간을 잘라 1080p60 MP4로 내보냅니다.</p>
+      <div class="actions">
+        <a class="btn btn-primary" href="https://github.com/dunzkoi/loupecast/releases/latest/download/Loupecast.zip"><svg class="icon" aria-hidden="true"><use href="#i-download-simple"/></svg>다운로드</a>
+        <div class="cmd">
+          <code>brew install --cask dunzkoi/tap/loupecast</code>
+          <button class="copy" type="button" data-copy="brew install --cask dunzkoi/tap/loupecast" aria-label="Homebrew 설치 명령 복사"><svg class="icon i-idle" aria-hidden="true"><use href="#i-copy"/></svg><svg class="icon i-done" aria-hidden="true"><use href="#i-check"/></svg><span>복사</span></button>
+        </div>
+      </div>
+    </div>
+
+    <svg class="editor" viewBox="0 0 640 470" role="img" aria-label="Loupecast 편집 화면 일러스트: 미리보기, 줌 구간, 잘라낼 구간이 표시된 타임라인">
+      <defs>
+        <linearGradient id="frame" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#ff7a45"/><stop offset=".55" stop-color="#e2471d"/><stop offset="1" stop-color="#7a1f10"/>
+        </linearGradient>
+        <pattern id="hatch" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+          <line x1="0" y1="0" x2="0" y2="8" class="ed-hatch" stroke-width="2.5"/>
+        </pattern>
+        <clipPath id="screenclip"><rect x="64" y="70" width="512" height="240" rx="6"/></clipPath>
+      </defs>
+      <!-- window -->
+      <rect class="ed-win" x="1" y="1" width="638" height="468" rx="16"/>
+      <path class="ed-bar" d="M1 17a16 16 0 0 1 16-16h606a16 16 0 0 1 16 16v23H1z"/>
+      <circle cx="22" cy="20" r="5.5" fill="#ff5f57"/><circle cx="40" cy="20" r="5.5" fill="#febc2e"/><circle cx="58" cy="20" r="5.5" fill="#28c840"/>
+      <line class="ed-line" x1="1" y1="40" x2="639" y2="40"/>
+      <!-- preview: gradient frame -->
+      <rect x="40" y="52" width="560" height="276" rx="12" fill="url(#frame)"/>
+      <g clip-path="url(#screenclip)">
+        <rect class="ed-screen" x="64" y="70" width="512" height="240"/>
+        <rect class="ed-block" x="64" y="70" width="512" height="18"/>
+        <rect class="ed-block" x="80" y="104" width="120" height="190" rx="5"/>
+        <rect class="ed-block-2" x="214" y="104" width="200" height="14" rx="4"/>
+        <rect class="ed-block" x="214" y="128" width="340" height="8" rx="4"/>
+        <rect class="ed-block" x="214" y="144" width="300" height="8" rx="4"/>
+        <rect class="ed-block" x="214" y="170" width="160" height="110" rx="6"/>
+        <rect class="ed-block" x="388" y="170" width="166" height="110" rx="6"/>
+      </g>
+      <!-- zoom lens over click point -->
+      <g class="ed-lens">
+        <rect x="320" y="96" width="170" height="104" rx="10" fill="none" stroke="#fff" stroke-width="3" stroke-dasharray="7 6"/>
+        <path class="ed-cursor" d="M420 140l0 30 8-8 6 13 6-3-6-12 11 0z" stroke-width="2" stroke-linejoin="round"/>
+        <circle cx="420" cy="140" r="16" fill="none" stroke="#fff" stroke-width="2.5" opacity=".9"/>
+      </g>
+      <!-- transport -->
+      <path class="ed-play" d="M308 344l14 8-14 8z"/>
+      <rect class="ed-muted" x="276" y="346" width="3" height="12" rx="1"/><path class="ed-muted" d="M292 346l-10 6 10 6z"/>
+      <path class="ed-muted" d="M338 346l10 6-10 6z"/><rect class="ed-muted" x="350" y="346" width="3" height="12" rx="1"/>
+      <line class="ed-line" x1="1" y1="374" x2="639" y2="374"/>
+      <!-- zoom track -->
+      <rect class="ed-track" x="24" y="386" width="592" height="28" rx="6"/>
+      <g>
+        <rect class="ed-cap" x="70" y="390" width="96" height="20" rx="10" stroke-width="1.5"/>
+        <use href="#i-magnifying-glass-plus" x="110" y="393" width="14" height="14" class="ed-cap-g"/>
+        <rect class="ed-cap" x="300" y="390" width="128" height="20" rx="10" stroke-width="1.5"/>
+        <use href="#i-magnifying-glass-plus" x="357" y="393" width="14" height="14" class="ed-cap-g"/>
+        <rect class="ed-cap" x="500" y="390" width="72" height="20" rx="10" stroke-width="1.5"/>
+        <use href="#i-magnifying-glass-plus" x="529" y="393" width="14" height="14" class="ed-cap-g"/>
+      </g>
+      <!-- clip track -->
+      <rect class="ed-track" x="24" y="422" width="592" height="34" rx="6"/>
+      <rect class="ed-clip" x="28" y="426" width="196" height="26" rx="4"/>
+      <rect x="228" y="426" width="78" height="26" rx="4" fill="url(#hatch)"/>
+      <rect class="ed-cut" x="228" y="426" width="78" height="26" rx="4" stroke-width="1.5" stroke-dasharray="4 3"/>
+      <rect class="ed-clip" x="310" y="426" width="302" height="26" rx="4"/>
+      <!-- playhead -->
+      <g class="ed-playhead">
+        <line class="ed-play" x1="140" y1="380" x2="140" y2="462" stroke-width="2"/>
+        <path class="ed-play" d="M134 378h12v6l-6 6-6-6z"/>
+      </g>
+    </svg>
+  </div>
+</section>
+
+<section id="features" class="alt">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2>녹화하고, 다듬고, 내보내기까지</h2>
+      <p>녹화를 멈추면 편집 창이 바로 열립니다. 줌은 이미 들어가 있습니다.</p>
+    </div>
+    <div class="bento">
+      <article class="tile tile-zoom">
+        <h3><svg class="icon" aria-hidden="true"><use href="#i-magnifying-glass-plus"/></svg>클릭하면 자동 줌</h3>
+        <p>녹화 중에 클릭한 지점이 그대로 줌 구간이 됩니다. 필요 없는 줌은 선택해서 Delete로 지우고, 원하는 곳에는 "줌 추가"로 넣습니다.</p>
+        <svg viewBox="0 0 420 220" aria-hidden="true">
+          <rect x="10" y="20" width="400" height="190" rx="12" fill="url(#frame)"/>
+          <rect x="26" y="34" width="368" height="162" rx="6" class="ed-screen"/>
+          <rect x="44" y="52" width="90" height="126" rx="5" class="ed-block"/>
+          <rect x="148" y="52" width="150" height="12" rx="4" class="ed-block-2"/>
+          <rect x="148" y="74" width="226" height="8" rx="4" class="ed-block"/>
+          <rect x="148" y="90" width="190" height="8" rx="4" class="ed-block"/>
+          <rect x="148" y="112" width="226" height="66" rx="6" class="ed-block"/>
+          <rect x="226" y="66" width="150" height="90" rx="10" fill="none" stroke="#fff" stroke-width="3" stroke-dasharray="7 6"/>
+          <path class="ed-cursor" d="M300 100l0 30 8-8 6 13 6-3-6-12 11 0z" stroke-width="2" stroke-linejoin="round"/>
+        </svg>
+      </article>
+      <article class="tile tile-cut">
+        <h3><svg class="icon" aria-hidden="true"><use href="#i-scissors"/></svg>키보드로 컷 편집</h3>
+        <p>재생 위치에서 나누고, 구간을 골라 지우고, 실수하면 되돌립니다.</p>
+        <div class="keys">
+          <span><kbd>D</kbd> 나누기</span>
+          <span><kbd>Delete</kbd> 잘라내기</span>
+          <span><kbd>⌘Z</kbd> 되돌리기</span>
+          <span><kbd>I</kbd> <kbd>O</kbd> 시작·끝 지정</span>
+        </div>
+      </article>
+      <article class="tile tile-menu">
+        <h3><svg class="icon" aria-hidden="true"><use href="#i-sliders-horizontal"/></svg>메뉴바에서 바로 설정</h3>
+        <p><kbd>⌘⇧2</kbd>로 녹화를 시작하고 멈춥니다. 내보낸 영상은 1080p60 H.264 MP4로 <code>~/Movies</code>에 저장됩니다.</p>
+        <div class="menu-mock" aria-label="Loupecast 메뉴 항목과 기본값">
+          <div class="hot">녹화 시작 <kbd>⌘⇧2</kbd></div>
+          <hr>
+          <div>마이크 녹음 <span class="sw" role="img" aria-label="기본 꺼짐"></span></div>
+          <div>컴퓨터 소리 녹음 <span class="sw on" role="img" aria-label="기본 켜짐"></span></div>
+          <div>영상 속 메뉴 막대 숨기기 <span class="sw on" role="img" aria-label="기본 켜짐"></span></div>
+        </div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section id="compare">
+  <div class="wrap compare">
+    <div class="sec-head">
+      <h2>유료 녹화 앱과 비교</h2>
+      <p>유료 앱이 기능은 더 많습니다. 녹화하고, 줌을 넣고, 잘라서 내보내는 데까지라면 Loupecast로 충분합니다.</p>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th scope="col"><span class="sr">항목</span></th><th scope="col" class="us">Loupecast</th><th scope="col">유료 녹화 앱 (예: Screen Studio)</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">가격</th><td class="us">무료</td><td>유료</td></tr>
+          <tr><th scope="row">소스 코드</th><td class="us">공개 (MIT)</td><td>비공개</td></tr>
+          <tr><th scope="row">클릭 자동 줌</th><td class="us">있음</td><td>있음</td></tr>
+          <tr><th scope="row">컷 편집</th><td class="us">있음</td><td>있음</td></tr>
+          <tr><th scope="row">내보내기</th><td class="us">1080p60 H.264 MP4</td><td>제품마다 다름</td></tr>
+          <tr><th scope="row">네트워크 요청</th><td class="us">없음, 텔레메트리 없음</td><td>제품마다 다름</td></tr>
+          <tr><th scope="row">지원 환경</th><td class="us">macOS 15 이상, Apple Silicon</td><td>제품마다 다름</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section id="install" class="alt">
+  <div class="wrap">
+    <div class="sec-head">
+      <h2>설치</h2>
+      <p>Apple Silicon Mac, macOS 15 이상에서 동작합니다. 앱은 Dock이 아니라 메뉴바에 나타납니다.</p>
+    </div>
+    <div class="install">
+      <div class="path">
+        <h3>Homebrew로 설치</h3>
+        <p>터미널에 한 줄이면 됩니다.</p>
+        <div class="cmd">
+          <code>brew install --cask dunzkoi/tap/loupecast</code>
+          <button class="copy" type="button" data-copy="brew install --cask dunzkoi/tap/loupecast" aria-label="Homebrew 설치 명령 복사"><svg class="icon i-idle" aria-hidden="true"><use href="#i-copy"/></svg><svg class="icon i-done" aria-hidden="true"><use href="#i-check"/></svg><span>복사</span></button>
+        </div>
+      </div>
+      <div class="path">
+        <h3>zip 파일로 설치</h3>
+        <ol>
+          <li><a href="https://github.com/dunzkoi/loupecast/releases/latest/download/Loupecast.zip">Loupecast.zip</a>을 받아 압축을 풉니다.</li>
+          <li><code>Loupecast.app</code>을 응용 프로그램 폴더로 옮깁니다.</li>
+        </ol>
+      </div>
+    </div>
+    <div class="after">
+      <div class="note note-warn">
+        <h3>"손상된 앱" 경고가 뜨면</h3>
+        <p>아직 Apple 공증을 받지 않아서 macOS가 막을 수 있습니다. 처음 한 번만 아래 명령을 실행하세요.</p>
+        <div class="cmd">
+          <code>xattr -dr com.apple.quarantine /Applications/Loupecast.app</code>
+          <button class="copy" type="button" data-copy="xattr -dr com.apple.quarantine /Applications/Loupecast.app" aria-label="xattr 명령 복사"><svg class="icon i-idle" aria-hidden="true"><use href="#i-copy"/></svg><svg class="icon i-done" aria-hidden="true"><use href="#i-check"/></svg><span>복사</span></button>
+        </div>
+      </div>
+      <div class="note note-perm">
+        <h3>화면 녹화 권한 켜기</h3>
+        <p>처음 녹화할 때 시스템 설정에서 <strong>화면 및 시스템 오디오 녹음</strong> 권한을 켭니다. 그다음 Loupecast를 종료했다가 다시 엽니다.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="faq">
+  <div class="wrap">
+    <div class="sec-head"><h2>자주 묻는 질문</h2></div>
+    <div class="faq">
+      <details>
+        <summary>녹화한 영상이 어딘가로 전송되나요?</summary>
+        <p>아니요. Loupecast는 네트워크 요청을 하지 않습니다. 녹화 원본은 <code>~/Library/Application Support/Loupecast/Recordings</code>에, 내보낸 영상은 <code>~/Movies</code>에만 저장됩니다. 업로드, 분석, 텔레메트리가 없습니다.</p>
+      </details>
+      <details>
+        <summary>어떤 권한이 필요한가요?</summary>
+        <p>시스템 설정의 <strong>화면 및 시스템 오디오 녹음</strong> 권한이 필요합니다. 권한을 켠 뒤에는 Loupecast를 한 번 종료했다가 다시 열어야 적용됩니다.</p>
+      </details>
+      <details>
+        <summary>업데이트하면 화면 녹화 권한을 다시 켜야 하나요?</summary>
+        <p>네. 아직 Apple Developer ID가 없어서 릴리스 빌드를 ad-hoc으로 서명하는데, macOS는 이 권한을 빌드마다 따로 기억합니다. 시스템 설정에서 기존 Loupecast 항목을 지우고 다시 켜 주세요.</p>
+      </details>
+      <details>
+        <summary>"손상된 앱" 또는 "열 수 없음" 경고가 떠요.</summary>
+        <p>공증을 받지 않은 앱이라서 생기는 경고입니다. 터미널에서 <code>xattr -dr com.apple.quarantine /Applications/Loupecast.app</code>을 한 번 실행하면 열립니다.</p>
+      </details>
+      <details>
+        <summary>메뉴바 아이콘이 안 보여요.</summary>
+        <p>메뉴바가 꽉 차면 macOS가 새 아이콘을 숨길 수 있습니다. 시스템 설정의 메뉴 막대 항목을 확인하거나, 그냥 <kbd>⌘⇧2</kbd>를 눌러 녹화를 시작하세요.</p>
+      </details>
+      <details>
+        <summary>Intel Mac에서도 되나요?</summary>
+        <p>아니요. Apple Silicon Mac, macOS 15 이상에서만 동작합니다.</p>
+      </details>
+    </div>
+  </div>
+</section>
+
+<section class="gh-band alt">
+  <div class="wrap">
+    <div>
+      <h2>소스 코드는 전부 GitHub에 있습니다</h2>
+      <p>MIT 라이선스이고 외부 의존성이 없습니다. 버그 제보와 PR을 환영합니다.</p>
+    </div>
+    <a class="btn btn-ghost" href="https://github.com/dunzkoi/loupecast"><svg class="icon" aria-hidden="true"><use href="#i-github-logo"/></svg>GitHub에서 보기</a>
+  </div>
+</section>
+
+<section class="en" lang="en">
+  <div class="wrap">
+    <h2>In English</h2>
+    <p>Loupecast is a free, open-source macOS menu-bar screen recorder. It zooms in where you click, lets you cut the boring parts, and exports a 1080p60 MP4. It makes no network requests.</p>
+    <p style="margin-top:8px">Requires macOS 15+ on Apple Silicon; the interface is currently in Korean. Install with <code>brew install --cask dunzkoi/tap/loupecast</code>.</p>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>Loupecast · MIT © 2026 Dunz Koi</span>
+    <a href="https://github.com/dunzkoi/loupecast/releases/latest">릴리스 노트</a>
+  </div>
+</footer>
+
+<div id="copy-status" class="sr" role="status" aria-live="polite"></div>
+<script>
+for (const b of document.querySelectorAll('[data-copy]')) {
+  b.addEventListener('click', async () => {
+    const text = b.dataset.copy;
+    try { await navigator.clipboard.writeText(text); }
+    catch {
+      // file:// or old browsers: select the command so ⌘C works
+      const r = document.createRange(); r.selectNodeContents(b.previousElementSibling);
+      getSelection().removeAllRanges(); getSelection().addRange(r);
+      document.getElementById('copy-status').textContent = '명령을 선택했습니다. ⌘C로 복사하세요.';
+      return;
+    }
+    b.dataset.done = ''; b.querySelector('span').textContent = '복사됨';
+    document.getElementById('copy-status').textContent = '복사했습니다.';
+    clearTimeout(b._t); b._t = setTimeout(() => { delete b.dataset.done; b.querySelector('span').textContent = '복사'; }, 1800);
+  });
+}
+</script>
+</body>
+</html>
