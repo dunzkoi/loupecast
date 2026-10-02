@@ -74,6 +74,10 @@ enum Updater {
             do { try await install() } catch {
                 failed = tag
                 NSLog("Loupecast: update to %@ failed: %@", tag, "\(error)")
+                if progress != nil {   // a menu click joined this install: don't leave its window hanging
+                    closeProgress()
+                    show("업데이트를 설치하지 못했습니다", error.localizedDescription)
+                }
             }
         }
     }
@@ -147,6 +151,8 @@ enum Updater {
         cfg.createsNewApplicationInstance = true
         cfg.activates = false
         do { _ = try await NSWorkspace.shared.openApplication(at: app, configuration: cfg) } catch {
+            defaults.removeObject(forKey: updatedToKey)
+            defaults.removeObject(forKey: updatedManuallyKey)
             throw UpdateError("새 버전은 설치됐지만 다시 열지 못했습니다. Loupecast를 직접 다시 열어 주세요. (\(error.localizedDescription))")
         }
         NSApp.terminate(nil)
