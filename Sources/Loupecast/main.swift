@@ -10,6 +10,7 @@ import SwiftUI
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegate {
     /// UserDefaults keys; both apply to the next recording.
     static let micKey = "recordMicrophone", systemAudioKey = "recordSystemAudio", hideMenuBarKey = "hideMenuBar"
+    static let screenRequestedKey = "screenAccessRequested"
 
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private var recorder: Recorder?
@@ -254,14 +255,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     private func start() async {
         let defaults = UserDefaults.standard
         let mic = defaults.bool(forKey: Self.micKey)
+        var prompted = false   // macOS showed its own prompt; our window on top of it would be a duplicate
         if mic, AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined {
             _ = await AVCaptureDevice.requestAccess(for: .audio)
         }
         let screenOK = CGPreflightScreenCaptureAccess()
         let micOK = !mic || AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
         guard screenOK, micOK else {
-            if !screenOK { CGRequestScreenCaptureAccess() }   // registers Loupecast in the list
-            showPermissions(needsMic: mic)
+            if !screenOK {
+                let reset = await Self.resetStaleScreenGrantOnce()
+                // the system prompt appears only while the app has no record yet: first request, or right after a reset
+                prompted = reset || !defaults.bool(forKey: Self.screenRequestedKey)
+                defaults.set(true, forKey: Self.screenRequestedKey)
+                CGRequestScreenCaptureAccess()   // registers Loupecast in the list
+            }
+            if !prompted { showPermissions(needsMic: mic) }
             return
         }
         do {
@@ -342,6 +350,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     #endif
 
     // MARK: permissions + alerts
+
+    /// Builds up to 0.3.0 were ad-hoc signed, so their Screen Recording grant is pinned to that build's cdhash.
+    /// The switch in System Settings stays on but no longer matches, and toggling it doesn't refresh the pin.
+    /// Dropping the record once lets the request above re-register it against the release certificate.
+    /// Once only: after the user switches it on, preflight stays false until relaunch, and a second reset would undo it.
+    static func resetStaleScreenGrantOnce() async -> Bool {
+        let key = "screenGrantResetForReleaseCert"
+        guard !UserDefaults.standard.bool(forKey: key), let id = Bundle.main.bundleIdentifier else { return false }
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
+        p.arguments = ["reset", "ScreenCapture", id]
+        // off the main thread: a hung tccutil must not freeze the menu
+        let ok = await withCheckedContinuation { (done: CheckedContinuation<Bool, Never>) in
+            p.terminationHandler = { done.resume(returning: $0.terminationStatus == 0) }
+            do { try p.run() } catch { done.resume(returning: false) }
+        }
+        if ok { UserDefaults.standard.set(true, forKey: key) }   // a failed reset is retried next time
+        return ok
+    }
 
     func showPermissions(needsMic: Bool) {
         permissionWindow?.close()
@@ -466,7 +493,7 @@ struct PermissionView: View {
                               detail: "시스템 설정 › 개인정보 보호 및 보안 › 마이크에서 Loupecast를 켭니다.",
                               pane: "Privacy_Microphone")
             }
-            Text("화면 녹화 권한은 켠 다음 Loupecast를 종료했다가 다시 열어야 적용됩니다.")
+            Text("화면 녹화 권한은 켠 다음 Loupecast를 종료했다가 다시 열어야 적용됩니다. 켜져 있는데도 이 창이 계속 뜨면, 목록에서 Loupecast를 선택해 −로 지운 뒤 녹화를 다시 시작하세요.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
