@@ -4,15 +4,19 @@ import LoupecastCore
 
 /// Self-update from GitHub releases: checks at launch and daily; when a newer tag exists and the app
 /// is idle (no recording, no editor), swaps the running bundle for the release zip and relaunches.
-// ponytail: trust is HTTPS to github.com plus the release's own SHA256SUMS; move to Sparkle (EdDSA appcast) if the
-// releases ever need a signing chain independent of the GitHub account.
+// ponytail: the signing key lives in a GitHub Actions secret, so a compromised GitHub account can still ship an
+// update; move to Sparkle (EdDSA key kept offline) if that ever matters.
 @MainActor
 enum Updater {
     static let repo = "dunzkoi/loupecast"
+    /// Only bundles signed by the release identity (release-please.yml imports it) are installed.
+    static let requirement = #"=identifier "com.flowoodz.loupecast" and certificate leaf = H"14483067735e80133538834400a7dc458392ad4c""#
     /// Newer release tag ("v0.3.0") found by the last check, until it is installed.
     private(set) static var available: String?
     private static var isIdle: () -> Bool = { false }
     private static var installing = false
+    /// Tag whose automatic install failed; retried after the next daily check, not on every editor close.
+    private static var failed: String?
 
     static var current: String { Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0" }
 
@@ -39,14 +43,20 @@ enum Updater {
             let tag = try JSONDecoder().decode(Release.self, from: data).tag_name
             guard Version.isNewer(tag, than: current) else { return }
             available = tag
+            failed = nil
             installIfIdle()
         } catch { NSLog("Loupecast: update check failed: %@", "\(error)") }
     }
 
     /// Called after a check, a recording stops, or an editor closes.
     static func installIfIdle() {
-        guard available != nil, canInstall, isIdle() else { return }
-        Task { try? await install() }
+        guard let tag = available, tag != failed, canInstall, isIdle() else { return }
+        Task {
+            do { try await install() } catch {
+                failed = tag
+                NSLog("Loupecast: update to %@ failed: %@", tag, "\(error)")
+            }
+        }
     }
 
     /// Manual install from the menu; a non-replaceable bundle gets the release page instead.
@@ -91,7 +101,7 @@ enum Updater {
         guard let version, "v" + version == tag else {
             throw UpdateError("받은 앱의 버전(\(version ?? "?"))이 \(tag)와 다릅니다.")
         }
-        try run("/usr/bin/codesign", "--verify", "--strict", fresh.path)
+        try run("/usr/bin/codesign", "--verify", "--strict", "-R", requirement, fresh.path)
         guard isIdle() else { return }   // a recording may have started during the download
 
         _ = try FileManager.default.replaceItemAt(app, withItemAt: fresh)
