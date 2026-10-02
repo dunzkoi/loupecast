@@ -3,6 +3,7 @@ import AppKit
 import Carbon.HIToolbox
 import Combine
 import LoupecastCore
+import LoupecastRender
 import SwiftUI
 
 @MainActor
@@ -88,6 +89,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         }
         let recent = NSMenuItem(title: "최근 녹화", action: nil, keyEquivalent: "")
         let sub = NSMenu()
+        sub.autoenablesItems = false
         let items = Library.recent(5)
         if items.isEmpty {
             let none = NSMenuItem(title: "녹화 없음", action: nil, keyEquivalent: "")
@@ -98,9 +100,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             let i = item(project.name, #selector(openRecent(_:)))
             i.representedObject = dir
             sub.addItem(i)
+            let del = item("휴지통으로: \(project.name)", #selector(trashRecent(_:)))   // shown while ⌥ is held
+            del.representedObject = dir
+            del.keyEquivalentModifierMask = .option
+            del.isAlternate = true
+            del.isEnabled = editors[dir] == nil
+            sub.addItem(del)
         }
+        sub.addItem(.separator())
+        let hint = NSMenuItem(title: "⌥를 누르면 하나씩 지울 수 있습니다", action: nil, keyEquivalent: "")
+        hint.isEnabled = false
+        sub.addItem(hint)
+        let folder = item("녹화 원본 폴더 열기", #selector(openFolder(_:)))
+        folder.representedObject = Recorder.recordingsDir
+        sub.addItem(folder)
+        let all = item("모두 휴지통으로 보내기", #selector(trashAllRecent))
+        all.isEnabled = !recording && !busy && !items.isEmpty
+        sub.addItem(all)
         recent.submenu = sub
         menu.addItem(recent)
+        let saved = item("저장 폴더 열기", #selector(openFolder(_:)))
+        saved.representedObject = Exporter.defaultURL().deletingLastPathComponent()
+        menu.addItem(saved)
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "종료", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
     }
@@ -125,6 +146,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         guard let dir = sender.representedObject as? URL else { return }
         do { openEditor(dir: dir, project: try Project.load(from: dir.appendingPathComponent(Project.fileName))) }
         catch { alert("녹화를 열지 못했습니다", error) }
+    }
+
+    @objc private func openFolder(_ sender: NSMenuItem) {
+        guard let dir = sender.representedObject as? URL else { return }
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        NSWorkspace.shared.open(dir)
+    }
+
+    @objc private func trashRecent(_ sender: NSMenuItem) {
+        guard let dir = sender.representedObject as? URL, editors[dir] == nil else { return }
+        do { try FileManager.default.trashItem(at: dir, resultingItemURL: nil) }
+        catch { alert("녹화를 지우지 못했습니다", error) }
+    }
+
+    /// Every finished recording not open in an editor; the one being recorded has no project file yet.
+    @objc private func trashAllRecent() {
+        guard recorder == nil else { return }
+        do { for (dir, _) in Library.recent(.max) where editors[dir] == nil { try FileManager.default.trashItem(at: dir, resultingItemURL: nil) } }
+        catch { alert("녹화를 지우지 못했습니다", error) }
     }
 
     func openEditor(dir: URL, project: Project) {
@@ -259,7 +299,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 .filter { item.keyEquivalentModifierMask.contains($0.0) }.map(\.1).joined()
             let key = item.keyEquivalent.isEmpty ? "" : " [\(mods)\(item.keyEquivalent.uppercased())]"
             let line = (item.state == .on ? "✓ " : "") + item.title + key + (item.isEnabled ? "" : " (disabled)")
-            return [line] + (item.submenu?.items.map { "  └ " + $0.title } ?? [])
+            return [line] + (item.submenu?.items.map { "  └ " + $0.title + ($0.isEnabled ? "" : " (disabled)") } ?? [])
         }
     }
 
@@ -453,6 +493,7 @@ enum Library {
         let dated = dirs.map { ($0, (try? $0.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast) }
         return dated.sorted { $0.1 > $1.1 }.lazy
             .compactMap { d, _ in (try? Project.load(from: d.appendingPathComponent(Project.fileName))).map { (d, $0) } }
+            .filter { d, p in FileManager.default.fileExists(atPath: d.appendingPathComponent(p.videoFile).path) }
             .prefix(n).map { $0 }
     }
 }
