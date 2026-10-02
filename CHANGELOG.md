@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.6.0](https://github.com/dunzkoi/loupecast/compare/v0.5.0...v0.6.0) (2026-10-02)
+
+
+### Features
+
+* play a sound when recording starts and stops ([#22](https://github.com/dunzkoi/loupecast/issues/22)) ([9bc6d62](https://github.com/dunzkoi/loupecast/commit/9bc6d62bb4fc0b6b47826e467a6c868ba1c011e3))
+* ship a real app icon ([#21](https://github.com/dunzkoi/loupecast/issues/21)) ([75c1178](https://github.com/dunzkoi/loupecast/commit/75c1178953478d1d7d7f5ccd364a28b19aa17cb6))
+
+
+### Bug Fixes
+
+* one permission prompt, and reset a stale grant once ([#20](https://github.com/dunzkoi/loupecast/issues/20)) ([63fad27](https://github.com/dunzkoi/loupecast/commit/63fad27ddc0826223c78c5396190891c95b27ca9))
+
 ## [0.5.0](https://github.com/dunzkoi/loupecast/compare/v0.4.0...v0.5.0) (2026-10-02)
 
 
