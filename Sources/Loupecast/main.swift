@@ -273,7 +273,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             if !prompted { showPermissions(needsMic: mic) }
             return
         }
-        await Self.chime("Tink", wait: true)
+        await Self.chime("loupecast-start", wait: true)   // Resources/loupecast-start.wav (NSSound(named:) checks the bundle first)
         do {
             let r = try await Recorder.start(microphone: mic, systemAudio: defaults.bool(forKey: Self.systemAudioKey), hideMenuBar: defaults.bool(forKey: Self.hideMenuBarKey))
             r.onStreamError = { [weak self] error in self?.streamFailed(error) }
@@ -298,7 +298,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         updateStatusItem()
         do {
             let project = try await r.stop()
-            await Self.chime("Pop", wait: false)
+            await Self.chime("loupecast-stop", wait: false)
             openEditor(dir: r.dir, project: project)
         }
         catch { alert("녹화를 저장하지 못했습니다", error) }
