@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.0](https://github.com/dunzkoi/loupecast/compare/v0.3.1...v0.4.0) (2026-10-02)
+
+
+### Features
+
+* add sponsor links to the menu, README and site ([#11](https://github.com/dunzkoi/loupecast/issues/11)) ([cb2aa0f](https://github.com/dunzkoi/loupecast/commit/cb2aa0fdeaced16f02b599204acb6d6becc6d919))
+
+
+### Bug Fixes
+
+* pin the update signer and log failed installs ([#10](https://github.com/dunzkoi/loupecast/issues/10)) ([0b0c88f](https://github.com/dunzkoi/loupecast/commit/0b0c88f8fb6b02e22a3d973df9932f37b0827c51))
+
 ## [0.3.1](https://github.com/dunzkoi/loupecast/compare/v0.3.0...v0.3.1) (2026-10-02)
 
 
