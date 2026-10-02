@@ -37,15 +37,28 @@ enum Updater {
     }
 
     static func check() async {
+        do { try await fetchLatest(); installIfIdle() }
+        catch { NSLog("Loupecast: update check failed: %@", "\(error)") }
+    }
+
+    /// Sets `available` when the latest release is newer than this build.
+    static func fetchLatest() async throws {
         struct Release: Decodable { let tag_name: String }
-        do {
-            let (data, _) = try await URLSession.shared.data(from: URL(string: "https://api.github.com/repos/\(repo)/releases/latest")!)
-            let tag = try JSONDecoder().decode(Release.self, from: data).tag_name
-            guard Version.isNewer(tag, than: current) else { return }
-            available = tag
-            failed = nil
-            installIfIdle()
-        } catch { NSLog("Loupecast: update check failed: %@", "\(error)") }
+        let (data, _) = try await URLSession.shared.data(from: URL(string: "https://api.github.com/repos/\(repo)/releases/latest")!)
+        let tag = try JSONDecoder().decode(Release.self, from: data).tag_name
+        guard Version.isNewer(tag, than: current) else { return }
+        available = tag
+        failed = nil
+    }
+
+    /// Menu "업데이트 확인…": installs a newer release right away when idle, otherwise says why not.
+    static func checkFromMenu() {
+        Task {
+            do { try await fetchLatest() } catch { return show("업데이트를 확인하지 못했습니다", error.localizedDescription) }
+            guard let tag = available else { return show("최신 버전입니다", "Loupecast \(current)이 최신 버전입니다.") }
+            guard isIdle() || !canInstall else { return show("\(tag) 업데이트가 있습니다", "녹화를 멈추고 편집 창을 모두 닫으면 설치됩니다.") }
+            installFromMenu()
+        }
     }
 
     /// Called after a check, a recording stops, or an editor closes.
@@ -67,12 +80,7 @@ enum Updater {
             return
         }
         Task {
-            do { try await install() } catch {
-                let a = NSAlert(error: error)
-                a.messageText = "업데이트를 설치하지 못했습니다"
-                a.informativeText = "\(error.localizedDescription)"
-                a.runModal()
-            }
+            do { try await install() } catch { show("업데이트를 설치하지 못했습니다", error.localizedDescription) }
         }
     }
 
@@ -113,6 +121,14 @@ enum Updater {
         relaunch.arguments = ["-c", "while kill -0 \(getpid()) 2>/dev/null; do sleep 0.2; done; open \"$0\"", app.path]
         try relaunch.run()
         NSApp.terminate(nil)
+    }
+
+    private static func show(_ title: String, _ info: String) {
+        let a = NSAlert()
+        a.messageText = title
+        a.informativeText = info
+        NSApp.activate(ignoringOtherApps: true)   // a menu-bar app is not active, so the alert would open behind
+        a.runModal()
     }
 
     private static func run(_ tool: String, _ args: String...) throws {

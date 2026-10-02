@@ -133,9 +133,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             menu.addItem(u)
             menu.addItem(.separator())
         }
+        let version = NSMenuItem(title: "Loupecast \(Updater.current)", action: nil, keyEquivalent: "")
+        version.isEnabled = false
+        menu.addItem(version)
+        menu.addItem(item("업데이트 확인…", #selector(checkForUpdates)))
+        let github = item("GitHub", #selector(openLink(_:)))
+        github.representedObject = URL(string: "https://github.com/\(Updater.repo)")!
+        menu.addItem(github)
         let sponsor = item("후원하기…", #selector(openLink(_:)))
         sponsor.representedObject = URL(string: "https://github.com/sponsors/dunzkoi")!
         menu.addItem(sponsor)
+        menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "종료", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
     }
 
@@ -162,6 +170,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     }
 
     @objc private func installUpdate() { Updater.installFromMenu() }
+
+    @objc private func checkForUpdates() { Updater.checkFromMenu() }
 
     /// A folder (created first: Recordings may not exist before the first recording) or a web page.
     @objc private func openLink(_ sender: NSMenuItem) {

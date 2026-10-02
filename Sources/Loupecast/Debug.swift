@@ -6,6 +6,7 @@
 //   LOUPECAST_SEEK=<seconds>          playhead time for the snapshot
 //   LOUPECAST_EXPORT=1|fake           run the editor's own export first (fake: just the done state)
 //   LOUPECAST_PERMISSIONS=<png>       save the permission window and quit
+//   LOUPECAST_UPDATE_CHECK=1          fetch the latest GitHub release once, print current/available, quit
 //   LOUPECAST_STATUS=<png>            save the menu-bar button in its recording state, print the menu
 //   LOUPECAST_SELFTEST=<cycles>       record per cycle (mic off, menu bar hidden on odd cycles) with two
 //                                 CGEvent clicks; prints size/audio/click/strip checks, deletes them, quits
@@ -53,6 +54,13 @@ enum DebugHooks {
                     save(v, to: URL(fileURLWithPath: out))
                 }
                 NSApp.terminate(nil)
+            }
+        }
+        if env["LOUPECAST_UPDATE_CHECK"] != nil {          // one fetch against GitHub; prints what it found, quits
+            Task {
+                do { try await Updater.fetchLatest(); print("LOUPECAST: update current=\(Updater.current) available=\(Updater.available ?? "none")") }
+                catch { print("LOUPECAST: update check failed \(error)") }
+                exit(0)
             }
         }
         if let out = env["LOUPECAST_STATUS"] {
