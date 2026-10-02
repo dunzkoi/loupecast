@@ -30,7 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         menu.delegate = self
         statusItem.menu = menu
         updateStatusItem()
-        HotKey.register { [weak self] in self?.toggleRecording() }
+        Updater.finishRelaunch { HotKey.register { [weak self] in self?.toggleRecording() } }
         Updater.start { [weak self] in self?.isIdle ?? false }
         // the user went to another app instead of clicking the floating window: stop floating
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification,
@@ -134,7 +134,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             menu.addItem(u)
             menu.addItem(.separator())
         }
-        let version = NSMenuItem(title: "Loupecast \(Updater.current)", action: nil, keyEquivalent: "")
+        let version = NSMenuItem(title: "Loupecast \(Updater.current)" + (Updater.justUpdated ? " · 방금 업데이트됨" : ""),
+                                 action: nil, keyEquivalent: "")
         version.isEnabled = false
         menu.addItem(version)
         menu.addItem(item("업데이트 확인…", #selector(checkForUpdates)))
