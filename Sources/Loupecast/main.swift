@@ -11,6 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     /// UserDefaults keys; both apply to the next recording.
     static let micKey = "recordMicrophone", systemAudioKey = "recordSystemAudio", hideMenuBarKey = "hideMenuBar"
     static let screenRequestedKey = "screenAccessRequested"
+    static let soundsKey = "playSounds"
 
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private var recorder: Recorder?
@@ -23,7 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     private var isIdle: Bool { recorder == nil && editors.isEmpty && !busy }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        UserDefaults.standard.register(defaults: [Self.micKey: false, Self.systemAudioKey: true, Self.hideMenuBarKey: true])
+        UserDefaults.standard.register(defaults: [Self.micKey: false, Self.systemAudioKey: true, Self.hideMenuBarKey: true, Self.soundsKey: true])
         NSApp.mainMenu = Self.mainMenu()
         let menu = NSMenu()
         menu.delegate = self
@@ -75,7 +76,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         }
         menu.addItem(.separator())
 
-        for (title, key) in [("마이크 녹음", Self.micKey), ("컴퓨터 소리 녹음", Self.systemAudioKey), ("영상 속 메뉴 막대 숨기기", Self.hideMenuBarKey)] {
+        for (title, key) in [("마이크 녹음", Self.micKey), ("컴퓨터 소리 녹음", Self.systemAudioKey), ("영상 속 메뉴 막대 숨기기", Self.hideMenuBarKey), ("시작·종료 효과음", Self.soundsKey)] {
             let toggle = item(title, #selector(toggleSetting(_:)))
             toggle.representedObject = key
             toggle.state = UserDefaults.standard.bool(forKey: key) ? .on : .off
@@ -271,6 +272,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             if !prompted { showPermissions(needsMic: mic) }
             return
         }
+        await Self.chime("Tink", wait: true)
         do {
             let r = try await Recorder.start(microphone: mic, systemAudio: defaults.bool(forKey: Self.systemAudioKey), hideMenuBar: defaults.bool(forKey: Self.hideMenuBarKey))
             r.onStreamError = { [weak self] error in self?.streamFailed(error) }
@@ -293,8 +295,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         ticker?.invalidate()
         ticker = nil
         updateStatusItem()
-        do { openEditor(dir: r.dir, project: try await r.stop()) }
+        do {
+            let project = try await r.stop()
+            await Self.chime("Pop", wait: false)
+            openEditor(dir: r.dir, project: project)
+        }
         catch { alert("녹화를 저장하지 못했습니다", error) }
+    }
+
+    /// Played outside the capture: the start sound finishes before the stream opens and the stop sound
+    /// plays after it closes, so neither lands in a recording that captures system audio.
+    static func chime(_ name: String, wait: Bool) async {
+        guard UserDefaults.standard.bool(forKey: soundsKey), let s = NSSound(named: name) else { return }
+        s.play()
+        if wait { try? await Task.sleep(for: .seconds(s.duration)) }
     }
 
     private func streamFailed(_ error: Error) {
