@@ -1,6 +1,7 @@
 import AppKit
 import CryptoKit
 import LoupecastCore
+import SwiftUI
 
 /// Self-update from GitHub releases: checks at launch and daily; when a newer tag exists and the app
 /// is idle (no recording, no editor), swaps the running bundle for the release zip and relaunches.
@@ -17,6 +18,9 @@ enum Updater {
     private static var installing = false
     /// Tag whose automatic install failed; retried after the next daily check, not on every editor close.
     private static var failed: String?
+    /// This launch is the first after an automatic update (the menu says so; a manual one gets an alert).
+    private(set) static var justUpdated = false
+    private static let relaunchKey = "updateRelaunching", updatedToKey = "updatedTo", updatedManuallyKey = "updatedManually"
 
     static var current: String { Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0" }
 
@@ -65,7 +69,7 @@ enum Updater {
     static func installIfIdle() {
         guard let tag = available, tag != failed, canInstall, isIdle() else { return }
         Task {
-            do { try await install() } catch {
+            do { try await install(progress: nil) } catch {
                 failed = tag
                 NSLog("Loupecast: update to %@ failed: %@", tag, "\(error)")
             }
@@ -79,15 +83,21 @@ enum Updater {
             NSWorkspace.shared.open(URL(string: "https://github.com/\(repo)/releases/tag/\(tag)")!)
             return
         }
+        let progress = UpdateProgress()
         Task {
-            do { try await install() } catch { show("업데이트를 설치하지 못했습니다", error.localizedDescription) }
+            do { try await install(progress: progress) } catch {
+                progress.close()
+                show("업데이트를 설치하지 못했습니다", error.localizedDescription)
+            }
         }
     }
 
-    private static func install() async throws {
+    /// `progress` is the manual path's window; the automatic path installs silently.
+    private static func install(progress: UpdateProgress?) async throws {
         guard let tag = available, !installing else { return }
         installing = true
         defer { installing = false }
+        progress?.show("\(tag) 내려받는 중…")
         let base = "https://github.com/\(repo)/releases/download/\(tag)/"
         let (zip, _) = try await URLSession.shared.download(from: URL(string: base + "Loupecast.zip")!)
         let (sums, _) = try await URLSession.shared.data(from: URL(string: base + "SHA256SUMS.txt")!)
@@ -110,25 +120,67 @@ enum Updater {
             throw UpdateError("받은 앱의 버전(\(version ?? "?"))이 \(tag)와 다릅니다.")
         }
         try run("/usr/bin/codesign", "--verify", "--strict", "-R", requirement, fresh.path)
-        guard isIdle() else { return }   // a recording may have started during the download
+        guard isIdle() else {   // a recording may have started during the download
+            progress?.close()
+            if progress != nil { show("업데이트를 미뤘습니다", "녹화를 멈추고 편집 창을 모두 닫으면 설치됩니다.") }
+            return
+        }
 
+        progress?.show("설치하는 중…")
         _ = try FileManager.default.replaceItemAt(app, withItemAt: fresh)
         try? FileManager.default.removeItem(at: work)   // terminate() below skips the defers
         try? FileManager.default.removeItem(at: zip)
-        // reopen once this process is gone
-        let relaunch = Process()
-        relaunch.executableURL = URL(fileURLWithPath: "/bin/sh")
-        relaunch.arguments = ["-c", "while kill -0 \(getpid()) 2>/dev/null; do sleep 0.2; done; open \"$0\"", app.path]
-        try relaunch.run()
+
+        // Start the new copy first, then quit. A helper child that waits for us to exit doesn't survive:
+        // macOS can tear down an app's children with it (a manual update quit and never came back).
+        progress?.show("다시 시작하는 중…")
+        let defaults = UserDefaults.standard
+        defaults.set(true, forKey: relaunchKey)
+        defaults.set(tag, forKey: updatedToKey)
+        defaults.set(progress != nil, forKey: updatedManuallyKey)
+        let cfg = NSWorkspace.OpenConfiguration()
+        cfg.createsNewApplicationInstance = true
+        cfg.activates = false
+        do { _ = try await NSWorkspace.shared.openApplication(at: app, configuration: cfg) } catch {
+            defaults.removeObject(forKey: relaunchKey)
+            throw UpdateError("새 버전은 설치됐지만 다시 열지 못했습니다. Loupecast를 직접 다시 열어 주세요. (\(error.localizedDescription))")
+        }
         NSApp.terminate(nil)
     }
 
-    private static func show(_ title: String, _ info: String) {
+    /// At launch. After a self-update the old instance is still quitting and still holds the hot key, so `then`
+    /// runs once it is gone (≤ 5 s). Polls instead of blocking: the old instance may be waiting for this launch.
+    static func finishRelaunch(then: @escaping @MainActor () -> Void) {
+        let defaults = UserDefaults.standard
+        guard defaults.bool(forKey: relaunchKey) else { return then() }
+        defaults.removeObject(forKey: relaunchKey)
+        let deadline = Date().addingTimeInterval(5)
+        Task {
+            while Date() < deadline, NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "")
+                    .contains(where: { $0.processIdentifier != getpid() }) {
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+            then()
+        }
+        guard let tag = defaults.string(forKey: updatedToKey), "v" + current == tag else { return }
+        defaults.removeObject(forKey: updatedToKey)
+        if defaults.bool(forKey: updatedManuallyKey) {
+            DispatchQueue.main.async { show("\(tag)으로 업데이트되었습니다", "Loupecast가 새 버전으로 다시 시작했습니다.", link: tag) }
+        } else {
+            justUpdated = true
+        }
+    }
+
+    /// `link`: a release tag; adds a button that opens its release notes.
+    private static func show(_ title: String, _ info: String, link: String? = nil) {
         let a = NSAlert()
         a.messageText = title
         a.informativeText = info
+        if let link { a.addButton(withTitle: "확인"); a.addButton(withTitle: "변경 사항 보기") }
         NSApp.activate(ignoringOtherApps: true)   // a menu-bar app is not active, so the alert would open behind
-        a.runModal()
+        if a.runModal() == .alertSecondButtonReturn, let link {
+            NSWorkspace.shared.open(URL(string: "https://github.com/\(repo)/releases/tag/\(link)")!)
+        }
     }
 
     private static func run(_ tool: String, _ args: String...) throws {
@@ -138,6 +190,42 @@ enum Updater {
         try p.run()
         p.waitUntilExit()
         guard p.terminationStatus == 0 else { throw UpdateError("\(tool) 실패 (\(p.terminationStatus))") }
+    }
+}
+
+/// The manual update's progress window: the app visibly downloads, installs and restarts instead of vanishing.
+@MainActor
+final class UpdateProgress: ObservableObject {
+    @Published var text = ""
+    private var window: NSWindow?
+
+    func show(_ text: String) {
+        self.text = text
+        guard window == nil else { return }
+        let w = LoupecastWindow(contentRect: .zero, styleMask: [.titled], backing: .buffered, defer: false)
+        w.title = "Loupecast 업데이트"
+        w.isReleasedWhenClosed = false
+        w.contentView = NSHostingView(rootView: UpdateProgressView(model: self))
+        w.center()
+        window = w
+        w.bringToFront()
+    }
+
+    func close() {
+        window?.close()
+        window = nil
+    }
+}
+
+struct UpdateProgressView: View {
+    @ObservedObject var model: UpdateProgress
+    var body: some View {
+        HStack(spacing: 12) {
+            ProgressView().controlSize(.small)
+            Text(model.text)
+        }
+        .padding(20)
+        .frame(width: 320, alignment: .leading)
     }
 }
 
