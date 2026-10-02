@@ -273,7 +273,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             if !prompted { showPermissions(needsMic: mic) }
             return
         }
-        await Self.chime("start", wait: true)
+        await Self.chime("Tink", wait: true)
         do {
             let r = try await Recorder.start(microphone: mic, systemAudio: defaults.bool(forKey: Self.systemAudioKey), hideMenuBar: defaults.bool(forKey: Self.hideMenuBarKey))
             r.onStreamError = { [weak self] error in self?.streamFailed(error) }
@@ -298,7 +298,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         updateStatusItem()
         do {
             let project = try await r.stop()
-            await Self.chime("stop", wait: false)
+            await Self.chime("Pop", wait: false)
             openEditor(dir: r.dir, project: project)
         }
         catch { alert("녹화를 저장하지 못했습니다", error) }
@@ -307,8 +307,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     /// Played outside the capture: the start sound finishes before the stream opens and the stop sound
     /// plays after it closes, so neither lands in a recording that captures system audio.
     static func chime(_ name: String, wait: Bool) async {
-        guard UserDefaults.standard.bool(forKey: soundsKey), let url = Bundle.main.url(forResource: name, withExtension: "wav"),
-              let s = NSSound(contentsOf: url, byReference: true) else { return }
+        guard UserDefaults.standard.bool(forKey: soundsKey), let s = NSSound(named: name) else { return }
         s.play()
         if wait { try? await Task.sleep(for: .seconds(s.duration)) }
     }
