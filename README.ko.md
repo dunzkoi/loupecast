@@ -39,7 +39,7 @@ Apple Silicon Mac, macOS 15 이상에서 동작합니다.
 
 ## 개인정보
 
-Loupecast가 하는 네트워크 요청은 하루 한 번 GitHub 릴리스(`api.github.com`)에서 업데이트를 확인하는 것과, 새 버전이 있을 때 내려받는 것뿐입니다. 녹화 원본은 `~/Library/Application Support/Loupecast/Recordings`에, 내보낸 영상은 `~/Movies`에만 저장됩니다. 업로드, 분석, 텔레메트리가 없습니다.
+Loupecast가 하는 네트워크 요청은 실행할 때와 그 뒤 하루 한 번 GitHub 릴리스(`api.github.com`)에서 업데이트를 확인하는 것과, 새 버전이 있을 때 내려받는 것뿐입니다. 녹화 원본은 `~/Library/Application Support/Loupecast/Recordings`에, 내보낸 영상은 `~/Movies`에만 저장됩니다. 업로드, 분석, 텔레메트리가 없습니다.
 
 ## 소스에서 빌드
 
