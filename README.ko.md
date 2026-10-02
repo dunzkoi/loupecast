@@ -3,6 +3,7 @@
 <p align="center">
   <a href="https://dunzkoi.github.io/loupecast/">웹사이트</a> ·
   <a href="https://github.com/dunzkoi/loupecast/releases/latest">다운로드</a> ·
+  <a href="https://github.com/sponsors/dunzkoi">후원</a> ·
   <a href="README.md">English</a>
 </p>
 
@@ -61,6 +62,10 @@ Xcode 16 이상이 필요하고, 외부 의존성은 없습니다.
 ## 기여
 
 버그 제보와 PR을 환영합니다. 먼저 [CONTRIBUTING.md](CONTRIBUTING.md)를 읽어 주세요. 모든 PR에 CI와 자동 리뷰가 돕니다.
+
+## 후원
+
+Loupecast는 앞으로도 무료입니다. 시간을 아껴 줬다면 [GitHub 후원](https://github.com/sponsors/dunzkoi)으로 새 기능, 버그 수정, 릴리스 작업을 응원해 주세요.
 
 ## 라이선스
 

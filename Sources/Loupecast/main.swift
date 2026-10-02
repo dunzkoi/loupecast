@@ -113,7 +113,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         let hint = NSMenuItem(title: "⌥를 누르면 하나씩 지울 수 있습니다", action: nil, keyEquivalent: "")
         hint.isEnabled = false
         sub.addItem(hint)
-        let folder = item("녹화 원본 폴더 열기", #selector(openFolder(_:)))
+        let folder = item("녹화 원본 폴더 열기", #selector(openLink(_:)))
         folder.representedObject = Recorder.recordingsDir
         sub.addItem(folder)
         let all = item("모두 휴지통으로 보내기", #selector(trashAllRecent))
@@ -121,7 +121,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         sub.addItem(all)
         recent.submenu = sub
         menu.addItem(recent)
-        let saved = item("저장 폴더 열기", #selector(openFolder(_:)))
+        let saved = item("저장 폴더 열기", #selector(openLink(_:)))
         saved.representedObject = Exporter.defaultURL().deletingLastPathComponent()
         menu.addItem(saved)
         menu.addItem(.separator())
@@ -133,6 +133,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             menu.addItem(u)
             menu.addItem(.separator())
         }
+        let sponsor = item("후원하기…", #selector(openLink(_:)))
+        sponsor.representedObject = URL(string: "https://github.com/sponsors/dunzkoi")!
+        menu.addItem(sponsor)
         menu.addItem(NSMenuItem(title: "종료", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
     }
 
@@ -160,10 +163,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
 
     @objc private func installUpdate() { Updater.installFromMenu() }
 
-    @objc private func openFolder(_ sender: NSMenuItem) {
-        guard let dir = sender.representedObject as? URL else { return }
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        NSWorkspace.shared.open(dir)
+    /// A folder (created first: Recordings may not exist before the first recording) or a web page.
+    @objc private func openLink(_ sender: NSMenuItem) {
+        guard let url = sender.representedObject as? URL else { return }
+        if url.isFileURL { try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true) }
+        NSWorkspace.shared.open(url)
     }
 
     @objc private func trashRecent(_ sender: NSMenuItem) {

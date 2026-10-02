@@ -258,6 +258,7 @@ td.us { font-weight: 650; background: color-mix(in oklch, var(--accent) 6%, tran
 .gh-band .wrap { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 24px; }
 .gh-band h2 { font-size: clamp(24px, 2.8vw, 32px); font-weight: 720; }
 .gh-band p { margin-top: 8px; color: var(--muted); }
+.gh-actions { display: flex; flex-wrap: wrap; gap: 12px; }
 
 .en { padding-block: 40px; border-top: 1px solid var(--line); }
 .en h2 { font-size: 18px; margin-bottom: 8px; }
@@ -266,6 +267,7 @@ td.us { font-weight: 650; background: color-mix(in oklch, var(--accent) 6%, tran
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 footer { padding-block: 28px 40px; color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); }
 footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 20px; justify-content: space-between; }
+.foot-links { display: flex; gap: 20px; }
 </style>
 </head>
 <body>
@@ -517,9 +519,12 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 20px; justify-content: s
   <div class="wrap">
     <div>
       <h2>소스 코드는 전부 GitHub에 있습니다</h2>
-      <p>MIT 라이선스이고 외부 의존성이 없습니다. 버그 제보와 PR을 환영합니다.</p>
+      <p>MIT 라이선스이고 외부 의존성이 없습니다. 버그 제보와 PR을 환영하고, 후원은 다음 기능 개발에 쓰입니다.</p>
     </div>
-    <a class="btn btn-ghost" href="https://github.com/dunzkoi/loupecast"><svg class="icon" aria-hidden="true"><use href="#i-github-logo"/></svg>GitHub에서 보기</a>
+    <div class="gh-actions">
+      <a class="btn btn-ghost" href="https://github.com/dunzkoi/loupecast"><svg class="icon" aria-hidden="true"><use href="#i-github-logo"/></svg>GitHub에서 보기</a>
+      <a class="btn btn-primary" href="https://github.com/sponsors/dunzkoi">후원하기</a>
+    </div>
   </div>
 </section>
 
@@ -535,7 +540,7 @@ footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 20px; justify-content: s
 <footer>
   <div class="wrap">
     <span>Loupecast · MIT © 2026 Dunz Koi</span>
-    <a href="https://github.com/dunzkoi/loupecast/releases/latest">릴리스 노트</a>
+    <span class="foot-links"><a href="https://github.com/sponsors/dunzkoi">후원</a><a href="https://github.com/dunzkoi/loupecast/releases/latest">릴리스 노트</a></span>
   </div>
 </footer>
 
