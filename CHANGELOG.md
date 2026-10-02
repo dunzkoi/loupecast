@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.7.0](https://github.com/dunzkoi/loupecast/compare/v0.6.0...v0.7.0) (2026-10-02)
+
+
+### Features
+
+* own start/stop chimes instead of system sounds ([#25](https://github.com/dunzkoi/loupecast/issues/25)) ([f72a45c](https://github.com/dunzkoi/loupecast/commit/f72a45cb8fbbae1705fcde2a1fda5767b95d1984))
+
+
+### Bug Fixes
+
+* visible manual updates that always relaunch ([#24](https://github.com/dunzkoi/loupecast/issues/24)) ([fb86baf](https://github.com/dunzkoi/loupecast/commit/fb86baf8296e20686e100070bd7d1606359aab41))
+
 ## [0.6.0](https://github.com/dunzkoi/loupecast/compare/v0.5.0...v0.6.0) (2026-10-02)
 
 
