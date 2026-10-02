@@ -19,6 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     private var editors: [URL: EditorController] = [:]
     private var permissionWindow: NSWindow?
     private var launcher: NSWindow?
+    private var isIdle: Bool { recorder == nil && editors.isEmpty && !busy }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         UserDefaults.standard.register(defaults: [Self.micKey: false, Self.systemAudioKey: true, Self.hideMenuBarKey: true])
@@ -29,6 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         statusItem.menu = menu
         updateStatusItem()
         HotKey.register { [weak self] in self?.toggleRecording() }
+        Updater.start { [weak self] in self?.isIdle ?? false }
         // the user went to another app instead of clicking the floating window: stop floating
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification,
                                                           object: nil, queue: .main) { _ in
@@ -123,6 +125,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         saved.representedObject = Exporter.defaultURL().deletingLastPathComponent()
         menu.addItem(saved)
         menu.addItem(.separator())
+        if let tag = Updater.available {
+            let title = !Updater.canInstall ? "\(tag) 다운로드 페이지 열기"
+                : isIdle ? "\(tag) 설치 후 다시 시작" : "\(tag) 업데이트: 녹화·편집 창을 닫으면 설치"
+            let u = item(title, #selector(installUpdate))
+            u.isEnabled = isIdle || !Updater.canInstall
+            menu.addItem(u)
+            menu.addItem(.separator())
+        }
         menu.addItem(NSMenuItem(title: "종료", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
     }
 
@@ -147,6 +157,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         do { openEditor(dir: dir, project: try Project.load(from: dir.appendingPathComponent(Project.fileName))) }
         catch { alert("녹화를 열지 못했습니다", error) }
     }
+
+    @objc private func installUpdate() { Updater.installFromMenu() }
 
     @objc private func openFolder(_ sender: NSMenuItem) {
         guard let dir = sender.representedObject as? URL else { return }
@@ -173,6 +185,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             e.onClose = { [weak self] in
                 self?.editors[dir] = nil
                 self?.updateActivationPolicy()
+                Updater.installIfIdle()
             }
             editors[dir] = e
             return e
