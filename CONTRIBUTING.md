@@ -14,6 +14,17 @@ Thanks for helping. This project is maintained by one person, so the rules below
 swift test
 ```
 
+## How to open a pull request
+
+1. Fork the repo and create a branch from `main`: `git switch -c fix/short-name`.
+2. Make the change, then run `./build.sh` and `swift test`. Both must pass.
+3. Commit, push to your fork, and open a PR against `dunzkoi/loupecast:main`. Fill in the template.
+4. What happens next:
+   - CI builds and tests on macOS, and a bot checks the title format.
+   - An automated reviewer leaves inline comments and a verdict, usually within a few minutes. Reply or push a fix; it re-runs on every push.
+   - The maintainer reviews, then squash-merges. Your PR title becomes the commit message and the changelog line.
+5. After merge, release-please opens a release PR. Your change ships in the next release, and installed apps update themselves.
+
 ## Pull request rules
 
 1. **Title** follows [Conventional Commits](https://www.conventionalcommits.org/): `feat: ...`, `fix: ...`, `docs: ...`, `refactor: ...`, `test: ...`, `chore: ...`. The title becomes the squash commit and the changelog entry.
