@@ -29,6 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         statusItem.menu = menu
         updateStatusItem()
         HotKey.register { [weak self] in self?.toggleRecording() }
+        Updater.start { [weak self] in self.map { $0.recorder == nil && $0.editors.isEmpty && !$0.busy } ?? false }
         // the user went to another app instead of clicking the floating window: stop floating
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification,
                                                           object: nil, queue: .main) { _ in
@@ -123,6 +124,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         saved.representedObject = Exporter.defaultURL().deletingLastPathComponent()
         menu.addItem(saved)
         menu.addItem(.separator())
+        if let tag = Updater.available {
+            let idle = !recording && !busy && editors.isEmpty
+            let u = item(idle ? "\(tag) 설치 후 다시 시작" : "\(tag) 업데이트: 녹화·편집 창을 닫으면 설치", #selector(installUpdate))
+            u.isEnabled = idle
+            menu.addItem(u)
+            menu.addItem(.separator())
+        }
         menu.addItem(NSMenuItem(title: "종료", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
     }
 
@@ -147,6 +155,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         do { openEditor(dir: dir, project: try Project.load(from: dir.appendingPathComponent(Project.fileName))) }
         catch { alert("녹화를 열지 못했습니다", error) }
     }
+
+    @objc private func installUpdate() { Updater.installFromMenu() }
 
     @objc private func openFolder(_ sender: NSMenuItem) {
         guard let dir = sender.representedObject as? URL else { return }
@@ -173,6 +183,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             e.onClose = { [weak self] in
                 self?.editors[dir] = nil
                 self?.updateActivationPolicy()
+                Updater.installIfIdle()
             }
             editors[dir] = e
             return e
