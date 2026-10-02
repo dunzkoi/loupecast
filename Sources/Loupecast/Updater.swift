@@ -73,6 +73,7 @@ enum Updater {
         let base = "https://github.com/\(repo)/releases/download/\(tag)/"
         let (zip, _) = try await URLSession.shared.download(from: URL(string: base + "Loupecast.zip")!)
         let (sums, _) = try await URLSession.shared.data(from: URL(string: base + "SHA256SUMS.txt")!)
+        defer { try? FileManager.default.removeItem(at: zip) }
         let digest = SHA256.hash(data: try Data(contentsOf: zip)).map { String(format: "%02x", $0) }.joined()
         guard String(decoding: sums, as: UTF8.self).split(separator: "\n")
                 .contains(where: { $0.hasPrefix(digest) && $0.hasSuffix("Loupecast.zip") }) else {
@@ -87,13 +88,15 @@ enum Updater {
         try run("/usr/bin/ditto", "-x", "-k", zip.path, work.path)
         let fresh = work.appendingPathComponent("Loupecast.app")
         let version = Bundle(url: fresh)?.infoDictionary?["CFBundleShortVersionString"] as? String
-        guard version.map({ "v" + $0 == tag || $0 == tag }) == true else {
+        guard let version, "v" + version == tag else {
             throw UpdateError("받은 앱의 버전(\(version ?? "?"))이 \(tag)와 다릅니다.")
         }
         try run("/usr/bin/codesign", "--verify", "--strict", fresh.path)
         guard isIdle() else { return }   // a recording may have started during the download
 
         _ = try FileManager.default.replaceItemAt(app, withItemAt: fresh)
+        try? FileManager.default.removeItem(at: work)   // terminate() below skips the defers
+        try? FileManager.default.removeItem(at: zip)
         // reopen once this process is gone
         let relaunch = Process()
         relaunch.executableURL = URL(fileURLWithPath: "/bin/sh")

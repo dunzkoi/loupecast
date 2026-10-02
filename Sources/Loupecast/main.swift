@@ -19,6 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     private var editors: [URL: EditorController] = [:]
     private var permissionWindow: NSWindow?
     private var launcher: NSWindow?
+    private var isIdle: Bool { recorder == nil && editors.isEmpty && !busy }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         UserDefaults.standard.register(defaults: [Self.micKey: false, Self.systemAudioKey: true, Self.hideMenuBarKey: true])
@@ -29,7 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         statusItem.menu = menu
         updateStatusItem()
         HotKey.register { [weak self] in self?.toggleRecording() }
-        Updater.start { [weak self] in self.map { $0.recorder == nil && $0.editors.isEmpty && !$0.busy } ?? false }
+        Updater.start { [weak self] in self?.isIdle ?? false }
         // the user went to another app instead of clicking the floating window: stop floating
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification,
                                                           object: nil, queue: .main) { _ in
@@ -125,9 +126,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         menu.addItem(saved)
         menu.addItem(.separator())
         if let tag = Updater.available {
-            let idle = !recording && !busy && editors.isEmpty
-            let u = item(idle ? "\(tag) 설치 후 다시 시작" : "\(tag) 업데이트: 녹화·편집 창을 닫으면 설치", #selector(installUpdate))
-            u.isEnabled = idle
+            let title = !Updater.canInstall ? "\(tag) 다운로드 페이지 열기"
+                : isIdle ? "\(tag) 설치 후 다시 시작" : "\(tag) 업데이트: 녹화·편집 창을 닫으면 설치"
+            let u = item(title, #selector(installUpdate))
+            u.isEnabled = isIdle || !Updater.canInstall
             menu.addItem(u)
             menu.addItem(.separator())
         }
