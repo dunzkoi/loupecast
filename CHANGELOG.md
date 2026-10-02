@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/dunzkoi/loupecast/compare/v0.4.0...v0.5.0) (2026-10-02)
+
+
+### Features
+
+* show the version, a manual update check and GitHub in the menu ([#18](https://github.com/dunzkoi/loupecast/issues/18)) ([782c5f7](https://github.com/dunzkoi/loupecast/commit/782c5f7559a050c2c7a7eddee507e29635618c19))
+
 ## [0.4.0](https://github.com/dunzkoi/loupecast/compare/v0.3.1...v0.4.0) (2026-10-02)
 
 
