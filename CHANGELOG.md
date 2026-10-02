@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/dunzkoi/loupecast/compare/v0.3.0...v0.3.1) (2026-10-02)
+
+
+### Continuous Integration
+
+* sign releases with a fixed self-signed identity ([#7](https://github.com/dunzkoi/loupecast/issues/7)) ([a7a2a0e](https://github.com/dunzkoi/loupecast/commit/a7a2a0e95b1d99e9a5508bbc135931f3725df955))
+
 ## [0.3.0](https://github.com/dunzkoi/loupecast/compare/v0.2.0...v0.3.0) (2026-10-02)
 
 
