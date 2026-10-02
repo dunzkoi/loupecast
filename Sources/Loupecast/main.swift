@@ -263,7 +263,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         let micOK = !mic || AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
         guard screenOK, micOK else {
             if !screenOK {
-                let reset = Self.resetStaleScreenGrantOnce()
+                let reset = await Self.resetStaleScreenGrantOnce()
                 // the system prompt appears only while the app has no record yet: first request, or right after a reset
                 prompted = reset || !defaults.bool(forKey: Self.screenRequestedKey)
                 defaults.set(true, forKey: Self.screenRequestedKey)
@@ -355,16 +355,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     /// The switch in System Settings stays on but no longer matches, and toggling it doesn't refresh the pin.
     /// Dropping the record once lets the request above re-register it against the release certificate.
     /// Once only: after the user switches it on, preflight stays false until relaunch, and a second reset would undo it.
-    @discardableResult static func resetStaleScreenGrantOnce() -> Bool {
+    static func resetStaleScreenGrantOnce() async -> Bool {
         let key = "screenGrantResetForReleaseCert"
         guard !UserDefaults.standard.bool(forKey: key), let id = Bundle.main.bundleIdentifier else { return false }
-        UserDefaults.standard.set(true, forKey: key)
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
         p.arguments = ["reset", "ScreenCapture", id]
-        guard (try? p.run()) != nil else { return false }
-        p.waitUntilExit()
-        return p.terminationStatus == 0
+        // off the main thread: a hung tccutil must not freeze the menu
+        let ok = await withCheckedContinuation { (done: CheckedContinuation<Bool, Never>) in
+            p.terminationHandler = { done.resume(returning: $0.terminationStatus == 0) }
+            do { try p.run() } catch { done.resume(returning: false) }
+        }
+        if ok { UserDefaults.standard.set(true, forKey: key) }   // a failed reset is retried next time
+        return ok
     }
 
     func showPermissions(needsMic: Bool) {
