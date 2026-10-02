@@ -89,6 +89,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         }
         let recent = NSMenuItem(title: "최근 녹화", action: nil, keyEquivalent: "")
         let sub = NSMenu()
+        sub.autoenablesItems = false
         let items = Library.recent(5)
         if items.isEmpty {
             let none = NSMenuItem(title: "녹화 없음", action: nil, keyEquivalent: "")
@@ -298,7 +299,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 .filter { item.keyEquivalentModifierMask.contains($0.0) }.map(\.1).joined()
             let key = item.keyEquivalent.isEmpty ? "" : " [\(mods)\(item.keyEquivalent.uppercased())]"
             let line = (item.state == .on ? "✓ " : "") + item.title + key + (item.isEnabled ? "" : " (disabled)")
-            return [line] + (item.submenu?.items.map { "  └ " + $0.title } ?? [])
+            return [line] + (item.submenu?.items.map { "  └ " + $0.title + ($0.isEnabled ? "" : " (disabled)") } ?? [])
         }
     }
 
