@@ -23,7 +23,28 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v7
+      # One fixed self-signed identity: the designated requirement stays the same across releases,
+      # so macOS keeps the Screen Recording grant after an update.
+      - name: Import signing identity
+        env:
+          P12: ${{ secrets.MACOS_CERT_P12 }}
+          P12_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          KC="$RUNNER_TEMP/signing.keychain-db"
+          KP="$(openssl rand -hex 16)"
+          echo "$P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security create-keychain -p "$KP" "$KC"
+          security set-keychain-settings "$KC"
+          security unlock-keychain -p "$KP" "$KC"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KC" -P "$P12_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KP" "$KC" >/dev/null
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | xargs)
+          rm "$RUNNER_TEMP/cert.p12"
       - run: ./build.sh
+        env:
+          LOUPECAST_SIGN_ID: Loupecast Release
+      - name: Guard against an unstable signature
+        run: codesign -d -r- dist/Loupecast.app 2>&1 | grep -q 'certificate leaf = H"14483067735e80133538834400a7dc458392ad4c"'
       - name: Guard against debug/dev-path builds
         run: "! strings dist/Loupecast.app/Contents/MacOS/Loupecast | grep -E '/Users/[^/]+/'"
       - name: Zip
