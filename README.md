@@ -40,7 +40,7 @@ Menu toggles: 마이크 녹음 (microphone, off by default), 컴퓨터 소리 �
 
 ## Privacy
 
-Loupecast makes no network requests. Recordings stay in `~/Library/Application Support/Loupecast/Recordings` and exports in `~/Movies`. Nothing is uploaded, and there is no analytics or telemetry.
+The only network request Loupecast makes is an update check against GitHub Releases at launch and then daily (`api.github.com`), plus the download when an update exists. Recordings stay in `~/Library/Application Support/Loupecast/Recordings` and exports in `~/Movies`. Nothing is uploaded, and there is no analytics or telemetry.
 
 ## Build from source
 
