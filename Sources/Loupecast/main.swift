@@ -24,7 +24,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     func applicationDidFinishLaunching(_ notification: Notification) {
         UserDefaults.standard.register(defaults: [Self.micKey: false, Self.systemAudioKey: true, Self.hideMenuBarKey: true])
         NSApp.mainMenu = Self.mainMenu()
-        NSApp.applicationIconImage = Self.appIcon()
         let menu = NSMenu()
         menu.delegate = self
         statusItem.menu = menu
@@ -371,22 +370,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         let main = NSMenu()
         main.addItem(app)
         return main
-    }
-
-    /// Dock icon drawn in code (no bundled assets): the export background gradient and the record glyph.
-    static func appIcon() -> NSImage {
-        NSImage(size: NSSize(width: 512, height: 512), flipped: false) { r in
-            let body = NSBezierPath(roundedRect: r.insetBy(dx: 50, dy: 50), xRadius: 92, yRadius: 92)
-            NSGradient(starting: NSColor(srgbRed: 0.55, green: 0.62, blue: 0.97, alpha: 1),
-                       ending: NSColor(srgbRed: 0.96, green: 0.68, blue: 0.78, alpha: 1))?.draw(in: body, angle: -45)
-            let cfg = NSImage.SymbolConfiguration(pointSize: 240, weight: .regular)
-                .applying(.init(paletteColors: [.white]))
-            if let s = NSImage(systemSymbolName: "record.circle", accessibilityDescription: nil)?.withSymbolConfiguration(cfg) {
-                s.draw(in: NSRect(x: r.midX - s.size.width / 2, y: r.midY - s.size.height / 2,
-                                  width: s.size.width, height: s.size.height))
-            }
-            return true
-        }
     }
 }
 
