@@ -12,7 +12,7 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/Loupecast"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/"   # regenerate with: swift scripts/make-icon.swift
-cp Resources/start.wav Resources/stop.wav "$APP/Contents/Resources/"   # python3 scripts/make-sounds.py
+cp Resources/loupecast-start.wav Resources/loupecast-stop.wav "$APP/Contents/Resources/"   # python3 scripts/make-sounds.py
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

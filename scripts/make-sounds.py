@@ -29,5 +29,5 @@ def write(name, notes):
     print(f"wrote {path} ({len(frames) / RATE:.2f}s)")
 
 E6, B6 = 1318.5, 1975.5
-write("start.wav", [(E6, 0.0, 0.32, 1.0), (B6, 0.075, 0.38, 0.9)])
-write("stop.wav", [(B6, 0.0, 0.32, 0.9), (E6, 0.075, 0.38, 1.0)])
+write("loupecast-start.wav", [(E6, 0.0, 0.32, 1.0), (B6, 0.075, 0.38, 0.9)])
+write("loupecast-stop.wav", [(B6, 0.0, 0.32, 0.9), (E6, 0.075, 0.38, 1.0)])
