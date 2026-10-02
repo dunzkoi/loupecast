@@ -10,6 +10,7 @@ import SwiftUI
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWindowDelegate {
     /// UserDefaults keys; both apply to the next recording.
     static let micKey = "recordMicrophone", systemAudioKey = "recordSystemAudio", hideMenuBarKey = "hideMenuBar"
+    static let screenRequestedKey = "screenAccessRequested"
 
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private var recorder: Recorder?
@@ -254,6 +255,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     private func start() async {
         let defaults = UserDefaults.standard
         let mic = defaults.bool(forKey: Self.micKey)
+        var prompted = false   // macOS showed its own prompt; our window on top of it would be a duplicate
         if mic, AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined {
             _ = await AVCaptureDevice.requestAccess(for: .audio)
         }
@@ -261,10 +263,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         let micOK = !mic || AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
         guard screenOK, micOK else {
             if !screenOK {
-                Self.resetStaleScreenGrantOnce()
+                let reset = Self.resetStaleScreenGrantOnce()
+                // the system prompt appears only while the app has no record yet: first request, or right after a reset
+                prompted = reset || !defaults.bool(forKey: Self.screenRequestedKey)
+                defaults.set(true, forKey: Self.screenRequestedKey)
                 CGRequestScreenCaptureAccess()   // registers Loupecast in the list
             }
-            showPermissions(needsMic: mic)
+            if !prompted { showPermissions(needsMic: mic) }
             return
         }
         do {
@@ -350,15 +355,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     /// The switch in System Settings stays on but no longer matches, and toggling it doesn't refresh the pin.
     /// Dropping the record once lets the request above re-register it against the release certificate.
     /// Once only: after the user switches it on, preflight stays false until relaunch, and a second reset would undo it.
-    static func resetStaleScreenGrantOnce() {
+    @discardableResult static func resetStaleScreenGrantOnce() -> Bool {
         let key = "screenGrantResetForReleaseCert"
-        guard !UserDefaults.standard.bool(forKey: key), let id = Bundle.main.bundleIdentifier else { return }
+        guard !UserDefaults.standard.bool(forKey: key), let id = Bundle.main.bundleIdentifier else { return false }
         UserDefaults.standard.set(true, forKey: key)
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
         p.arguments = ["reset", "ScreenCapture", id]
-        try? p.run()
+        guard (try? p.run()) != nil else { return false }
         p.waitUntilExit()
+        return p.terminationStatus == 0
     }
 
     func showPermissions(needsMic: Bool) {
