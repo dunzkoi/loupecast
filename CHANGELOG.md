@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/dunzkoi/loupecast/compare/v0.2.0...v0.3.0) (2026-10-02)
+
+
+### Features
+
+* self-update from GitHub releases ([#5](https://github.com/dunzkoi/loupecast/issues/5)) ([8db13d6](https://github.com/dunzkoi/loupecast/commit/8db13d63daedad2ff77e90fe774f3bf58de3579a))
+
 ## [0.2.0](https://github.com/dunzkoi/loupecast/compare/v0.1.0...v0.2.0) (2026-10-02)
 
 
