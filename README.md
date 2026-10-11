@@ -1,7 +1,7 @@
 <h1 align="center">Loupecast</h1>
 <p align="center">A free, open-source macOS screen recorder that zooms in where you click, lets you cut the boring parts, and exports a polished 1080p60 MP4.</p>
 <p align="center">
-  <a href="https://dunzkoi.github.io/loupecast/">Website</a> ·
+  <a href="https://dunzkoi.github.io/loupecast/en/">Website</a> ·
   <a href="https://github.com/dunzkoi/loupecast/releases/latest">Download</a> ·
   <a href="https://github.com/sponsors/dunzkoi">Sponsor</a> ·
   <a href="README.ko.md">한국어</a>

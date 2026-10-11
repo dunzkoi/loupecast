@@ -6,8 +6,11 @@
 - 공증 전이라 처음 한 번 `xattr -dr com.apple.quarantine /Applications/Loupecast.app` 실행이 필요할 수 있습니다.
 - 녹화 단축키: ⌘⇧2. 편집: D 나누기, Delete 잘라내기, ⌘Z 되돌리기.
 
+In English: Loupecast is a free, open-source (MIT) macOS menu bar screen recorder that zooms in where you click, cuts the parts you don't need and exports a 1080p60 H.264 MP4 (16:9, 9:16 or 1:1). The app follows the macOS language (English or Korean). It has no telemetry; its only network request is the update check against GitHub Releases. macOS 15 or later, Apple Silicon only. Install with `brew install --cask dunzkoi/tap/loupecast`.
+
 ## Pages
 
 - [Loupecast 홈](https://dunzkoi.github.io/loupecast/): 기능, 유료 녹화 앱과 비교, 설치 방법, 자주 묻는 질문
+- [Loupecast (English)](https://dunzkoi.github.io/loupecast/en/): features, comparison with paid recorders, install, FAQ
 - [GitHub 저장소](https://github.com/dunzkoi/loupecast): 소스 코드, README, 이슈
 - [최신 릴리스](https://github.com/dunzkoi/loupecast/releases/latest): 다운로드와 변경 내역
