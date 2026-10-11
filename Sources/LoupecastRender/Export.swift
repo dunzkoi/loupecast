@@ -14,12 +14,8 @@ public enum Exporter {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
         f.dateFormat = "yyyy-MM-dd HH.mm.ss"
-        var n = 1
-        while true {
-            let url = dir.appendingPathComponent("Loupecast \(f.string(from: now))\(n == 1 ? "" : " \(n)").mp4")
-            if !taken.contains(url), !FileManager.default.fileExists(atPath: url.path) { return url }
-            n += 1
-        }
+        return (1...).lazy.map { n in dir.appendingPathComponent("Loupecast \(f.string(from: now))\(n == 1 ? "" : " \(n)").mp4") }
+            .first { !taken.contains($0) && !FileManager.default.fileExists(atPath: $0.path) }!
     }
 
     public static func export(project: Project, videoURL: URL, to output: URL,
