@@ -614,11 +614,8 @@ enum Library {
         let dirs = (try? fm.contentsOfDirectory(at: root, includingPropertiesForKeys: [.contentModificationDateKey], options: .skipsHiddenFiles)) ?? []
         let changed = ([root] + dirs).compactMap { try? $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate }.max()
         if let usage, usage.changed == changed { return usage.bytes }
-        var bytes: Int64 = 0
-        let files = fm.enumerator(at: root, includingPropertiesForKeys: [.totalFileAllocatedSizeKey])
-        while let file = files?.nextObject() as? URL {
-            bytes += Int64((try? file.resourceValues(forKeys: [.totalFileAllocatedSizeKey]).totalFileAllocatedSize) ?? 0)
-        }
+        let files = fm.enumerator(at: root, includingPropertiesForKeys: [.totalFileAllocatedSizeKey])?.allObjects as? [URL] ?? []
+        let bytes = files.reduce(Int64(0)) { $0 + Int64((try? $1.resourceValues(forKeys: [.totalFileAllocatedSizeKey]).totalFileAllocatedSize) ?? 0) }
         usage = (changed, bytes)
         return bytes
     }
