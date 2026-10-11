@@ -219,6 +219,48 @@ final class ExportTests: XCTestCase {
         XCTAssertEqual(cutGain(at: 2.02, cuts: [2]), 1)
     }
 
+    // MARK: cancel and file names
+
+    /// Cancelled at 20 %: the partial MP4 that existed then is gone and the export throws CancellationError.
+    func testCancelledExportLeavesNoFile() async throws {
+        try XCTSkipIf(ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] != nil, "no video hardware on CI VMs")
+        try await withDeadline(Self.deadline) { try await Self.cancelledExport() }
+    }
+
+    static func cancelledExport() async throws {
+        let mov = outDir.appendingPathComponent("synthetic-cancel.mov")
+        try await writeSyntheticMovie(to: mov)
+        let out = outDir.appendingPathComponent("export-cancel.mp4")
+        let (reached, at20) = AsyncStream<Void>.makeStream()
+        let export = Task {
+            defer { at20.finish() }
+            try await Exporter.export(project: makeProject(), videoURL: mov, to: out) { if $0 >= 0.2 { at20.yield() } }
+        }
+        for await _ in reached { break }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: out.path), "the partial file exists while exporting")
+        export.cancel()
+        do {
+            try await export.value
+            XCTFail("the cancelled export finished")
+        } catch is CancellationError {}
+        XCTAssertFalse(FileManager.default.fileExists(atPath: out.path), "partial export left behind")
+    }
+
+    func testDefaultURLNeverReusesAName() throws {
+        let dir = Self.outDir.appendingPathComponent("names", isDirectory: true)
+        try? FileManager.default.removeItem(at: dir)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let first = Exporter.defaultURL(now: now, in: dir)
+        XCTAssertTrue(first.lastPathComponent.hasPrefix("Loupecast 20") && first.lastPathComponent.hasSuffix(".mp4"))
+        XCTAssertFalse(first.lastPathComponent.contains(" 2.mp4"))
+        try Data().write(to: first)
+        let second = Exporter.defaultURL(now: now, in: dir)
+        XCTAssertEqual(second.lastPathComponent, first.deletingPathExtension().lastPathComponent + " 2.mp4", "an existing file is never the target")
+        let third = Exporter.defaultURL(now: now, in: dir, taken: [second])
+        XCTAssertEqual(third.lastPathComponent, first.deletingPathExtension().lastPathComponent + " 3.mp4", "a running export's name is taken too")
+    }
+
     // MARK: time limit
 
     /// One export test takes ~6 s on Apple Silicon; a stuck one fails here instead of hanging `swift test`.

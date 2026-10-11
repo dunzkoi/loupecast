@@ -5,6 +5,8 @@
 //   LOUPECAST_SNAPSHOT=<png>          save the editor window (with the live preview frame) and quit
 //   LOUPECAST_SEEK=<seconds>          playhead time for the snapshot
 //   LOUPECAST_EXPORT=1|fake           run the editor's own export first (fake: just the done state)
+//                    cancel|twice     cancel it at 20 %, or export from two editors of the recording at once
+//   LOUPECAST_EXPORT_DIR=<dir>        where the editor exports (default ~/Movies)
 //   LOUPECAST_PERMISSIONS=<png>       save the permission window and quit
 //   LOUPECAST_UPDATE_CHECK=1          fetch the latest GitHub release once, print current/available, quit
 //   LOUPECAST_STATUS=<png>            save the menu-bar button in its recording state, print the menu
@@ -30,6 +32,7 @@ enum DebugHooks {
     static let env = ProcessInfo.processInfo.environment
 
     static func run(_ app: AppDelegate) {
+        if let dir = env["LOUPECAST_EXPORT_DIR"] { EditorModel.exportDir = URL(fileURLWithPath: dir) }
         if let a = env["LOUPECAST_APPEARANCE"] { NSApp.appearance = NSAppearance(named: a == "dark" ? .darkAqua : .aqua) }
         if let path = env["LOUPECAST_OPEN"] {
             let dir = URL(fileURLWithPath: path)
@@ -118,6 +121,22 @@ enum DebugHooks {
             m.export()
             while m.exportState.isRunning { try? await Task.sleep(for: .milliseconds(100)) }
             print("LOUPECAST: export state \(m.exportState)")
+        }
+        if env["LOUPECAST_EXPORT"] == "cancel" {
+            m.export()
+            while case .running(let p) = m.exportState, p < 0.2 { try? await Task.sleep(for: .milliseconds(20)) }
+            print("LOUPECAST: cancelling at \(m.exportState), files \(exported())")
+            m.cancelExport()
+            while m.exportState.isRunning { try? await Task.sleep(for: .milliseconds(50)) }
+            print("LOUPECAST: after cancel \(m.exportState), files \(exported())")
+        }
+        if env["LOUPECAST_EXPORT"] == "twice" {
+            let other = offscreenEditor(m.dir, m.project)
+            while other.model.edit == nil { try? await Task.sleep(for: .milliseconds(100)) }
+            m.export(); other.model.export()
+            while m.exportState.isRunning || other.model.exportState.isRunning { try? await Task.sleep(for: .milliseconds(100)) }
+            print("LOUPECAST: two exports \(m.exportState) | \(other.model.exportState), files \(exported())")
+            other.window.close()
         }
         let output = AVPlayerItemVideoOutput(pixelBufferAttributes: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA])
         m.player.currentItem?.add(output)
@@ -364,6 +383,10 @@ enum DebugHooks {
         print("LOUPECAST: editor test \(failures.isEmpty ? "PASSED" : "FAILED: \(failures)")"); fflush(stdout)
         w.close()
         NSApp.terminate(nil)
+    }
+
+    static func exported() -> [String] {
+        ((try? FileManager.default.contentsOfDirectory(atPath: EditorModel.exportDir.path)) ?? []).filter { $0.hasSuffix(".mp4") }.sorted()
     }
 
     static func state(_ label: String, _ w: NSWindow?) {

@@ -4,12 +4,20 @@ import LoupecastCore
 /// H.264 1920×1080 constant 60 fps + one stereo AAC track (system and mic mixed).
 /// The composition is the kept clips back to back, so the file is exactly their total length.
 public enum Exporter {
-    public static func defaultURL(now: Date = Date()) -> URL {
+    public static var moviesDir: URL { FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Movies") }
+
+    /// `Loupecast <yyyy-MM-dd HH.mm.ss>.mp4` in `dir`, numbered " 2", " 3"… when that name is on disk or in `taken`
+    /// (exports still running), so an export never replaces an earlier one from the same second.
+    public static func defaultURL(now: Date = Date(), in dir: URL = moviesDir, taken: Set<URL> = []) -> URL {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
         f.dateFormat = "yyyy-MM-dd HH.mm.ss"
-        return FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Movies/Loupecast \(f.string(from: now)).mp4")
+        var n = 1
+        while true {
+            let url = dir.appendingPathComponent("Loupecast \(f.string(from: now))\(n == 1 ? "" : " \(n)").mp4")
+            if !taken.contains(url), !FileManager.default.fileExists(atPath: url.path) { return url }
+            n += 1
+        }
     }
 
     public static func export(project: Project, videoURL: URL, to output: URL,
@@ -67,17 +75,29 @@ public enum Exporter {
             audio = (o, i)
         }
 
-        guard reader.startReading() else { throw reader.error ?? LoupecastError("읽기를 시작하지 못했습니다.") }
-        guard writer.startWriting() else { throw writer.error ?? LoupecastError("쓰기를 시작하지 못했습니다.") }
-        writer.startSession(atSourceTime: .zero)
+        // a cancelled or failed export leaves no half-written file behind
+        do {
+            guard reader.startReading() else { throw reader.error ?? LoupecastError("읽기를 시작하지 못했습니다.") }
+            guard writer.startWriting() else { throw writer.error ?? LoupecastError("쓰기를 시작하지 못했습니다.") }
+            writer.startSession(atSourceTime: .zero)
 
-        let total = duration.seconds
-        try await Pumps(reader: reader, writer: writer, video: (vOut, vIn), audio: audio, cuts: project.clips.cutTimes)
-            .run { progress(min(1, $0 / total)) }
-        if reader.status == .failed { writer.cancelWriting(); throw reader.error ?? LoupecastError("읽기 실패") }
-        writer.endSession(atSourceTime: duration)
-        await writer.finishWriting()
-        if writer.status != .completed { throw writer.error ?? LoupecastError("쓰기 실패") }
+            let total = duration.seconds
+            let pumps = Pumps(reader: reader, writer: writer, video: (vOut, vIn), audio: audio, cuts: project.clips.cutTimes)
+            // a cancelled reader hands out no more buffers, so both pumps finish and the check below throws
+            try await withTaskCancellationHandler {
+                try await pumps.run { progress(min(1, $0 / total)) }
+            } onCancel: { pumps.reader.cancelReading() }
+            try Task.checkCancellation()
+            if reader.status == .failed { throw reader.error ?? LoupecastError("읽기 실패") }
+            writer.endSession(atSourceTime: duration)
+            await writer.finishWriting()
+            if writer.status != .completed { throw writer.error ?? LoupecastError("쓰기 실패") }
+        } catch {
+            reader.cancelReading()
+            if writer.status == .writing { writer.cancelWriting() }
+            try? FileManager.default.removeItem(at: output)
+            throw error
+        }
         progress(1)
     }
 }

@@ -37,6 +37,7 @@ final class EditorModel {
     /// Project before the drag in progress; the drag becomes one undo step and one player update.
     @ObservationIgnored private var dragBase: Project?
     @ObservationIgnored private var saveTask: Task<Void, Never>?
+    @ObservationIgnored private var exportTask: Task<Void, Never>?
     @ObservationIgnored private var timeObserver: Any?
     @ObservationIgnored private var rateObserver: NSKeyValueObservation?
 
@@ -244,11 +245,16 @@ final class EditorModel {
 
     // MARK: export
 
+    /// Running exports by output file, across all editors: an export keeps going after its window closes.
+    static private(set) var exports: [URL: Task<Void, Never>] = [:]
+    static var exportDir = Exporter.moviesDir
+
     func export() {
         if exportState.isRunning { return }
         exportState = .running(0)
-        let project = project, video = videoURL, url = Exporter.defaultURL()
-        Task {
+        let project = project, video = videoURL
+        let url = Exporter.defaultURL(in: Self.exportDir, taken: Set(Self.exports.keys))
+        let task = Task {
             do {
                 try await Exporter.export(project: project, videoURL: video, to: url) { p in
                     Task { @MainActor in
@@ -257,10 +263,17 @@ final class EditorModel {
                 }
                 exportState = .done(url)
             } catch {
-                exportState = .failed(describe(error))
+                exportState = Task.isCancelled ? .idle : .failed(describe(error))
             }
+            Self.exports[url] = nil
+            exportTask = nil
         }
+        Self.exports[url] = task
+        exportTask = task
     }
+
+    /// The exporter stops reading, cancels the writer and deletes the partial file; the state goes back to idle.
+    func cancelExport() { exportTask?.cancel() }
 
     private func makeThumbnails(count: Int) async -> [NSImage] {
         let gen = AVAssetImageGenerator(asset: AVURLAsset(url: videoURL))
@@ -486,6 +499,12 @@ struct ExportStatus: View {
             HStack(spacing: 8) {
                 ProgressView(value: p).frame(width: 110)
                 Text("\(Int(p * 100))%").font(.callout.monospacedDigit()).foregroundStyle(.secondary).frame(width: 36, alignment: .trailing)
+                Button(action: model.cancelExport) { Image(systemName: "xmark.circle.fill") }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(.secondary)
+                    .focusable(false)
+                    .help("내보내기 취소")
+                    .accessibilityLabel("내보내기 취소")
             }
         case .done(let url):
             Button("Finder에서 보기") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
