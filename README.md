@@ -23,20 +23,20 @@ Or download `Loupecast.zip` from the [latest release](https://github.com/dunzkoi
 > xattr -dr com.apple.quarantine /Applications/Loupecast.app
 > ```
 
-Requires macOS 15 or later on Apple Silicon. The interface is currently in Korean.
+Requires macOS 15 or later on Apple Silicon. The interface is in English or Korean, following your macOS language.
 
 ## Usage
 
 1. Open Loupecast. It lives in the menu bar (◉), not the Dock.
-2. Press **⌘⇧2** (or choose 녹화 시작 from the menu) to start, and again to stop.
+2. Press **⌘⇧2** (or choose **Start Recording** from the menu) to start, and again to stop.
 3. The first time, allow **Screen & System Audio Recording** in System Settings, then quit and reopen Loupecast.
 4. When you stop, the editor opens:
-   - Clicks become automatic zooms. Select a zoom and press Delete to remove it, or use 줌 추가 to add one.
+   - Clicks become automatic zooms. Select a zoom and press Delete to remove it, or use **Add Zoom** to add one.
    - **D** splits at the playhead, click a clip and press **Delete** to cut it, **⌘Z** to undo.
    - **Space** plays, **← →** step one frame, **I / O** set the clip start and end.
-5. Pick the frame next to it (16:9, 9:16 for Shorts and Reels, or 1:1), then press 내보내기 to export. Files go to `~/Movies`.
+5. Pick the frame next to it (16:9, 9:16 for Shorts and Reels, or 1:1), then press **Export**. Files go to `~/Movies`.
 
-Menu toggles: 마이크 녹음 (microphone, off by default), 컴퓨터 소리 녹음 (system audio, on), 영상 속 메뉴 막대 숨기기 (crop the menu bar out of the video, on).
+Menu toggles: **Record Microphone** (off by default), **Record Computer Audio** (on), **Hide Menu Bar in Video** (crops the menu bar out of the video, on).
 
 ## Privacy
 

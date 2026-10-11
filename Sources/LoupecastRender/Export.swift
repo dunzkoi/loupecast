@@ -80,8 +80,8 @@ public enum Exporter {
 
         // a cancelled or failed export leaves no half-written file behind
         do {
-            guard reader.startReading() else { throw reader.error ?? LoupecastError("읽기를 시작하지 못했습니다.") }
-            guard writer.startWriting() else { throw writer.error ?? LoupecastError("쓰기를 시작하지 못했습니다.") }
+            guard reader.startReading() else { throw reader.error ?? LoupecastError("Couldn’t start reading.") }
+            guard writer.startWriting() else { throw writer.error ?? LoupecastError("Couldn’t start writing.") }
             writer.startSession(atSourceTime: .zero)
 
             let total = duration.seconds
@@ -91,10 +91,10 @@ public enum Exporter {
                 try await pumps.run { progress(min(1, $0 / total)) }
             } onCancel: { pumps.stop() }
             try Task.checkCancellation()
-            if reader.status == .failed { throw reader.error ?? LoupecastError("읽기 실패") }
+            if reader.status == .failed { throw reader.error ?? LoupecastError("Reading failed") }
             writer.endSession(atSourceTime: duration)
             await writer.finishWriting()
-            if writer.status != .completed { throw writer.error ?? LoupecastError("쓰기 실패") }
+            if writer.status != .completed { throw writer.error ?? LoupecastError("Writing failed") }
         } catch {
             reader.cancelReading()   // safe here: both pumps have returned
             if writer.status == .writing { writer.cancelWriting() }
@@ -132,14 +132,14 @@ private struct Pumps: @unchecked Sendable {
                 while input.isReadyForMoreMediaData {
                     guard !stopped.withLock({ $0 }), let buffer = output.copyNextSampleBuffer() else {
                         input.markAsFinished()
-                        if reader.status == .failed { cont.resume(throwing: reader.error ?? LoupecastError("읽기 실패")) }
+                        if reader.status == .failed { cont.resume(throwing: reader.error ?? LoupecastError("Reading failed")) }
                         else { cont.resume() }
                         return
                     }
                     if !cuts.isEmpty { Self.applyCutFades(buffer, cuts: cuts) }
                     guard input.append(buffer) else {
                         stop()
-                        cont.resume(throwing: writer.error ?? LoupecastError("쓰기 실패"))
+                        cont.resume(throwing: writer.error ?? LoupecastError("Writing failed"))
                         return
                     }
                     progress(CMSampleBufferGetPresentationTimeStamp(buffer).seconds)

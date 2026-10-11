@@ -13,11 +13,19 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/Loupecast"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/"   # regenerate with: swift scripts/make-icon.swift
 cp Resources/loupecast-start.wav Resources/loupecast-stop.wav "$APP/Contents/Resources/"   # python3 scripts/make-sounds.py
+cp -R Resources/en.lproj Resources/ko.lproj "$APP/Contents/Resources/"   # UI text: English in the source, Korean in ko.lproj
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>ko</string>
+	</array>
 	<key>CFBundleIdentifier</key>
 	<string>com.flowoodz.loupecast</string>
 	<key>CFBundleName</key>
@@ -41,7 +49,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>마이크 소리를 녹음하려면 접근 권한이 필요합니다.</string>
+	<string>Loupecast needs access to record your microphone.</string>
 </dict>
 </plist>
 PLIST

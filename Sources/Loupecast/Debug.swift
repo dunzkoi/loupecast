@@ -56,7 +56,7 @@ enum DebugHooks {
         if let path = env["LOUPECAST_EDITOR_TEST"] { Task { await editorTest(URL(fileURLWithPath: path)) } }
         if let out = env["LOUPECAST_PERMISSIONS"] {
             app.showPermissions(needsMic: UserDefaults.standard.bool(forKey: AppDelegate.micKey))
-            let w = NSApp.windows.first { $0.title == "Loupecast 권한" }
+            let w = NSApp.windows.first { $0.title == String(localized: "Loupecast Permissions") }
             w?.setFrameOrigin(NSPoint(x: -20_000, y: -20_000))
             Task {
                 try? await Task.sleep(for: .seconds(2.5))
@@ -88,7 +88,7 @@ enum DebugHooks {
             }
         }
         if env["LOUPECAST_USAGE_TEST"] != nil {
-            let line = { app.debugMenuTitles().first { $0.contains("녹화 원본 폴더") } ?? "none" }
+            let line = { app.debugMenuTitles().first { $0.contains(String(localized: "Open Recordings Folder")) } ?? "none" }
             print("LOUPECAST: usage \(line())")
             print("LOUPECAST: usage again (cached) \(line())")
             if let newest = Library.recent(1).first { try? Library.trash(newest.dir); print("LOUPECAST: trashed \(newest.name)") }
@@ -126,7 +126,7 @@ enum DebugHooks {
             m.selection = .clip(m.project.clips[i].id); m.deleteSelected()
         }
         if let a = env["LOUPECAST_ASPECT"].flatMap(AspectRatio.init(rawValue:)) {
-            m.edit("비율") { $0.aspect = a }
+            m.edit("Aspect Ratio") { $0.aspect = a }
             print("LOUPECAST: aspect \(m.project.aspect.rawValue), undo \(m.undo.undoActionName)")
             if env["LOUPECAST_ASPECT_UNDO"] != nil { m.undoEdit(); print("LOUPECAST: aspect after undo \(m.project.aspect.rawValue)") }
         }
@@ -270,7 +270,7 @@ enum DebugHooks {
         let edits: [(String, () -> Void)] = [
             ("no edit (noise floor)", {}),
             ("split at 100 s", { m.seek(100); m.split() }),
-            ("zoom off", { let z = m.project.zooms[5]; m.edit("줌 끄기") { $0.setZoomEnabled(id: z.id, false) } }),
+            ("zoom off", { let z = m.project.zooms[5]; m.edit("Turn Zoom Off") { $0.setZoomEnabled(id: z.id, false) } }),
             ("add zoom", { m.seek(1000); m.addZoom() }),
         ]
         for (name, edit) in edits {
@@ -288,7 +288,7 @@ enum DebugHooks {
         for i in 1...2 {
             t0 = up()
             let titles = app.debugMenuTitles()
-            print("LOUPECAST: perf menu build #\(i) \(ms(up() - t0)), \(titles.filter { $0.contains("1시간") && !$0.contains("휴지통") }.count) recent items")
+            print("LOUPECAST: perf menu build #\(i) \(ms(up() - t0)), \(titles.filter { $0 == "  └ 1시간 합성" }.count) recent items")
         }
         fflush(stdout)
         exit(0)
@@ -398,7 +398,7 @@ enum DebugHooks {
             click(NSPoint(x: r.midX, y: r.midY))
             try? await Task.sleep(for: .seconds(1.2))
         }
-        state("after clicking 줌 추가")
+        state("after clicking Add Zoom")
         check(m.project.zooms.count == zooms0 + 1, "button click landed (zoom added)")
         check(!(w.firstResponder is NSButton), "the clicked button did not keep keyboard focus")
 

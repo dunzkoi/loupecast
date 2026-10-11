@@ -59,7 +59,7 @@ public final class LoupecastCompositor: NSObject, AVVideoCompositing, @unchecked
             guard let ins = request.videoCompositionInstruction as? LoupecastInstruction,
                   let src = request.sourceFrame(byTrackID: ins.trackID).map({ CIImage(cvPixelBuffer: $0) }) ?? lastSource,
                   let out = request.renderContext.newPixelBuffer() else {
-                request.finish(with: LoupecastError("합성할 원본 프레임이 없습니다."))
+                request.finish(with: LoupecastError("No source frame to compose."))
                 return
             }
             lastSource = src
@@ -149,7 +149,7 @@ public struct SourceTracks: @unchecked Sendable {
 
     public static func load(_ url: URL) async throws -> SourceTracks {
         let source = AVURLAsset(url: url)
-        guard let v = try await source.loadTracks(withMediaType: .video).first else { throw LoupecastError("녹화 파일에 영상 트랙이 없습니다.") }
+        guard let v = try await source.loadTracks(withMediaType: .video).first else { throw LoupecastError("The recording has no video track.") }
         var audio: [(AVAssetTrack, CMTimeRange)] = []
         for a in try await source.loadTracks(withMediaType: .audio) { audio.append((a, try await a.load(.timeRange))) }
         return SourceTracks(asset: source, video: (v, try await v.load(.timeRange)), audio: audio)
@@ -168,7 +168,7 @@ public enum Composer {
     public static func make(project: Project, source: SourceTracks, style: FrameStyle = .standard) throws -> EditComposition {
         let comp = AVMutableComposition()
         guard let video = comp.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid) else {
-            throw LoupecastError("녹화 파일에 영상 트랙이 없습니다.")
+            throw LoupecastError("The recording has no video track.")
         }
         var tracks = [(source.video.track, source.video.range, video)]
         for a in source.audio {

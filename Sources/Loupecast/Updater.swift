@@ -60,9 +60,9 @@ enum Updater {
     /// Menu "업데이트 확인…": installs a newer release right away when idle, otherwise says why not.
     static func checkFromMenu() {
         Task {
-            do { try await fetchLatest() } catch { return show("업데이트를 확인하지 못했습니다", error.localizedDescription) }
-            guard let tag = available else { return show("최신 버전입니다", "Loupecast \(current)이 최신 버전입니다.") }
-            guard isIdle() || !canInstall else { return show("\(tag) 업데이트가 있습니다", "녹화와 내보내기가 끝나고 편집 창을 모두 닫으면 설치됩니다.") }
+            do { try await fetchLatest() } catch { return show(String(localized: "Couldn’t check for updates"), error.localizedDescription) }
+            guard let tag = available else { return show(String(localized: "You’re up to date"), String(localized: "Loupecast \(current) is the latest version.")) }
+            guard isIdle() || !canInstall else { return show(String(localized: "\(tag) is available"), String(localized: "It installs once recording and exports finish and every editor window is closed.")) }
             installFromMenu()
         }
     }
@@ -76,7 +76,7 @@ enum Updater {
                 NSLog("Loupecast: update to %@ failed: %@", tag, "\(error)")
                 if progress != nil {   // a menu click joined this install: don't leave its window hanging
                     closeProgress()
-                    show("업데이트를 설치하지 못했습니다", error.localizedDescription)
+                    show(String(localized: "Couldn’t install the update"), error.localizedDescription)
                 }
             }
         }
@@ -91,11 +91,11 @@ enum Updater {
         }
         let window = progress ?? UpdateProgress()
         progress = window
-        window.show("\(tag) 내려받는 중…")
+        window.show(String(localized: "Downloading \(tag)…"))
         Task {
             do { try await install() } catch {
                 closeProgress()
-                show("업데이트를 설치하지 못했습니다", error.localizedDescription)
+                show(String(localized: "Couldn’t install the update"), error.localizedDescription)
             }
         }
     }
@@ -112,7 +112,7 @@ enum Updater {
         let digest = SHA256.hash(data: try Data(contentsOf: zip)).map { String(format: "%02x", $0) }.joined()
         guard String(decoding: sums, as: UTF8.self).split(separator: "\n")
                 .contains(where: { $0.hasPrefix(digest) && $0.hasSuffix("Loupecast.zip") }) else {
-            throw UpdateError("다운로드한 파일의 체크섬이 맞지 않습니다.")
+            throw UpdateError("The downloaded file’s checksum doesn’t match.")
         }
 
         let app = Bundle.main.bundleURL
@@ -125,14 +125,14 @@ enum Updater {
         let fresh = work.appendingPathComponent("Loupecast.app")
         let version = Bundle(url: fresh)?.infoDictionary?["CFBundleShortVersionString"] as? String
         guard let version, "v" + version == tag else {
-            throw UpdateError("받은 앱의 버전(\(version ?? "?"))이 \(tag)와 다릅니다.")
+            throw UpdateError("The downloaded app’s version (\(version ?? "?")) isn’t \(tag).")
         }
         let req = requirement
         try await Task.detached { try run("/usr/bin/codesign", "--verify", "--strict", "-R", req, fresh.path) }.value
         guard isIdle() else {   // a recording may have started during the download
             if progress != nil {
                 closeProgress()
-                show("업데이트를 미뤘습니다", "녹화와 내보내기가 끝나고 편집 창을 모두 닫으면 설치됩니다.")
+                show(String(localized: "Update postponed"), String(localized: "It installs once recording and exports finish and every editor window is closed."))
             }
             return
         }
@@ -143,7 +143,7 @@ enum Updater {
 
         // Start the new copy first, then quit. A helper child that waits for us to exit doesn't survive:
         // macOS can tear down an app's children with it (a manual update quit and never came back).
-        progress?.show("다시 시작하는 중…")
+        progress?.show(String(localized: "Restarting…"))
         let defaults = UserDefaults.standard
         defaults.set(tag, forKey: updatedToKey)   // also tells the new instance it is a relaunch
         defaults.set(progress != nil, forKey: updatedManuallyKey)
@@ -153,7 +153,7 @@ enum Updater {
         do { _ = try await NSWorkspace.shared.openApplication(at: app, configuration: cfg) } catch {
             defaults.removeObject(forKey: updatedToKey)
             defaults.removeObject(forKey: updatedManuallyKey)
-            throw UpdateError("새 버전은 설치됐지만 다시 열지 못했습니다. Loupecast를 직접 다시 열어 주세요. (\(error.localizedDescription))")
+            throw UpdateError("The new version is installed but couldn’t be opened. Open Loupecast again yourself. (\(error.localizedDescription))")
         }
         quit()
     }
@@ -180,7 +180,7 @@ enum Updater {
         }
         guard "v" + current == tag else { return }   // the relaunch failed and this is an older copy
         if defaults.bool(forKey: updatedManuallyKey) {
-            DispatchQueue.main.async { show("\(tag)으로 업데이트되었습니다", "Loupecast가 새 버전으로 다시 시작했습니다.", link: tag) }
+            DispatchQueue.main.async { show(String(localized: "Updated to \(tag)"), String(localized: "Loupecast restarted with the new version."), link: tag) }
         } else {
             justUpdated = true
         }
@@ -191,7 +191,7 @@ enum Updater {
         let a = NSAlert()
         a.messageText = title
         a.informativeText = info
-        if let link { a.addButton(withTitle: "확인"); a.addButton(withTitle: "변경 사항 보기") }
+        if let link { a.addButton(withTitle: String(localized: "OK")); a.addButton(withTitle: String(localized: "View Changes")) }
         NSApp.activate(ignoringOtherApps: true)   // a menu-bar app is not active, so the alert would open behind
         if a.runModal() == .alertSecondButtonReturn, let link {
             NSWorkspace.shared.open(URL(string: "https://github.com/\(repo)/releases/tag/\(link)")!)
@@ -209,7 +209,7 @@ enum Updater {
         p.arguments = args
         try p.run()
         p.waitUntilExit()
-        guard p.terminationStatus == 0 else { throw UpdateError("\(tool) 실패 (\(p.terminationStatus))") }
+        guard p.terminationStatus == 0 else { throw UpdateError("\(tool) failed (\(String(p.terminationStatus)))") }
     }
 }
 
@@ -223,7 +223,7 @@ final class UpdateProgress {
         self.text = text
         guard window == nil else { return }
         let w = LoupecastWindow(contentRect: .zero, styleMask: [.titled], backing: .buffered, defer: false)
-        w.title = "Loupecast 업데이트"
+        w.title = String(localized: "Loupecast Update")
         w.isReleasedWhenClosed = false
         w.contentView = NSHostingView(rootView: UpdateProgressView(model: self))
         w.center()
@@ -251,5 +251,5 @@ struct UpdateProgressView: View {
 
 struct UpdateError: LocalizedError {
     let errorDescription: String?
-    init(_ message: String) { errorDescription = message }
+    init(_ message: String.LocalizationValue) { errorDescription = String(localized: message) }
 }

@@ -47,7 +47,7 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
         let mouse = CGEvent(source: nil)?.location ?? .zero
         guard let scDisplay = content.displays.first(where: { $0.frame.contains(mouse) }) ?? content.displays.first else {
-            throw LoupecastError("녹화할 디스플레이를 찾지 못했습니다.")
+            throw LoupecastError("Couldn’t find a display to record.")
         }
         let me = content.applications.filter { $0.processID == ProcessInfo.processInfo.processIdentifier }
         let filter = SCContentFilter(display: scDisplay, excludingApplications: me, exceptingWindows: [])
@@ -121,7 +121,7 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
             i.expectsMediaDataInRealTime = true
             writer.add(i)
         }
-        guard writer.startWriting() else { throw writer.error ?? LoupecastError("녹화 파일을 만들지 못했습니다.") }
+        guard writer.startWriting() else { throw writer.error ?? LoupecastError("Couldn’t create the recording file.") }
         try Project(name: Self.name(Date()), duration: 0, pixelWidth: w, pixelHeight: h, pointPixelScale: scale, cursor: [], clicks: [], keys: [])
             .save(to: dir.appendingPathComponent(Self.recoveryFile))
 
@@ -214,13 +214,13 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
         guard let start else {
             writer.cancelWriting()
             try? FileManager.default.removeItem(at: dir)
-            throw LoupecastError("화면 프레임을 하나도 받지 못했습니다. 화면 녹화 권한을 확인해 주세요.")
+            throw LoupecastError("No screen frames arrived. Check the Screen Recording permission.")
         }
         let end = max(stopHost, last)
         videoIn.markAsFinished(); systemIn?.markAsFinished(); micIn?.markAsFinished()
         writer.endSession(atSourceTime: end)
         await writer.finishWriting()
-        guard writer.status == .completed else { throw writer.error ?? LoupecastError("녹화 파일을 마무리하지 못했습니다.") }
+        guard writer.status == .completed else { throw writer.error ?? LoupecastError("Couldn’t finish the recording file.") }
         if dropped > 0 { NSLog("Loupecast: writer was busy for %d frames", dropped) }
 
         let movie = AVURLAsset(url: writer.outputURL)
@@ -241,8 +241,8 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
 
     static func name(_ date: Date) -> String {
         let f = DateFormatter()
-        f.dateFormat = "M월 d일 HH.mm.ss"
-        return "녹화 \(f.string(from: date))"
+        f.dateFormat = String(localized: "MMM d HH.mm.ss", comment: "Date in a recording's name")
+        return String(localized: "Recording \(f.string(from: date))")
     }
 }
 

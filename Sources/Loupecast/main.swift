@@ -65,20 +65,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         menu.autoenablesItems = false   // isEnabled below is the source of truth (greyed while recording)
         let recording = startedAt != nil
 
-        let rec = item(recording ? "녹화 중지" : "녹화 시작", #selector(toggleRecording))
+        let rec = item(recording ? String(localized: "Stop Recording") : String(localized: "Start Recording"), #selector(toggleRecording))
         rec.keyEquivalent = "2"
         rec.keyEquivalentModifierMask = [.command, .shift]
         rec.isEnabled = !busy
         menu.addItem(rec)
         if let reason = HotKey.failure {
-            let line = NSMenuItem(title: "단축키 사용 불가: \(HotKey.label)", action: nil, keyEquivalent: "")
+            let line = NSMenuItem(title: String(localized: "Shortcut unavailable: \(HotKey.label)"), action: nil, keyEquivalent: "")
             line.isEnabled = false
             line.toolTip = reason
             menu.addItem(line)
         }
         menu.addItem(.separator())
 
-        for (title, key) in [("마이크 녹음", Self.micKey), ("컴퓨터 소리 녹음", Self.systemAudioKey), ("영상 속 메뉴 막대 숨기기", Self.hideMenuBarKey), ("시작·종료 효과음", Self.soundsKey)] {
+        for (title, key) in [(String(localized: "Record Microphone"), Self.micKey), (String(localized: "Record Computer Audio"), Self.systemAudioKey),
+                             (String(localized: "Hide Menu Bar in Video"), Self.hideMenuBarKey), (String(localized: "Start and Stop Sounds"), Self.soundsKey)] {
             let toggle = item(title, #selector(toggleSetting(_:)))
             toggle.representedObject = key
             toggle.state = UserDefaults.standard.bool(forKey: key) ? .on : .off
@@ -88,16 +89,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         menu.addItem(.separator())
 
         for editor in editors.values.sorted(by: { $0.model.project.name < $1.model.project.name }) {
-            let e = item("편집: \(editor.model.project.name)", #selector(showEditor(_:)))
+            let e = item(String(localized: "Edit: \(editor.model.project.name)"), #selector(showEditor(_:)))
             e.representedObject = editor.model.dir
             menu.addItem(e)
         }
-        let recent = NSMenuItem(title: "최근 녹화", action: nil, keyEquivalent: "")
+        let recent = NSMenuItem(title: String(localized: "Recent Recordings"), action: nil, keyEquivalent: "")
         let sub = NSMenu()
         sub.autoenablesItems = false
         let items = Library.recent(5)
         if items.isEmpty {
-            let none = NSMenuItem(title: "녹화 없음", action: nil, keyEquivalent: "")
+            let none = NSMenuItem(title: String(localized: "No Recordings"), action: nil, keyEquivalent: "")
             none.isEnabled = false
             sub.addItem(none)
         }
@@ -105,7 +106,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             let i = item(name, #selector(openRecent(_:)))
             i.representedObject = dir
             sub.addItem(i)
-            let del = item("휴지통으로: \(name)", #selector(trashRecent(_:)))   // shown while ⌥ is held
+            let del = item(String(localized: "Move to Trash: \(name)"), #selector(trashRecent(_:)))   // shown while ⌥ is held
             del.representedObject = dir
             del.keyEquivalentModifierMask = .option
             del.isAlternate = true
@@ -113,44 +114,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             sub.addItem(del)
         }
         sub.addItem(.separator())
-        let hint = NSMenuItem(title: "⌥를 누르면 하나씩 지울 수 있습니다", action: nil, keyEquivalent: "")
+        let hint = NSMenuItem(title: String(localized: "Hold ⌥ to delete one at a time"), action: nil, keyEquivalent: "")
         hint.isEnabled = false
         sub.addItem(hint)
         let bytes = Library.diskUsage()   // the originals pile up out of sight: ~4 MB/s
-        let folder = item("녹화 원본 폴더 열기" + (bytes > 0 ? " (\(ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)))" : ""),
+        let size = ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+        let folder = item(bytes > 0 ? String(localized: "Open Recordings Folder (\(size))") : String(localized: "Open Recordings Folder"),
                           #selector(openLink(_:)))
         folder.representedObject = Recorder.recordingsDir
         sub.addItem(folder)
-        let all = item("모두 휴지통으로 보내기", #selector(trashAllRecent))
+        let all = item(String(localized: "Move All to Trash"), #selector(trashAllRecent))
         all.isEnabled = !recording && !busy && !items.isEmpty
         sub.addItem(all)
         recent.submenu = sub
         menu.addItem(recent)
-        let saved = item("저장 폴더 열기", #selector(openLink(_:)))
+        let saved = item(String(localized: "Open Exports Folder"), #selector(openLink(_:)))
         saved.representedObject = Exporter.defaultURL().deletingLastPathComponent()
         menu.addItem(saved)
         menu.addItem(.separator())
         if let tag = Updater.available {
-            let title = !Updater.canInstall ? "\(tag) 다운로드 페이지 열기"
-                : isIdle ? "\(tag) 설치 후 다시 시작" : "\(tag) 업데이트: 녹화·내보내기가 끝나고 편집 창을 닫으면 설치"
+            let title = !Updater.canInstall ? String(localized: "Open the \(tag) Download Page")
+                : isIdle ? String(localized: "Install \(tag) and Restart")
+                : String(localized: "\(tag) update: installs once recording and exports finish and editors are closed")
             let u = item(title, #selector(installUpdate))
             u.isEnabled = isIdle || !Updater.canInstall
             menu.addItem(u)
             menu.addItem(.separator())
         }
-        let version = NSMenuItem(title: "Loupecast \(Updater.current)" + (Updater.justUpdated ? " · 방금 업데이트됨" : ""),
+        let version = NSMenuItem(title: Updater.justUpdated ? String(localized: "Loupecast \(Updater.current) · just updated") : "Loupecast \(Updater.current)",
                                  action: nil, keyEquivalent: "")
         version.isEnabled = false
         menu.addItem(version)
-        menu.addItem(item("업데이트 확인…", #selector(checkForUpdates)))
+        menu.addItem(item(String(localized: "Check for Updates…"), #selector(checkForUpdates)))
         let github = item("GitHub", #selector(openLink(_:)))
         github.representedObject = URL(string: "https://github.com/\(Updater.repo)")!
         menu.addItem(github)
-        let sponsor = item("후원하기…", #selector(openLink(_:)))
+        let sponsor = item(String(localized: "Sponsor…"), #selector(openLink(_:)))
         sponsor.representedObject = URL(string: "https://github.com/sponsors/dunzkoi")!
         menu.addItem(sponsor)
         menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "종료", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        menu.addItem(NSMenuItem(title: String(localized: "Quit"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
     }
 
     private func item(_ title: String, _ action: Selector) -> NSMenuItem {
@@ -172,7 +175,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     @objc private func openRecent(_ sender: NSMenuItem) {
         guard let dir = sender.representedObject as? URL else { return }
         do { openEditor(dir: dir, project: try Project.load(from: dir.appendingPathComponent(Project.fileName))) }
-        catch { alert("녹화를 열지 못했습니다", error) }
+        catch { alert(String(localized: "Couldn’t open the recording"), error) }
     }
 
     @objc private func installUpdate() { Updater.installFromMenu() }
@@ -189,14 +192,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     @objc private func trashRecent(_ sender: NSMenuItem) {
         guard let dir = sender.representedObject as? URL, editors[dir] == nil else { return }
         do { try Library.trash(dir) }
-        catch { alert("녹화를 지우지 못했습니다", error) }
+        catch { alert(String(localized: "Couldn’t delete the recording"), error) }
     }
 
     /// Every finished recording not open in an editor; the one being recorded has no project file yet.
     @objc private func trashAllRecent() {
         guard recorder == nil else { return }
         do { for (dir, _) in Library.recent(.max) where editors[dir] == nil { try Library.trash(dir) } }
-        catch { alert("녹화를 지우지 못했습니다", error) }
+        catch { alert(String(localized: "Couldn’t delete the recording"), error) }
     }
 
     func openEditor(dir: URL, project: Project) {
@@ -290,7 +293,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             ticker = t
             updateStatusItem()
         } catch {
-            alert("녹화를 시작하지 못했습니다", error)
+            alert(String(localized: "Couldn’t start recording"), error)
         }
     }
 
@@ -307,7 +310,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             await Self.chime("loupecast-stop", wait: false)
             openEditor(dir: r.dir, project: project)
         }
-        catch { alert("녹화를 저장하지 못했습니다", error) }
+        catch { alert(String(localized: "Couldn’t save the recording"), error) }
     }
 
     /// Played outside the capture: the start sound finishes before the stream opens and the stop sound
@@ -328,7 +331,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         guard let button = statusItem.button else { return }
         if let startedAt {
             let config = NSImage.SymbolConfiguration(paletteColors: [.systemRed])
-            button.image = NSImage(systemSymbolName: "record.circle", accessibilityDescription: "녹화 중")?
+            button.image = NSImage(systemSymbolName: "record.circle", accessibilityDescription: String(localized: "Recording in progress"))?
                 .withSymbolConfiguration(config)
             let s = Int(ProcessInfo.processInfo.systemUptime - startedAt)
             button.attributedTitle = NSAttributedString(string: String(format: " %02d:%02d", s / 60, s % 60), attributes: [
@@ -399,10 +402,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         if let answer = DebugHooks.env["LOUPECAST_QUIT_ANSWER"] { return answer == "quit" }
         #endif
         let a = NSAlert()
-        a.messageText = "내보내기가 진행 중입니다"
-        a.informativeText = "내보내기가 끝나야 파일이 완성됩니다. 지금 종료하면 내보내기를 취소하고 만들던 파일을 지웁니다."
-        a.addButton(withTitle: "취소")
-        a.addButton(withTitle: "종료").hasDestructiveAction = true
+        a.messageText = String(localized: "An export is in progress")
+        a.informativeText = String(localized: "The file is complete only when the export finishes. Quitting now cancels the export and deletes the unfinished file.")
+        a.addButton(withTitle: String(localized: "Cancel"))
+        a.addButton(withTitle: String(localized: "Quit")).hasDestructiveAction = true
         NSApp.activate(ignoringOtherApps: true)
         return a.runModal() == .alertSecondButtonReturn
     }
@@ -431,7 +434,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     func showPermissions(needsMic: Bool) {
         permissionWindow?.close()
         let w = LoupecastWindow(contentRect: .zero, styleMask: [.titled, .closable], backing: .buffered, defer: false)
-        w.title = "Loupecast 권한"
+        w.title = String(localized: "Loupecast Permissions")
         w.isReleasedWhenClosed = false
         w.contentView = NSHostingView(rootView: PermissionView(needsMic: needsMic) { [weak w] in w?.close() })
         w.center()
@@ -452,7 +455,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     static func mainMenu() -> NSMenu {
         let app = NSMenuItem()
         app.submenu = NSMenu()
-        app.submenu?.addItem(withTitle: "Loupecast 종료", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        app.submenu?.addItem(withTitle: String(localized: "Quit Loupecast"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         let main = NSMenu()
         main.addItem(app)
         return main
@@ -494,12 +497,13 @@ struct LauncherView: View {
                 .frame(width: 72, height: 72)
                 .accessibilityHidden(true)
             Button(action: start) {
-                Label("녹화 시작", systemImage: "record.circle").frame(minWidth: 128)
+                Label("Start Recording", systemImage: "record.circle").frame(minWidth: 128)
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
             .keyboardShortcut(.defaultAction)
-            Text(HotKey.failure == nil ? "메뉴 막대 아이콘이나 \(HotKey.label)로도 시작합니다." : "메뉴 막대 아이콘에서도 시작합니다.")
+            Text(HotKey.failure == nil ? String(localized: "You can also start from the menu bar icon or \(HotKey.label).")
+                                        : String(localized: "You can also start from the menu bar icon."))
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }
@@ -523,25 +527,25 @@ struct PermissionView: View {
                     .font(.system(size: 34, weight: .regular))
                     .foregroundStyle(.red)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("녹화하려면 권한이 필요합니다").font(.title3.weight(.semibold))
-                    Text("아래 항목을 시스템 설정에서 켜 주세요.").foregroundStyle(.secondary)
+                    Text("Recording needs permission").font(.title3.weight(.semibold))
+                    Text("Turn on the items below in System Settings.").foregroundStyle(.secondary)
                 }
             }
-            PermissionRow(granted: screen, title: "화면 및 시스템 오디오 녹음",
-                          detail: "시스템 설정 › 개인정보 보호 및 보안 › 화면 및 시스템 오디오 녹음에서 Loupecast를 켭니다.",
+            PermissionRow(granted: screen, title: "Screen & System Audio Recording",
+                          detail: "In System Settings › Privacy & Security › Screen & System Audio Recording, turn on Loupecast.",
                           pane: "Privacy_ScreenCapture")
             if needsMic {
-                PermissionRow(granted: mic, title: "마이크",
-                              detail: "시스템 설정 › 개인정보 보호 및 보안 › 마이크에서 Loupecast를 켭니다.",
+                PermissionRow(granted: mic, title: "Microphone",
+                              detail: "In System Settings › Privacy & Security › Microphone, turn on Loupecast.",
                               pane: "Privacy_Microphone")
             }
-            Text("화면 녹화 권한은 켠 다음 Loupecast를 종료했다가 다시 열어야 적용됩니다. 켜져 있는데도 이 창이 계속 뜨면, 목록에서 Loupecast를 선택해 −로 지운 뒤 녹화를 다시 시작하세요.")
+            Text("Screen recording takes effect after you quit and reopen Loupecast. If this window keeps appearing while it is on, select Loupecast in the list, remove it with −, and start recording again.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             HStack {
                 Spacer()
-                Button("닫기", action: close).keyboardShortcut(.defaultAction)
+                Button("Close", action: close).keyboardShortcut(.defaultAction)
             }
         }
         .padding(24)
@@ -555,8 +559,8 @@ struct PermissionView: View {
 
 struct PermissionRow: View {
     let granted: Bool
-    let title: String
-    let detail: String
+    let title: LocalizedStringKey
+    let detail: LocalizedStringKey
     let pane: String
 
     var body: some View {
@@ -564,14 +568,14 @@ struct PermissionRow: View {
             Image(systemName: granted ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
                 .font(.title2)
                 .foregroundStyle(granted ? .green : .orange)
-                .accessibilityLabel(granted ? "허용됨" : "필요함")
+                .accessibilityLabel(granted ? String(localized: "Allowed") : String(localized: "Needed"))
             VStack(alignment: .leading, spacing: 3) {
                 Text(title).font(.headline)
                 Text(detail).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 8)
             if !granted {
-                Button("설정 열기") {
+                Button("Open Settings") {
                     NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?\(pane)")!)
                 }
             }
@@ -644,7 +648,7 @@ enum Library {
         guard let video = try? await AVURLAsset(url: movie).loadTracks(withMediaType: .video).first,
               let (range, size) = try? await video.load(.timeRange, .naturalSize), range.end.seconds > 0 else { return nil }
         let base = try? Project.load(from: dir.appendingPathComponent(Recorder.recoveryFile))
-        return Project(name: "\(base?.name ?? Recorder.name(Date())) (복구됨)", duration: range.end.seconds,
+        return Project(name: String(localized: "\(base?.name ?? Recorder.name(Date())) (Recovered)"), duration: range.end.seconds,
                        pixelWidth: base?.pixelWidth ?? Int(size.width), pixelHeight: base?.pixelHeight ?? Int(size.height),
                        pointPixelScale: base?.pointPixelScale ?? 1, cursor: [], clicks: [], keys: [])
     }
@@ -693,7 +697,8 @@ enum HotKey {
                                          GetEventDispatcherTarget(), 0, &ref)
         }
         if status != noErr {
-            failure = status == OSStatus(eventHotKeyExistsErr) ? "다른 앱이 이미 사용 중입니다." : "등록하지 못했습니다 (OSStatus \(status))."
+            failure = status == OSStatus(eventHotKeyExistsErr) ? String(localized: "Another app is already using it.")
+                : String(localized: "Couldn’t register it (OSStatus \(String(status))).")
             NSLog("Loupecast: %@ hot key unavailable (%d)", label, status)
         }
         #if DEBUG

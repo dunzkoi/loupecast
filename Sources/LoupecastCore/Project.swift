@@ -65,7 +65,7 @@ public struct Project: Codable, Sendable, Equatable {
 
     public static func load(from url: URL) throws -> Project {
         var p = try JSONDecoder().decode(Project.self, from: Data(contentsOf: url))
-        guard p.version <= currentVersion else { throw LoupecastError("지원하지 않는 프로젝트 버전입니다: \(p.version)") }
+        guard p.version <= currentVersion else { throw LoupecastError("Unsupported project version: \(p.version)") }
         p.version = currentVersion
         p.clips = p.clips.sanitized(duration: p.duration)
         return p
@@ -340,7 +340,8 @@ public struct InputLog: Sendable {
     }
 }
 
+/// Looked up in the app bundle's Localizable.strings (English when there is no translation).
 public struct LoupecastError: LocalizedError {
     public let errorDescription: String?
-    public init(_ text: String) { errorDescription = text }
+    public init(_ text: String.LocalizationValue) { errorDescription = String(localized: text) }
 }

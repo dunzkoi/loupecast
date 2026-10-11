@@ -23,7 +23,7 @@ brew install --cask dunzkoi/tap/loupecast
 > xattr -dr com.apple.quarantine /Applications/Loupecast.app
 > ```
 
-Apple Silicon Mac, macOS 15 이상에서 동작합니다.
+Apple Silicon Mac, macOS 15 이상에서 동작합니다. 화면은 macOS 언어 설정에 따라 한국어나 영어로 나옵니다.
 
 ## 사용법
 

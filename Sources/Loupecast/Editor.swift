@@ -147,10 +147,10 @@ final class EditorModel {
 
     // MARK: edits (each one undo step)
 
-    func edit(_ name: String, _ change: (inout Project) -> Void) {
+    func edit(_ name: String.LocalizationValue, _ change: (inout Project) -> Void) {
         let before = project
         change(&project)
-        if dragBase == nil, project != before { undo.registerChange(self, \.project, before: before, name: name) }
+        if dragBase == nil, project != before { undo.registerChange(self, \.project, before: before, name: String(localized: name)) }
     }
 
     func undoEdit() { if dragBase == nil, undo.canUndo { undo.undo() } }
@@ -160,16 +160,16 @@ final class EditorModel {
         project.clips.index(containing: playhead).map { project.clips[$0] } ?? project.clips.last
     }
 
-    func markIn() { if let c = clipAtPlayhead { edit("시작 지점") { $0.setClipStart(id: c.id, playhead) } } }
-    func markOut() { if let c = clipAtPlayhead { edit("끝 지점") { $0.setClipEnd(id: c.id, playhead) } } }
-    func split() { edit("자르기") { $0.split(at: playhead) } }
+    func markIn() { if let c = clipAtPlayhead { edit("Set Start") { $0.setClipStart(id: c.id, playhead) } } }
+    func markOut() { if let c = clipAtPlayhead { edit("Set End") { $0.setClipEnd(id: c.id, playhead) } } }
+    func split() { edit("Split") { $0.split(at: playhead) } }
 
-    func addZoom() { edit("줌 추가") { selection = .zoom($0.addZoom(at: playhead).id) } }
+    func addZoom() { edit("Add Zoom") { selection = .zoom($0.addZoom(at: playhead).id) } }
 
     func deleteSelected() {
         switch selection {
-        case .clip(let id): edit("클립 삭제") { $0.removeClip(id: id) }
-        case .zoom(let id): edit("줌 삭제") { $0.removeZoom(id: id) }
+        case .clip(let id): edit("Delete Clip") { $0.removeClip(id: id) }
+        case .zoom(let id): edit("Delete Zoom") { $0.removeZoom(id: id) }
         case .none: return
         }
     }
@@ -195,7 +195,7 @@ final class EditorModel {
     func dragClip(_ id: UUID, edge: HorizontalEdge, to t: Double) {
         beginDrag()
         selection = .clip(id)
-        edit("다듬기") { edge == .leading ? $0.setClipStart(id: id, t) : $0.setClipEnd(id: id, t) }
+        edit("Trim") { edge == .leading ? $0.setClipStart(id: id, t) : $0.setClipEnd(id: id, t) }
         guard let c = project.clips.first(where: { $0.id == id }) else { return }
         playhead = edge == .leading ? c.start : max(c.start, c.end - Project.frameDuration)
         if built.index(containing: playhead) != nil {
@@ -205,14 +205,14 @@ final class EditorModel {
 
     func dragZoom(_ id: UUID, edge: HorizontalEdge, to t: Double) {
         beginDrag()
-        edit("줌 길이") { edge == .leading ? $0.setZoomStart(id: id, t) : $0.setZoomEnd(id: id, t) }
+        edit("Zoom Length") { edge == .leading ? $0.setZoomStart(id: id, t) : $0.setZoomEnd(id: id, t) }
     }
 
-    func endDrag(_ name: String) {
+    func endDrag(_ name: String.LocalizationValue) {
         guard let base = dragBase else { return }
         dragBase = nil
         guard project != base else { return }
-        undo.registerChange(self, \.project, before: base, name: name)
+        undo.registerChange(self, \.project, before: base, name: String(localized: name))
         applyToPlayer(old: base)
     }
 
@@ -450,54 +450,54 @@ struct ControlBar: View {
             }
             .buttonStyle(.borderless)
             .focusable(false)
-            .help(model.isPlaying ? "일시정지 (스페이스)" : "재생 (스페이스)")
-            .accessibilityLabel(model.isPlaying ? "일시정지" : "재생")
+            .help(model.isPlaying ? String(localized: "Pause (Space)") : String(localized: "Play (Space)"))
+            .accessibilityLabel(model.isPlaying ? String(localized: "Pause") : String(localized: "Play"))
 
             Text("\(Text(timecode(model.position)))\(Text(" / \(timecode(model.total))").foregroundStyle(.secondary))")
                 .font(.callout.monospacedDigit())
             let removed = model.project.duration - model.total
             if removed > 0.005 {
                 Label {
-                    Text("잘라냄 \(timecode(removed))")
+                    Text("Cut \(timecode(removed))")
                 } icon: {
                     Image(systemName: "scissors").imageScale(.small)
                 }
                 .font(.callout.monospacedDigit())
                 .foregroundStyle(.secondary)
-                .help("잘라낸 길이 (D 자르기, Delete 삭제, ⌘Z 되돌리기)")
+                .help("Length cut out (D splits, Delete removes, ⌘Z undoes)")
             }
 
             Spacer(minLength: 12)
 
             if let seg = model.selectedZoom {
-                Toggle("줌 사용", isOn: Binding(get: { seg.isEnabled },
-                                              set: { on in model.edit(on ? "줌 켜기" : "줌 끄기") { $0.setZoomEnabled(id: seg.id, on) } }))
+                Toggle("Use Zoom", isOn: Binding(get: { seg.isEnabled },
+                                              set: { on in model.edit(on ? "Turn Zoom On" : "Turn Zoom Off") { $0.setZoomEnabled(id: seg.id, on) } }))
                     .toggleStyle(.switch)
                     .controlSize(.small)
                     .focusable(false)
                 Button(role: .destructive, action: model.deleteSelected) { Image(systemName: "trash") }
                     .buttonStyle(.borderless)
                     .focusable(false)
-                    .help("선택한 줌 삭제 (Delete)")
-                    .accessibilityLabel("선택한 줌 삭제")
+                    .help("Delete the selected zoom (Delete)")
+                    .accessibilityLabel("Delete the selected zoom")
                 Divider().frame(height: 18)
             }
             ExportStatus(model: model)
-            Picker("비율", selection: Binding(get: { model.project.aspect },
-                                              set: { a in model.edit("비율") { $0.aspect = a } })) {
+            Picker("Aspect Ratio", selection: Binding(get: { model.project.aspect },
+                                              set: { a in model.edit("Aspect Ratio") { $0.aspect = a } })) {
                 ForEach(AspectRatio.allCases) { Text($0.rawValue).tag($0) }
             }
             .pickerStyle(.menu)
             .labelsHidden()
             .fixedSize()
             .focusable(false)
-            .help("내보내기 비율 (16:9 가로, 9:16 세로, 1:1 정사각)")
-            .accessibilityLabel("내보내기 비율")
-            Button(action: model.addZoom) { Label("줌 추가", systemImage: "plus.magnifyingglass") }
+            .help("Export frame (16:9 landscape, 9:16 portrait, 1:1 square)")
+            .accessibilityLabel("Export frame")
+            Button(action: model.addZoom) { Label("Add Zoom", systemImage: "plus.magnifyingglass") }
                 .buttonStyle(.bordered)
                 .focusable(false)
-                .help("재생 위치에 2초 줌 추가")
-            Button(action: model.export) { Label("내보내기", systemImage: "square.and.arrow.up") }
+                .help("Add a 2-second zoom at the playhead")
+            Button(action: model.export) { Label("Export", systemImage: "square.and.arrow.up") }
                 .buttonStyle(.borderedProminent)
                 .focusable(false)
                 .disabled(model.exportState.isRunning || model.edit == nil)
@@ -523,11 +523,11 @@ struct ExportStatus: View {
                     .buttonStyle(.borderless)
                     .foregroundStyle(.secondary)
                     .focusable(false)
-                    .help("내보내기 취소")
-                    .accessibilityLabel("내보내기 취소")
+                    .help("Cancel Export")
+                    .accessibilityLabel("Cancel Export")
             }
         case .done(let url):
-            Button("Finder에서 보기") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
+            Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
                 .buttonStyle(.link)
                 .focusable(false)
                 .help(url.path)
@@ -574,12 +574,12 @@ struct TimelineView: View {
                 .contentShape(Rectangle())
                 .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .named("timeline"))
                     .onChanged { model.scrub(t($0.location.x), began: $0.translation == .zero) })
-                .accessibilityLabel("타임라인")
+                .accessibilityLabel("Timeline")
 
                 ForEach(clips) { clip in
                     ClipHandles(selected: model.selection == .clip(clip.id), width: x(clip.end) - x(clip.start), height: H,
                                 drag: { edge, px in model.dragClip(clip.id, edge: edge, to: t(px)) },
-                                ended: { model.endDrag("다듬기") })
+                                ended: { model.endDrag("Trim") })
                         .offset(x: x(clip.start))
                 }
 
@@ -660,7 +660,7 @@ struct ClipHandles: View {
             .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .named("timeline"))
                 .updating($dragging) { _, d, _ in d = true }
                 .onChanged { drag(edge, $0.location.x + (edge == .leading ? -g / 2 : g / 2)) })
-            .accessibilityLabel(edge == .leading ? "클립 시작 지점 조절" : "클립 끝 지점 조절")
+            .accessibilityLabel(edge == .leading ? String(localized: "Adjust Clip Start") : String(localized: "Adjust Clip End"))
     }
 }
 
@@ -737,12 +737,12 @@ struct ZoomCapsule: View, Equatable {
             .overlay(alignment: .leading) { edge(.leading) }
             .overlay(alignment: .trailing) { edge(.trailing) }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("줌")
-            .accessibilityValue("\(timecode(seg.start))–\(timecode(seg.end))\(seg.isEnabled ? "" : ", 꺼짐")")
+            .accessibilityLabel("Zoom")
+            .accessibilityValue(seg.isEnabled ? "\(timecode(seg.start))–\(timecode(seg.end))" : String(localized: "\(timecode(seg.start))–\(timecode(seg.end)), off"))
             .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
             .frame(width: max(8, w), height: ZoomLane.capsuleHeight)
             .offset(x: x(seg.start))
-            .onChange(of: dragging) { _, now in if !now { model.endDrag("줌 길이") } }
+            .onChange(of: dragging) { _, now in if !now { model.endDrag("Zoom Length") } }
     }
 
     private func edge(_ edge: HorizontalEdge) -> some View {
