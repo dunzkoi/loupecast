@@ -21,7 +21,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     private var editors: [URL: EditorController] = [:]
     private var permissionWindow: NSWindow?
     private var launcher: NSWindow?
-    private var isIdle: Bool { recorder == nil && editors.isEmpty && !busy }
+    /// Also waits for exports: one keeps writing after its editor closes.
+    private var isIdle: Bool { recorder == nil && editors.isEmpty && !busy && EditorModel.exports.isEmpty }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         UserDefaults.standard.register(defaults: [Self.micKey: false, Self.systemAudioKey: true, Self.hideMenuBarKey: true, Self.soundsKey: true])
@@ -128,7 +129,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         menu.addItem(.separator())
         if let tag = Updater.available {
             let title = !Updater.canInstall ? "\(tag) 다운로드 페이지 열기"
-                : isIdle ? "\(tag) 설치 후 다시 시작" : "\(tag) 업데이트: 녹화·편집 창을 닫으면 설치"
+                : isIdle ? "\(tag) 설치 후 다시 시작" : "\(tag) 업데이트: 녹화·내보내기가 끝나고 편집 창을 닫으면 설치"
             let u = item(title, #selector(installUpdate))
             u.isEnabled = isIdle || !Updater.canInstall
             menu.addItem(u)
@@ -290,7 +291,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         }
     }
 
-    private func stop(_ r: Recorder) async {
+    /// `quitting`: the file and project.json are written, but no chime and no editor.
+    private func stop(_ r: Recorder, quitting: Bool = false) async {
         recorder = nil
         startedAt = nil
         ticker?.invalidate()
@@ -298,6 +300,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         updateStatusItem()
         do {
             let project = try await r.stop()
+            if quitting { return }
             await Self.chime("loupecast-stop", wait: false)
             openEditor(dir: r.dir, project: project)
         }
@@ -361,7 +364,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     }
 
     func debugReopen() { _ = applicationShouldHandleReopen(NSApp, hasVisibleWindows: false) }
+    var debugIsIdle: Bool { isIdle }
     #endif
+
+    // MARK: quit
+
+    /// Quit (menu, ⌘Q, logout) never loses work: a recording is finished and saved first (it shows up in
+    /// 최근 녹화), and running exports are cancelled, partial files deleted, only when the user says so.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        if !EditorModel.exports.isEmpty, !confirmQuitDuringExport() { return .terminateCancel }
+        guard recorder != nil || busy || !EditorModel.exports.isEmpty else { return .terminateNow }
+        Task {
+            while busy { try? await Task.sleep(for: .milliseconds(50)) }   // a start or stop already running
+            busy = true                                    // from here on: no hot-key start, no update install
+            let exports = Array(EditorModel.exports.values)
+            exports.forEach { $0.cancel() }
+            for e in exports { await e.value }
+            if let r = recorder { await stop(r, quitting: true) }
+            NSApp.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
+    }
+
+    /// Open editors write their pending (debounced) edits.
+    func applicationWillTerminate(_ notification: Notification) {
+        editors.values.forEach { $0.model.close() }
+    }
+
+    private func confirmQuitDuringExport() -> Bool {
+        #if DEBUG
+        if let answer = DebugHooks.env["LOUPECAST_QUIT_ANSWER"] { return answer == "quit" }
+        #endif
+        let a = NSAlert()
+        a.messageText = "내보내기가 진행 중입니다"
+        a.informativeText = "내보내기가 끝나야 파일이 완성됩니다. 지금 종료하면 내보내기를 취소하고 만들던 파일을 지웁니다."
+        a.addButton(withTitle: "취소")
+        a.addButton(withTitle: "종료").hasDestructiveAction = true
+        NSApp.activate(ignoringOtherApps: true)
+        return a.runModal() == .alertSecondButtonReturn
+    }
 
     // MARK: permissions + alerts
 

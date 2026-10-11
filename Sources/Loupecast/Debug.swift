@@ -17,6 +17,9 @@
 //   LOUPECAST_SELECT=clip|zoom|none   selection for the snapshot (default zoom); LOUPECAST_SPLITS="3,6" splits,
 //                                 LOUPECAST_DELETE=<clip index> removes one, before the snapshot
 //   LOUPECAST_EXPORT_TO=<mp4>         export the snapshot's edit to that path first
+//   LOUPECAST_QUIT_TEST=<dir>         export from that recording's editor, close the editor, then quit;
+//                                 LOUPECAST_QUIT_ANSWER=cancel|quit answers the export alert,
+//                                 LOUPECAST_QUIT_EDIT=<dir> splits a second recording right before quitting
 //   LOUPECAST_EDITOR_TEST=<dir>       trim drag + button click + Space/D/Delete/⌘Z through the window's key
 //                                 handler, off screen and without activating; logs each state change
 import AVFoundation
@@ -80,6 +83,7 @@ enum DebugHooks {
             }
         }
         if let n = env["LOUPECAST_SELFTEST"].flatMap(Int.init) { Task { await selfTest(app, cycles: n) } }
+        if let path = env["LOUPECAST_QUIT_TEST"] { Task { await quitTest(app, dir: URL(fileURLWithPath: path)) } }
         if let path = env["LOUPECAST_WINDOW_TEST"] { Task { await windowTest(app, dir: URL(fileURLWithPath: path)) } }
         if env["LOUPECAST_HOTKEY_PROBE"] != nil {
             Task {
@@ -197,6 +201,32 @@ enum DebugHooks {
         try? await Task.sleep(for: .seconds(0.5))
         state("launcher closed", nil)
         NSApp.terminate(nil)
+    }
+
+    static func quitTest(_ app: AppDelegate, dir: URL) async {
+        guard let p = try? Project.load(from: dir.appendingPathComponent(Project.fileName)) else { exit(2) }
+        app.openEditor(dir: dir, project: p)
+        let e = app.openEditors[0], m = e.model
+        while m.edit == nil { try? await Task.sleep(for: .milliseconds(100)) }
+        m.export()
+        while case .running(let f) = m.exportState, f < 0.2 { try? await Task.sleep(for: .milliseconds(20)) }
+        e.window.close()
+        print("LOUPECAST: editor closed while exporting: idle=\(app.debugIsIdle) exports=\(EditorModel.exports.count) files \(exported())")
+        if let path = env["LOUPECAST_QUIT_EDIT"], let q = try? Project.load(from: URL(fileURLWithPath: path).appendingPathComponent(Project.fileName)) {
+            app.openEditor(dir: URL(fileURLWithPath: path), project: q)
+            let m2 = app.openEditors.first { $0.model.dir.path == path }!.model
+            while m2.edit == nil { try? await Task.sleep(for: .milliseconds(100)) }
+            m2.seek(m2.project.trimIn + 1); m2.split()
+            print("LOUPECAST: split right before quitting: \(m2.project.clips.count) clips")
+        }
+        fflush(stdout)
+        Updater.quit()
+        try? await Task.sleep(for: .seconds(5))   // a quit ends the process before this
+        print("LOUPECAST: quit cancelled, still running: export \(m.exportState)")
+        while m.exportState.isRunning { try? await Task.sleep(for: .milliseconds(100)) }
+        print("LOUPECAST: export ended \(m.exportState) idle=\(app.debugIsIdle) files \(exported())")
+        fflush(stdout)
+        exit(0)
     }
 
     // MARK: editor key-handling test

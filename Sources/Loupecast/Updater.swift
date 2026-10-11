@@ -62,12 +62,12 @@ enum Updater {
         Task {
             do { try await fetchLatest() } catch { return show("업데이트를 확인하지 못했습니다", error.localizedDescription) }
             guard let tag = available else { return show("최신 버전입니다", "Loupecast \(current)이 최신 버전입니다.") }
-            guard isIdle() || !canInstall else { return show("\(tag) 업데이트가 있습니다", "녹화를 멈추고 편집 창을 모두 닫으면 설치됩니다.") }
+            guard isIdle() || !canInstall else { return show("\(tag) 업데이트가 있습니다", "녹화와 내보내기가 끝나고 편집 창을 모두 닫으면 설치됩니다.") }
             installFromMenu()
         }
     }
 
-    /// Called after a check, a recording stops, or an editor closes.
+    /// Called after a check, an editor closes, or an export ends.
     static func installIfIdle() {
         guard let tag = available, tag != failed, canInstall, isIdle() else { return }
         Task {
@@ -132,7 +132,7 @@ enum Updater {
         guard isIdle() else {   // a recording may have started during the download
             if progress != nil {
                 closeProgress()
-                show("업데이트를 미뤘습니다", "녹화를 멈추고 편집 창을 모두 닫으면 설치됩니다.")
+                show("업데이트를 미뤘습니다", "녹화와 내보내기가 끝나고 편집 창을 모두 닫으면 설치됩니다.")
             }
             return
         }
@@ -155,7 +155,13 @@ enum Updater {
             defaults.removeObject(forKey: updatedManuallyKey)
             throw UpdateError("새 버전은 설치됐지만 다시 열지 못했습니다. Loupecast를 직접 다시 열어 주세요. (\(error.localizedDescription))")
         }
-        NSApp.terminate(nil)
+        quit()
+    }
+
+    /// Quits from a run-loop block, not from this task. A quit that has to wait (a recording started meanwhile)
+    /// spins a nested run loop, and that loop doesn't run the main queue while a main-queue job is on the stack.
+    static func quit() {
+        RunLoop.main.perform { MainActor.assumeIsolated { NSApp.terminate(nil) } }
     }
 
     /// At launch. After a self-update the old instance is still quitting and still holds the hot key, so `then`

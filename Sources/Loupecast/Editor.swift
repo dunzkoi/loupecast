@@ -267,6 +267,7 @@ final class EditorModel {
             }
             Self.exports[url] = nil
             exportTask = nil
+            Updater.installIfIdle()   // an update waits for running exports
         }
         Self.exports[url] = task
         exportTask = task

@@ -1,5 +1,6 @@
 import AVFoundation
 import LoupecastCore
+import os
 
 /// H.264 1920×1080 constant 60 fps + one stereo AAC track (system and mic mixed).
 /// The composition is the kept clips back to back, so the file is exactly their total length.
@@ -83,17 +84,17 @@ public enum Exporter {
 
             let total = duration.seconds
             let pumps = Pumps(reader: reader, writer: writer, video: (vOut, vIn), audio: audio, cuts: project.clips.cutTimes)
-            // a cancelled reader hands out no more buffers, so both pumps finish and the check below throws
+            // both pumps finish at their next buffer, then the check below throws
             try await withTaskCancellationHandler {
                 try await pumps.run { progress(min(1, $0 / total)) }
-            } onCancel: { pumps.reader.cancelReading() }
+            } onCancel: { pumps.stop() }
             try Task.checkCancellation()
             if reader.status == .failed { throw reader.error ?? LoupecastError("읽기 실패") }
             writer.endSession(atSourceTime: duration)
             await writer.finishWriting()
             if writer.status != .completed { throw writer.error ?? LoupecastError("쓰기 실패") }
         } catch {
-            reader.cancelReading()
+            reader.cancelReading()   // safe here: both pumps have returned
             if writer.status == .writing { writer.cancelWriting() }
             try? FileManager.default.removeItem(at: output)
             throw error
@@ -107,6 +108,12 @@ private struct Pumps: @unchecked Sendable {
     typealias Job = (AVAssetReaderOutput, AVAssetWriterInput)
     let reader: AVAssetReader, writer: AVAssetWriter, video: Job, audio: Job?
     let cuts: [Double]
+    /// Checked by each pump on its own queue. cancelReading() from another thread while a pump is inside
+    /// copyNextSampleBuffer() crashes in AVFoundation (measured: EXC_BREAKPOINT when quitting mid-export).
+    let stopped = OSAllocatedUnfairLock(initialState: false)
+
+    /// Both pumps mark their input finished at the next buffer they would have read.
+    func stop() { stopped.withLock { $0 = true } }
 
     /// Runs the video and (optional) audio pumps concurrently; `progress` gets the video time.
     func run(progress: @escaping @Sendable (Double) -> Void) async throws {
@@ -121,7 +128,7 @@ private struct Pumps: @unchecked Sendable {
         try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
             input.requestMediaDataWhenReady(on: queue) { [self] in
                 while input.isReadyForMoreMediaData {
-                    guard let buffer = output.copyNextSampleBuffer() else {
+                    guard !stopped.withLock({ $0 }), let buffer = output.copyNextSampleBuffer() else {
                         input.markAsFinished()
                         if reader.status == .failed { cont.resume(throwing: reader.error ?? LoupecastError("읽기 실패")) }
                         else { cont.resume() }
@@ -129,7 +136,7 @@ private struct Pumps: @unchecked Sendable {
                     }
                     if !cuts.isEmpty { Self.applyCutFades(buffer, cuts: cuts) }
                     guard input.append(buffer) else {
-                        reader.cancelReading()
+                        stop()
                         cont.resume(throwing: writer.error ?? LoupecastError("쓰기 실패"))
                         return
                     }
