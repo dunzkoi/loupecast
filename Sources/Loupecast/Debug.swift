@@ -1,5 +1,7 @@
 #if DEBUG
 // Verification handles, compiled into debug builds only (build.sh ships -c release).
+//   LOUPECAST_RECORDINGS_DIR=<dir>    recordings folder instead of ~/Library/Application Support/Loupecast/Recordings;
+//                                 trashing moves to "<dir>-trash". Set it for every hook: launch-time recovery runs too
 //   LOUPECAST_OPEN=<recording dir>    open that recording's editor at launch
 //   LOUPECAST_APPEARANCE=dark|light   force appearance
 //   LOUPECAST_SNAPSHOT=<png>          save the editor window (with the live preview frame) and quit

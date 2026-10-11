@@ -14,6 +14,8 @@ Thanks for helping. This project is maintained by one person, so the rules below
 swift test
 ```
 
+Agent and maintainer notes (layout, invariants, verification hooks) are in [CLAUDE.md](CLAUDE.md).
+
 ## How to open a pull request
 
 1. Fork the repo and create a branch from `main`: `git switch -c fix/short-name`.
@@ -28,7 +30,7 @@ swift test
 ## Pull request rules
 
 1. **Title** follows [Conventional Commits](https://www.conventionalcommits.org/): `feat: ...`, `fix: ...`, `docs: ...`, `refactor: ...`, `test: ...`, `chore: ...`. The title becomes the squash commit and the changelog entry.
-2. **CI must be green.** Build, tests, and lint run on every PR.
+2. **CI must be green.** Every PR runs the build, the tests, the release build (`./build.sh`) and a check that the binary has no developer paths. The export tests skip on CI (GitHub's macOS VMs have no video hardware), so run `swift test` locally when you touch recording, rendering or export.
 3. **Tests:** changed logic needs a test that fails without your change.
 4. **No new dependencies** without discussing in an issue first.
 5. **UI changes** include a before/after screenshot or short video.
