@@ -151,9 +151,8 @@ public struct Project: Codable, Sendable, Equatable {
 }
 
 /// Export and preview frame. Pixel sizes keep the long side at 1920 and the short one at 1080.
-public enum AspectRatio: String, Codable, CaseIterable, Identifiable, Sendable {
+public enum AspectRatio: String, Codable, CaseIterable, Sendable {
     case landscape = "16:9", portrait = "9:16", square = "1:1"
-    public var id: Self { self }
     public var pixels: (width: Int, height: Int) {
         switch self {
         case .landscape: (1920, 1080)

@@ -485,7 +485,7 @@ struct ControlBar: View {
             ExportStatus(model: model)
             Picker("Aspect Ratio", selection: Binding(get: { model.project.aspect },
                                               set: { a in model.edit("Aspect Ratio") { $0.aspect = a } })) {
-                ForEach(AspectRatio.allCases) { Text($0.rawValue).tag($0) }
+                ForEach(AspectRatio.allCases, id: \.self) { Text($0.rawValue).tag($0) }
             }
             .pickerStyle(.menu)
             .labelsHidden()
