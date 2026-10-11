@@ -59,15 +59,12 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
                                                safeAreaTop: screen.safeAreaInsets.top)
         }
         let dir = recordingsDir.appendingPathComponent(UUID().uuidString, isDirectory: true)
-        var made: Recorder?
-        do {
+        do {   // no empty .mov or folder left behind
             let r = try Recorder(dir: dir, filter: filter, displayID: scDisplay.displayID, topInset: inset, microphone: microphone, systemAudio: systemAudio)
-            made = r
-            try await r.stream.startCapture()
+            do { try await r.stream.startCapture() } catch { r.writer.cancelWriting(); throw error }
             r.startInputMonitors()
             return r
         } catch {
-            made?.writer.cancelWriting()   // no empty .mov or folder left behind
             try? FileManager.default.removeItem(at: dir)
             throw error
         }
