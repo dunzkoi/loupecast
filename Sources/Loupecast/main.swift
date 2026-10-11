@@ -129,7 +129,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         recent.submenu = sub
         menu.addItem(recent)
         let saved = item(String(localized: "Open Exports Folder"), #selector(openLink(_:)))
-        saved.representedObject = Exporter.defaultURL().deletingLastPathComponent()
+        saved.representedObject = EditorModel.exportDir
         menu.addItem(saved)
         menu.addItem(.separator())
         if let tag = Updater.available {
