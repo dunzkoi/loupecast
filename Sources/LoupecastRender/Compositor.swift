@@ -3,7 +3,7 @@ import CoreImage
 import CoreImage.CIFilterBuiltins
 import LoupecastCore
 
-/// Look of the exported frame. Values are for a 1080-pixel-tall canvas and scale with it.
+/// Look of the exported frame. Values are for a canvas whose short side is 1080 pixels and scale with it.
 public struct FrameStyle: Sendable {
     public var topLeft = CIColor(red: 0.62, green: 0.69, blue: 0.97)
     public var bottomRight = CIColor(red: 0.97, green: 0.76, blue: 0.82)
@@ -97,7 +97,7 @@ public final class LoupecastCompositor: NSObject, AVVideoCompositing, @unchecked
     private static func roundedRect(_ frame: CGRect, canvas: CGSize, style: FrameStyle, color: CIColor) -> CIImage {
         let shape = CIFilter.roundedRectangleGenerator()
         shape.extent = frame
-        shape.radius = Float(style.cornerRadius * canvas.height / 1080)
+        shape.radius = Float(style.cornerRadius * min(canvas.width, canvas.height) / 1080)
         shape.color = color
         return shape.outputImage!
     }
@@ -113,7 +113,7 @@ public final class LoupecastCompositor: NSObject, AVVideoCompositing, @unchecked
     /// Gradient and drop shadow never change within a render, so they are rendered once and cached.
     private func backgroundImage(frame: CGRect, canvas: CGSize, style: FrameStyle) -> CIImage {
         if let bg = background, bg.frame == frame, bg.canvas == canvas { return bg.image }
-        let k = canvas.height / 1080
+        let k = min(canvas.width, canvas.height) / 1080
         let full = CGRect(origin: .zero, size: canvas)
         let gradient = CIFilter.linearGradient()
         gradient.point0 = CGPoint(x: 0, y: canvas.height)            // top-left
@@ -157,7 +157,9 @@ public struct SourceTracks: @unchecked Sendable {
 }
 
 public enum Composer {
-    public static let renderSize = CGSize(width: 1920, height: 1080)
+    public static func renderSize(_ aspect: AspectRatio) -> CGSize {
+        CGSize(width: aspect.pixels.width, height: aspect.pixels.height)
+    }
     public static let frameDuration = CMTime(value: 1, timescale: 60)
 
     public static func time(_ s: Double) -> CMTime { CMTime(seconds: s, preferredTimescale: 60_000) }
@@ -210,7 +212,7 @@ public enum Composer {
                                         style: FrameStyle = .standard) -> AVMutableVideoComposition {
         let vc = AVMutableVideoComposition()
         vc.customVideoCompositorClass = LoupecastCompositor.self
-        vc.renderSize = renderSize
+        vc.renderSize = renderSize(project.aspect)
         vc.frameDuration = frameDuration
         vc.colorPrimaries = AVVideoColorPrimaries_ITU_R_709_2
         vc.colorTransferFunction = AVVideoTransferFunction_ITU_R_709_2

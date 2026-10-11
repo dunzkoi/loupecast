@@ -225,6 +225,25 @@ final class ClipTests: XCTestCase {
         XCTAssertEqual(doc.project.zooms.count, 1)
         XCTAssertFalse(undo.canRedo)
     }
+
+    // MARK: aspect
+
+    func testAspectDefaultsAndRoundTrip() throws {
+        var p = project()
+        XCTAssertEqual(p.aspect, .landscape)
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("aspect-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        // a file from an older version has no aspect: 16:9
+        var json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(p)) as! [String: Any]
+        json["aspect"] = nil
+        try JSONSerialization.data(withJSONObject: json).write(to: url)
+        XCTAssertEqual(try Project.load(from: url).aspect, .landscape)
+        p.aspect = .portrait
+        try p.save(to: url)
+        XCTAssertEqual(try Project.load(from: url).aspect, .portrait)
+        XCTAssertEqual(AspectRatio.portrait.pixels.width, 1080); XCTAssertEqual(AspectRatio.portrait.pixels.height, 1920)
+        XCTAssertEqual(AspectRatio.square.pixels.width, AspectRatio.square.pixels.height)
+    }
 }
 
 private extension Project {

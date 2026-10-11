@@ -226,7 +226,7 @@ final class EditorModel {
     private func applyToPlayer(old: Project) {
         func material(_ c: [ClipRange]) -> [[Double]] { c.keptRanges.map { [$0.start, $0.end] } }
         if material(project.clips) != material(built) { rebuild() }
-        else if project.zooms != old.zooms || project.clips != built { refreshComposition() }
+        else if project.zooms != old.zooms || project.clips != built || project.aspect != old.aspect { refreshComposition() }
     }
 
     private func scheduleSave() {
@@ -404,8 +404,9 @@ struct EditorView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            let size = Composer.renderSize(model.project.aspect)
             PlayerView(player: model.player)
-                .aspectRatio(16 / 9, contentMode: .fit)
+                .aspectRatio(size.width / size.height, contentMode: .fit)
                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .shadow(color: .black.opacity(0.14), radius: 10, y: 3)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -482,6 +483,16 @@ struct ControlBar: View {
                 Divider().frame(height: 18)
             }
             ExportStatus(model: model)
+            Picker("비율", selection: Binding(get: { model.project.aspect },
+                                              set: { a in model.edit("비율") { $0.aspect = a } })) {
+                ForEach(AspectRatio.allCases) { Text($0.rawValue).tag($0) }
+            }
+            .pickerStyle(.menu)
+            .labelsHidden()
+            .fixedSize()
+            .focusable(false)
+            .help("내보내기 비율 (16:9 가로, 9:16 세로, 1:1 정사각)")
+            .accessibilityLabel("내보내기 비율")
             Button(action: model.addZoom) { Label("줌 추가", systemImage: "plus.magnifyingglass") }
                 .buttonStyle(.bordered)
                 .focusable(false)

@@ -2,7 +2,8 @@ import AVFoundation
 import LoupecastCore
 import os
 
-/// H.264 1920×1080 constant 60 fps + one stereo AAC track (system and mic mixed).
+/// H.264 at the project's aspect (1920×1080, 1080×1920 or 1080×1080), constant 60 fps, + one stereo AAC track
+/// (system and mic mixed).
 /// The composition is the kept clips back to back, so the file is exactly their total length.
 public enum Exporter {
     public static var moviesDir: URL { FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Movies") }
@@ -37,10 +38,11 @@ public enum Exporter {
         try? FileManager.default.removeItem(at: output)
         try FileManager.default.createDirectory(at: output.deletingLastPathComponent(), withIntermediateDirectories: true)
         let writer = try AVAssetWriter(outputURL: output, fileType: .mp4)
+        let size = Composer.renderSize(project.aspect)
         writer.shouldOptimizeForNetworkUse = true
         let vIn = AVAssetWriterInput(mediaType: .video, outputSettings: [
             AVVideoCodecKey: AVVideoCodecType.h264,
-            AVVideoWidthKey: Int(Composer.renderSize.width), AVVideoHeightKey: Int(Composer.renderSize.height),
+            AVVideoWidthKey: Int(size.width), AVVideoHeightKey: Int(size.height),
             AVVideoColorPropertiesKey: [
                 AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_709_2,
                 AVVideoTransferFunctionKey: AVVideoTransferFunction_ITU_R_709_2,

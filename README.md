@@ -34,7 +34,7 @@ Requires macOS 15 or later on Apple Silicon. The interface is currently in Korea
    - Clicks become automatic zooms. Select a zoom and press Delete to remove it, or use 줌 추가 to add one.
    - **D** splits at the playhead, click a clip and press **Delete** to cut it, **⌘Z** to undo.
    - **Space** plays, **← →** step one frame, **I / O** set the clip start and end.
-5. Press 내보내기 to export. Files go to `~/Movies`.
+5. Pick the frame next to it (16:9, 9:16 for Shorts and Reels, or 1:1), then press 내보내기 to export. Files go to `~/Movies`.
 
 Menu toggles: 마이크 녹음 (microphone, off by default), 컴퓨터 소리 녹음 (system audio, on), 영상 속 메뉴 막대 숨기기 (crop the menu bar out of the video, on).
 

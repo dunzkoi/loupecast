@@ -18,6 +18,8 @@
 //   LOUPECAST_SELECT=clip|zoom|none   selection for the snapshot (default zoom); LOUPECAST_SPLITS="3,6" splits,
 //                                 LOUPECAST_DELETE=<clip index> removes one, before the snapshot
 //   LOUPECAST_EXPORT_TO=<mp4>         export the snapshot's edit to that path first
+//   LOUPECAST_ASPECT=9:16|1:1|16:9    pick that output aspect through the editor (one undo step) before the snapshot;
+//                                 LOUPECAST_ASPECT_UNDO=1 undoes it again
 //   LOUPECAST_QUIT_TEST=<dir>         export from that recording's editor, close the editor, then quit;
 //                                 LOUPECAST_QUIT_ANSWER=cancel|quit answers the export alert,
 //                                 LOUPECAST_QUIT_EDIT=<dir> splits a second recording right before quitting
@@ -122,6 +124,11 @@ enum DebugHooks {
         for t in (env["LOUPECAST_SPLITS"] ?? "").split(separator: ",").compactMap({ Double($0) }) { m.seek(t); m.split() }
         if let i = env["LOUPECAST_DELETE"].flatMap(Int.init), m.project.clips.indices.contains(i) {
             m.selection = .clip(m.project.clips[i].id); m.deleteSelected()
+        }
+        if let a = env["LOUPECAST_ASPECT"].flatMap(AspectRatio.init(rawValue:)) {
+            m.edit("비율") { $0.aspect = a }
+            print("LOUPECAST: aspect \(m.project.aspect.rawValue), undo \(m.undo.undoActionName)")
+            if env["LOUPECAST_ASPECT_UNDO"] != nil { m.undoEdit(); print("LOUPECAST: aspect after undo \(m.project.aspect.rawValue)") }
         }
         switch env["LOUPECAST_SELECT"] ?? "zoom" {
         case "clip": m.selection = m.project.clips.first.map { .clip($0.id) } ?? .none

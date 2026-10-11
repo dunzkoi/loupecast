@@ -79,14 +79,21 @@ final class ExportTests: XCTestCase {
         try await withDeadline(Self.deadline) { try await Self.exportMatchesTrim() }
     }
 
-    static func exportMatchesTrim() async throws {
+    /// The same checks for a 9:16 export: 1080×1920, same length and frame count, the click still inside the zoom.
+    func testPortraitExport() async throws {
+        try XCTSkipIf(ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] != nil, "no video hardware on CI VMs")
+        try await withDeadline(Self.deadline) { try await Self.exportMatchesTrim(.portrait) }
+    }
+
+    static func exportMatchesTrim(_ aspect: AspectRatio = .landscape) async throws {
         let mov = Self.outDir.appendingPathComponent("synthetic.mov")
         try await Self.writeSyntheticMovie(to: mov)
-        let project = makeProject()
+        var project = makeProject()
+        project.aspect = aspect
         XCTAssertEqual(project.zooms.count, 1, "two nearby clicks → one zoom")
         try project.save(to: Self.outDir.appendingPathComponent("project.json"))
 
-        let out = Self.outDir.appendingPathComponent("export.mp4")
+        let out = Self.outDir.appendingPathComponent("export-\(aspect.pixels.width)x\(aspect.pixels.height).mp4")
         let start = Date()
         try await Exporter.export(project: project, videoURL: mov, to: out)
         print("export took \(Date().timeIntervalSince(start)) s → \(out.path)")
@@ -99,7 +106,7 @@ final class ExportTests: XCTestCase {
         XCTAssertEqual(video.count, 1)
         let v = try XCTUnwrap(video.first)
         let (natural, nominal, fmts) = try await v.load(.naturalSize, .nominalFrameRate, .formatDescriptions)
-        XCTAssertEqual(natural, CGSize(width: 1920, height: 1080))
+        XCTAssertEqual(natural, CGSize(width: aspect.pixels.width, height: aspect.pixels.height))
         XCTAssertEqual(Double(nominal), 60, accuracy: 0.01)
         let fmt = try XCTUnwrap(fmts.first)
         XCTAssertEqual(CMFormatDescriptionGetMediaSubType(fmt), kCMVideoCodecType_H264)
@@ -152,11 +159,12 @@ final class ExportTests: XCTestCase {
         XCTAssertGreaterThan(n, 1000, "blue square not found in the zoomed export frame")
         let cam = CameraPath(project: project).camera(at: t)
         XCTAssertEqual(cam.scale, 2, accuracy: 1e-6, "the click zoom is fully in at \(t) s")
-        let frame = LoupecastCompositor.frameRect(source: Self.size, canvas: Composer.renderSize, style: .standard)
+        let canvas = Composer.renderSize(project.aspect)
+        let frame = LoupecastCompositor.frameRect(source: Self.size, canvas: canvas, style: .standard)
         let p = Self.target(t), half = 0.5 / cam.scale
         let u = (p.x - (cam.center.x - half)) * cam.scale, v = (p.y - (cam.center.y - half)) * cam.scale
         XCTAssertTrue((0...1).contains(u) && (0...1).contains(v), "click point outside the zoom rect: \(u), \(v)")
-        let expected = (x: frame.minX + u * frame.width, y: (Composer.renderSize.height - frame.maxY) + v * frame.height)
+        let expected = (x: frame.minX + u * frame.width, y: (canvas.height - frame.maxY) + v * frame.height)
         print("zoom check: square at (\(sx / n), \(sy / n)) px, camera(t) predicts (\(expected.x), \(expected.y)), window uv (\(u), \(v))")
         XCTAssertEqual(sx / n, expected.x, accuracy: 4)
         XCTAssertEqual(sy / n, expected.y, accuracy: 4)

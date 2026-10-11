@@ -22,6 +22,8 @@ public struct Project: Codable, Sendable, Equatable {
     /// Kept material in recording time: sorted, non-overlapping, never empty.
     public var clips: [ClipRange]
     public var zooms: [ZoomSegment]
+    /// Output frame; files without it (older versions) are 16:9.
+    public var aspect = AspectRatio.landscape
 
     public init(name: String, videoFile: String = "recording.mov", duration: Double,
                 pixelWidth: Int, pixelHeight: Int, pointPixelScale: Double,
@@ -35,7 +37,7 @@ public struct Project: Codable, Sendable, Equatable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case version, name, videoFile, duration, pixelWidth, pixelHeight, pointPixelScale, cursor, clicks, keys, clips, zooms
+        case version, name, videoFile, duration, pixelWidth, pixelHeight, pointPixelScale, cursor, clicks, keys, clips, zooms, aspect
     }
     private enum V1Keys: String, CodingKey { case trimIn, trimOut }
 
@@ -52,6 +54,7 @@ public struct Project: Codable, Sendable, Equatable {
         clicks = try c.decode([ClickEvent].self, forKey: .clicks)
         keys = try c.decode([KeyEvent].self, forKey: .keys)
         zooms = try c.decode([ZoomSegment].self, forKey: .zooms)
+        aspect = try c.decodeIfPresent(AspectRatio.self, forKey: .aspect) ?? .landscape
         if let clips = try c.decodeIfPresent([ClipRange].self, forKey: .clips) {
             self.clips = clips
         } else {                                // version 1: one trim range
@@ -144,6 +147,19 @@ public struct Project: Codable, Sendable, Equatable {
     public mutating func setZoomEnd(id: UUID, _ t: Double) {
         guard let i = zooms.firstIndex(where: { $0.id == id }) else { return }
         zooms[i].end = max(min(duration, t), zooms[i].start + Self.minZoomLength)
+    }
+}
+
+/// Export and preview frame. Pixel sizes keep the long side at 1920 and the short one at 1080.
+public enum AspectRatio: String, Codable, CaseIterable, Identifiable, Sendable {
+    case landscape = "16:9", portrait = "9:16", square = "1:1"
+    public var id: Self { self }
+    public var pixels: (width: Int, height: Int) {
+        switch self {
+        case .landscape: (1920, 1080)
+        case .portrait: (1080, 1920)
+        case .square: (1080, 1080)
+        }
     }
 }
 
