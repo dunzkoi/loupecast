@@ -78,8 +78,8 @@ final class EditorModel {
         if let timeObserver { player.removeTimeObserver(timeObserver) }
         timeObserver = nil
         rateObserver = nil
-        saveTask?.cancel()
-        save()
+        if let saveTask { saveTask.cancel(); save() }   // an edit still inside its debounce
+        Self.saves.sync {}   // the last save is on disk before the window goes away (or the app quits)
         undo.removeAllActions()
         player.replaceCurrentItem(with: nil)
     }
@@ -235,12 +235,20 @@ final class EditorModel {
             try? await Task.sleep(for: .milliseconds(500))
             guard !Task.isCancelled else { return }
             self?.save()
+            self?.saveTask = nil
         }
     }
 
+    /// One serial queue for every editor: saves land in order, and encoding an hour-long project (~20 MB of
+    /// cursor samples, hundreds of ms) never blocks the main thread. The value is copied here, on the main actor.
+    private static let saves = DispatchQueue(label: "loupecast.autosave", qos: .utility)
+
     private func save() {
-        do { try project.save(to: dir.appendingPathComponent(Project.fileName)) }
-        catch { NSLog("Loupecast: autosave failed: %@", describe(error)) }
+        let project = project, url = dir.appendingPathComponent(Project.fileName)
+        Self.saves.async {
+            do { try project.save(to: url) }
+            catch { NSLog("Loupecast: autosave failed: %@", describe(error)) }
+        }
     }
 
     // MARK: export
@@ -564,7 +572,7 @@ struct TimelineView: View {
                         .offset(x: x(clip.start))
                 }
 
-                ZoomLane(model: model, x: x, t: t)
+                ZoomLane(model: model, width: w, duration: d)
                     .frame(width: w, height: Self.laneHeight)
                     .offset(y: H + Self.gap)
 
@@ -665,9 +673,8 @@ struct ClipFrame: Shape {
 struct ZoomLane: View {
     static let capsuleHeight: CGFloat = 22
     @Bindable var model: EditorModel
-    @GestureState private var dragging = false
-    let x: (Double) -> CGFloat
-    let t: (CGFloat) -> Double
+    let width: CGFloat
+    let duration: Double
 
     var body: some View {
         ZStack(alignment: .leading) {
@@ -676,19 +683,33 @@ struct ZoomLane: View {
                 .contentShape(Rectangle())
                 .onTapGesture { model.selection = .none }
             ForEach(model.project.zooms) { seg in
-                capsule(seg)
-                    .frame(width: max(8, x(seg.end) - x(seg.start)), height: Self.capsuleHeight)
-                    .offset(x: x(seg.start))
+                ZoomCapsule(model: model, seg: seg, isSelected: model.selection == .zoom(seg.id), width: width, duration: duration)
+                    .equatable()
             }
         }
-        .onChange(of: dragging) { _, now in if !now { model.endDrag("줌 길이") } }
+    }
+}
+
+/// One zoom on the lane. Compared by its values, so after an edit SwiftUI redraws only the capsules it changed:
+/// an hour-long recording has hundreds, and redrawing all of them was most of an edit's main-thread time.
+struct ZoomCapsule: View, Equatable {
+    let model: EditorModel   // actions only; reading it in `body` would redraw every capsule on every change
+    let seg: ZoomSegment
+    let isSelected: Bool
+    let width: CGFloat
+    let duration: Double
+    @GestureState private var dragging = false
+
+    nonisolated static func == (a: Self, b: Self) -> Bool {
+        a.seg == b.seg && a.isSelected == b.isSelected && a.width == b.width && a.duration == b.duration
     }
 
-    private func capsule(_ seg: ZoomSegment) -> some View {
-        let isSelected = model.selection == .zoom(seg.id)
+    private func x(_ t: Double) -> CGFloat { CGFloat(t / duration) * width }
+
+    var body: some View {
         let w = x(seg.end) - x(seg.start)
         let tint = seg.isEnabled ? Color.accentColor : Color.gray
-        return Capsule()
+        Capsule()
             .fill(tint.opacity(isSelected ? 1 : seg.isEnabled ? 0.35 : 0.4))
             .overlay { if !seg.isEnabled { Hatch(color: .secondary).opacity(0.5).clipShape(Capsule()) } }
             .overlay(Capsule().strokeBorder(isSelected ? .white : tint, lineWidth: isSelected ? 2 : 1))
@@ -702,22 +723,25 @@ struct ZoomLane: View {
             }
             .contentShape(Capsule())
             .onTapGesture { model.selection = .zoom(seg.id) }
-            .overlay(alignment: .leading) { edge(seg.id, .leading) }
-            .overlay(alignment: .trailing) { edge(seg.id, .trailing) }
+            .overlay(alignment: .leading) { edge(.leading) }
+            .overlay(alignment: .trailing) { edge(.trailing) }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("줌")
             .accessibilityValue("\(timecode(seg.start))–\(timecode(seg.end))\(seg.isEnabled ? "" : ", 꺼짐")")
             .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+            .frame(width: max(8, w), height: ZoomLane.capsuleHeight)
+            .offset(x: x(seg.start))
+            .onChange(of: dragging) { _, now in if !now { model.endDrag("줌 길이") } }
     }
 
-    private func edge(_ id: UUID, _ edge: HorizontalEdge) -> some View {
+    private func edge(_ edge: HorizontalEdge) -> some View {
         Color.clear
             .frame(width: 8)
             .contentShape(Rectangle())
             .pointerStyle(.columnResize)
             .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .named("timeline"))
                 .updating($dragging) { _, d, _ in d = true }
-                .onChanged { model.dragZoom(id, edge: edge, to: t($0.location.x)) })
+                .onChanged { model.dragZoom(seg.id, edge: edge, to: Double(min(max(0, $0.location.x), width) / width) * duration) })
     }
 }
 

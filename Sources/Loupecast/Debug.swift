@@ -20,6 +20,8 @@
 //   LOUPECAST_QUIT_TEST=<dir>         export from that recording's editor, close the editor, then quit;
 //                                 LOUPECAST_QUIT_ANSWER=cancel|quit answers the export alert,
 //                                 LOUPECAST_QUIT_EDIT=<dir> splits a second recording right before quitting
+//   LOUPECAST_PERF=<dir>              open that recording off screen, make three edits and print the longest main-thread
+//                                 stall after each (debounced autosave included), the close time and two menu builds
 //   LOUPECAST_EDITOR_TEST=<dir>       trim drag + button click + Space/D/Delete/⌘Z through the window's key
 //                                 handler, off screen and without activating; logs each state change
 import AVFoundation
@@ -83,6 +85,7 @@ enum DebugHooks {
             }
         }
         if let n = env["LOUPECAST_SELFTEST"].flatMap(Int.init) { Task { await selfTest(app, cycles: n) } }
+        if let path = env["LOUPECAST_PERF"] { Task { await perfTest(app, dir: URL(fileURLWithPath: path)) } }
         if let path = env["LOUPECAST_QUIT_TEST"] { Task { await quitTest(app, dir: URL(fileURLWithPath: path)) } }
         if let path = env["LOUPECAST_WINDOW_TEST"] { Task { await windowTest(app, dir: URL(fileURLWithPath: path)) } }
         if env["LOUPECAST_HOTKEY_PROBE"] != nil {
@@ -229,6 +232,52 @@ enum DebugHooks {
         exit(0)
     }
 
+    /// Longest gap between 1 ms main-thread timer fires: how long the main thread was blocked.
+    @MainActor final class Stalls {
+        var last = ProcessInfo.processInfo.systemUptime, worst = 0.0
+        func tick() { let now = ProcessInfo.processInfo.systemUptime; worst = max(worst, now - last); last = now }
+        func reset() { last = ProcessInfo.processInfo.systemUptime; worst = 0 }
+    }
+
+    static func perfTest(_ app: AppDelegate, dir: URL) async {
+        func ms(_ s: Double) -> String { String(format: "%.1f ms", s * 1000) }
+        let up = { ProcessInfo.processInfo.systemUptime }
+        var t0 = up()
+        guard let p = try? Project.load(from: dir.appendingPathComponent(Project.fileName)) else { exit(2) }
+        print("LOUPECAST: perf load \(p.cursor.count) cursor samples, \(p.zooms.count) zooms in \(ms(up() - t0))")
+        let editor = offscreenEditor(dir, p), m = editor.model
+        while m.edit == nil { try? await Task.sleep(for: .milliseconds(100)) }
+        try? await Task.sleep(for: .seconds(1))
+        let stalls = Stalls()
+        let timer = Timer(timeInterval: 0.001, repeats: true) { _ in MainActor.assumeIsolated { stalls.tick() } }
+        RunLoop.main.add(timer, forMode: .common)
+        let edits: [(String, () -> Void)] = [
+            ("no edit (noise floor)", {}),
+            ("split at 100 s", { m.seek(100); m.split() }),
+            ("zoom off", { let z = m.project.zooms[5]; m.edit("줌 끄기") { $0.setZoomEnabled(id: z.id, false) } }),
+            ("add zoom", { m.seek(1000); m.addZoom() }),
+        ]
+        for (name, edit) in edits {
+            stalls.reset()
+            t0 = up()
+            edit()
+            let sync = up() - t0
+            try? await Task.sleep(for: .seconds(1.5))   // past the 0.5 s autosave debounce
+            print("LOUPECAST: perf \(name): edit \(ms(sync)), longest main-thread stall \(ms(stalls.worst))")
+        }
+        timer.invalidate()
+        t0 = up()
+        editor.window.close()
+        print("LOUPECAST: perf close (waits for the last save) \(ms(up() - t0))")
+        for i in 1...2 {
+            t0 = up()
+            let titles = app.debugMenuTitles()
+            print("LOUPECAST: perf menu build #\(i) \(ms(up() - t0)), \(titles.filter { $0.contains("1시간") && !$0.contains("휴지통") }.count) recent items")
+        }
+        fflush(stdout)
+        exit(0)
+    }
+
     // MARK: editor key-handling test
 
     /// Window-level key handler evidence (only while LOUPECAST_EDITOR_TEST runs).
@@ -307,6 +356,23 @@ enum DebugHooks {
         try? await Task.sleep(for: .seconds(1.2))
         state("after trim-handle drag")
         check(m.project.trimOut < out0 - 1, "trim-out handle drag moved the clip end (\(timecode(out0)) → \(timecode(m.project.trimOut)))")
+
+        // 1b. a zoom capsule: a click selects it, dragging its right edge 60 pt lengthens it as one undo step
+        if let z = m.project.zooms.first {
+            let laneY = pad + TimelineView.laneHeight / 2
+            mouse(.leftMouseDown, NSPoint(x: xFor((z.start + z.end) / 2), y: laneY)); mouse(.leftMouseUp, NSPoint(x: xFor((z.start + z.end) / 2), y: laneY))
+            try? await Task.sleep(for: .seconds(0.3))
+            check(m.selection == .zoom(z.id), "clicking a zoom capsule selected it")
+            let ex = xFor(z.end) - 4
+            mouse(.leftMouseDown, NSPoint(x: ex, y: laneY))
+            for i in 1...6 { mouse(.leftMouseDragged, NSPoint(x: ex + Double(i) * 10, y: laneY)) }
+            mouse(.leftMouseUp, NSPoint(x: ex + 60, y: laneY))
+            try? await Task.sleep(for: .seconds(0.5))
+            let end = m.project.zooms.first { $0.id == z.id }?.end ?? z.end
+            check(end > z.end + 0.3, "dragging the zoom's right edge lengthened it (\(timecode(z.end)) → \(timecode(end)))")
+            m.undoEdit()
+            check(m.project.zooms.first { $0.id == z.id }?.end == z.end, "one undo restored the zoom length")
+        }
 
         // 2. a button click: 줌 추가 (borderedProminent 내보내기 is the last button, 줌 추가 the one before it)
         let zooms0 = m.project.zooms.count

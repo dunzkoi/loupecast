@@ -155,13 +155,17 @@ public struct CameraPath: Sendable {
             }
             return pieces.map { piece in
                 let n = Int(((piece.end - piece.start) / Self.step).rounded(.up)) + 1
+                let times = (0..<n).map { clips.recordingTime(piece.start + Double($0) * Self.step) }   // non-decreasing
+                // the samples bracketing these times give the same interpolation as all of them, and an hour of
+                // 60 Hz samples made the per-step lookups most of an edit's main-thread time
+                let near = Array(cursor[max(0, cursor.firstIndex(after: times[0]) - 1)..<min(cursor.count, cursor.firstIndex(after: times[n - 1]) + 1)])
                 var pts: [Point] = []
                 pts.reserveCapacity(n)
                 var p = seg.focus, v = Point(x: 0, y: 0)
                 let w = Self.springOmega, k = exp(-w * Self.step)
-                for i in 0..<n {
+                for t in times {
                     pts.append(p)
-                    let g = cursorAt(cursor, clips.recordingTime(piece.start + Double(i) * Self.step)) ?? seg.focus
+                    let g = cursorAt(near, t) ?? seg.focus
                     // exact critically damped step toward g (no overshoot from rest)
                     let dx = p.x - g.x, dy = p.y - g.y
                     let tx = (v.x + w * dx) * Self.step, ty = (v.y + w * dy) * Self.step
@@ -230,14 +234,22 @@ public func cursorAt(_ samples: [CursorSample], _ t: Double) -> Point? {
     guard let first = samples.first, let last = samples.last else { return nil }
     if t <= first.t { return Point(x: first.x, y: first.y) }
     if t >= last.t { return Point(x: last.x, y: last.y) }
-    var lo = 0, hi = samples.count - 1
-    while hi - lo > 1 {
-        let mid = (lo + hi) / 2
-        if samples[mid].t <= t { lo = mid } else { hi = mid }
-    }
-    let a = samples[lo], b = samples[hi]
+    let hi = samples.firstIndex(after: t)
+    let a = samples[hi - 1], b = samples[hi]
     let u = b.t > a.t ? (t - a.t) / (b.t - a.t) : 0
     return Point(x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u)
+}
+
+extension Array where Element == CursorSample {
+    /// Index of the first sample later than `t` (binary search; `count` when there is none).
+    func firstIndex(after t: Double) -> Int {
+        var lo = 0, hi = count
+        while lo < hi {
+            let mid = (lo + hi) / 2
+            if self[mid].t <= t { lo = mid + 1 } else { hi = mid }
+        }
+        return lo
+    }
 }
 
 func clamp01(_ v: Double) -> Double { Swift.min(1, Swift.max(0, v)) }

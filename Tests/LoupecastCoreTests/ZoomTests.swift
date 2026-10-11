@@ -141,6 +141,19 @@ final class ZoomTests: XCTestCase {
         XCTAssertEqual(path.camera(at: 2.1).center.x, 0.3, accuracy: 0.05) // eased, not snapped
     }
 
+    func testCursorLookup() {
+        let s = [CursorSample(t: 0, x: 0, y: 0), CursorSample(t: 1, x: 1, y: 0), CursorSample(t: 1, x: 2, y: 0), CursorSample(t: 3, x: 4, y: 2)]
+        XCTAssertEqual(s.firstIndex(after: -1), 0)
+        XCTAssertEqual(s.firstIndex(after: 1), 3, "past every sample at that time")
+        XCTAssertEqual(s.firstIndex(after: 5), 4)
+        XCTAssertEqual(cursorAt(s, -1), Point(x: 0, y: 0), "clamped before the first sample")
+        XCTAssertEqual(cursorAt(s, 0.5), Point(x: 0.5, y: 0))
+        XCTAssertEqual(cursorAt(s, 1), Point(x: 2, y: 0), "the last sample at an exact time")
+        XCTAssertEqual(cursorAt(s, 2), Point(x: 3, y: 1))
+        XCTAssertEqual(cursorAt(s, 9), Point(x: 4, y: 2), "clamped after the last sample")
+        XCTAssertNil(cursorAt([], 1))
+    }
+
     func testEasingShape() {
         XCTAssertEqual(smootherstep(0), 0); XCTAssertEqual(smootherstep(1), 1)
         XCTAssertEqual(smootherstep(0.5), 0.5, accuracy: 1e-12)

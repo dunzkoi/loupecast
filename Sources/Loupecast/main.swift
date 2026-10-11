@@ -101,11 +101,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             none.isEnabled = false
             sub.addItem(none)
         }
-        for (dir, project) in items {
-            let i = item(project.name, #selector(openRecent(_:)))
+        for (dir, name) in items {
+            let i = item(name, #selector(openRecent(_:)))
             i.representedObject = dir
             sub.addItem(i)
-            let del = item("휴지통으로: \(project.name)", #selector(trashRecent(_:)))   // shown while ⌥ is held
+            let del = item("휴지통으로: \(name)", #selector(trashRecent(_:)))   // shown while ⌥ is held
             del.representedObject = dir
             del.keyEquivalentModifierMask = .option
             del.isAlternate = true
@@ -579,17 +579,27 @@ struct PermissionRow: View {
     }
 }
 
-/// Recordings on disk, newest first. Only the top `n` project files are decoded.
 enum Library {
-    static func recent(_ n: Int) -> [(URL, Project)] {
+    /// Recordings on disk, newest first, with their names. The menu asks on every open and an hour-long
+    /// project.json takes hundreds of ms to decode, so a file is decoded again only when it changed.
+    @MainActor static func recent(_ n: Int) -> [(dir: URL, name: String)] {
         let dirs = (try? FileManager.default.contentsOfDirectory(
             at: Recorder.recordingsDir, includingPropertiesForKeys: [.creationDateKey], options: .skipsHiddenFiles)) ?? []
         let dated = dirs.map { ($0, (try? $0.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast) }
-        return dated.sorted { $0.1 > $1.1 }.lazy
-            .compactMap { d, _ in (try? Project.load(from: d.appendingPathComponent(Project.fileName))).map { (d, $0) } }
-            .filter { d, p in FileManager.default.fileExists(atPath: d.appendingPathComponent(p.videoFile).path) }
-            .prefix(n).map { $0 }
+        var out: [(dir: URL, name: String)] = []
+        for (dir, _) in dated.sorted(by: { $0.1 > $1.1 }) where out.count < n {
+            let file = dir.appendingPathComponent(Project.fileName)
+            guard let changed = try? file.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate else { continue }
+            if names[file]?.changed != changed {
+                guard let p = try? Project.load(from: file) else { continue }
+                names[file] = (changed, p.name, p.videoFile)
+            }
+            guard let entry = names[file], FileManager.default.fileExists(atPath: dir.appendingPathComponent(entry.videoFile).path) else { continue }
+            out.append((dir, entry.name))
+        }
+        return out
     }
+    @MainActor private static var names: [URL: (changed: Date, name: String, videoFile: String)] = [:]
 
     /// Folders a crash left behind: no project.json. A movie that plays (the recorder writes a fragment every
     /// 5 s) becomes a project without input events, so it shows up in 최근 녹화; anything else goes to the Trash.

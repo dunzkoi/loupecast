@@ -68,9 +68,10 @@ public struct Project: Codable, Sendable, Equatable {
         return p
     }
 
+    /// Compact: an hour of 60 Hz cursor samples is ~20 MB, and indentation made it larger and slower to write.
     public func save(to url: URL) throws {
         let enc = JSONEncoder()
-        enc.outputFormatting = [.prettyPrinted, .sortedKeys]
+        enc.outputFormatting = [.sortedKeys]
         try enc.encode(self).write(to: url, options: .atomic)
     }
 
@@ -168,16 +169,25 @@ public extension Array where Element == ClipRange {
         return map { c in defer { t += c.length }; return t }
     }
 
-    /// Recording time shown at composition time `c` (clamped to the kept material).
+    /// Recording time shown at composition time `c` (clamped to the kept material). Called per camera-path
+    /// step, so the clip starts are summed on the way instead of allocated (same sums as `compositionStarts`).
     func recordingTime(_ c: Double) -> Double {
         guard let last else { return c }
-        for (clip, s) in zip(self, compositionStarts) where c < s + clip.length { return clip.start + Swift.max(0, c - s) }
+        var s = 0.0
+        for clip in self {
+            if c < s + clip.length { return clip.start + Swift.max(0, c - s) }
+            s += clip.length
+        }
         return last.end
     }
 
     /// Composition time of recording time `r`; inside a removed range, where the next kept clip begins.
     func compositionTime(_ r: Double) -> Double {
-        for (clip, s) in zip(self, compositionStarts) where r < clip.end { return s + Swift.max(0, r - clip.start) }
+        var s = 0.0
+        for clip in self {
+            if r < clip.end { return s + Swift.max(0, r - clip.start) }
+            s += clip.length
+        }
         return totalLength
     }
 
