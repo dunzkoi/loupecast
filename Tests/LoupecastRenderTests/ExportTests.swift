@@ -26,7 +26,7 @@ final class ExportTests: XCTestCase {
 
     // MARK: synthetic project
 
-    func makeProject() -> Project {
+    static func makeProject() -> Project {
         let host0 = CMClockGetTime(CMClockGetHostTimeClock()).seconds   // same clock SCStream stamps with
         var log = InputLog()
         // a secondary 2× display whose 20 pt menu bar is left out: the movie is the 800×500 pt below it
@@ -53,7 +53,7 @@ final class ExportTests: XCTestCase {
     }
 
     func testEventTimesAreRecordingRelative() throws {
-        let p = makeProject()
+        let p = Self.makeProject()
         XCTAssertEqual(p.clicks.count, 2)
         XCTAssertEqual(p.clicks.map(\.t), [3.0, 3.5].map { $0 }, accuracy: 1e-6)
         // normalized against the cropped capture rect: the stored click is exactly where the square was
@@ -76,6 +76,10 @@ final class ExportTests: XCTestCase {
         // GitHub's macOS VMs have no hardware scaler/encoder (AppleM2ScalerParavirtDriver missing) and the
         // video pipeline hangs there; these run locally on real hardware.
         try XCTSkipIf(ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] != nil, "no video hardware on CI VMs")
+        try await withDeadline(Self.deadline) { try await Self.exportMatchesTrim() }
+    }
+
+    static func exportMatchesTrim() async throws {
         let mov = Self.outDir.appendingPathComponent("synthetic.mov")
         try await Self.writeSyntheticMovie(to: mov)
         let project = makeProject()
@@ -130,7 +134,7 @@ final class ExportTests: XCTestCase {
 
     /// Export time 2.0 s = recording 4.0 s, inside the zoom from the clicks at 3.0/3.5 s. The blue
     /// square (where the cursor clicked) must be visible in the zoomed frame, where camera(t) puts it.
-    func assertClickInsideZoom(export asset: AVURLAsset, project: Project) async throws {
+    static func assertClickInsideZoom(export asset: AVURLAsset, project: Project) async throws {
         let t = 4.0
         let gen = AVAssetImageGenerator(asset: asset)
         gen.requestedTimeToleranceBefore = .zero; gen.requestedTimeToleranceAfter = .zero
@@ -165,6 +169,10 @@ final class ExportTests: XCTestCase {
         // GitHub's macOS VMs have no hardware scaler/encoder (AppleM2ScalerParavirtDriver missing) and the
         // video pipeline hangs there; these run locally on real hardware.
         try XCTSkipIf(ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] != nil, "no video hardware on CI VMs")
+        try await withDeadline(Self.deadline) { try await Self.exportConcatenatesClips() }
+    }
+
+    static func exportConcatenatesClips() async throws {
         let mov = Self.outDir.appendingPathComponent("synthetic-cuts.mov")
         try await Self.writeSyntheticMovie(to: mov, staticScreen: false)   // every frame shows its own time
         var project = makeProject()
@@ -209,6 +217,25 @@ final class ExportTests: XCTestCase {
         XCTAssertEqual(cutGain(at: 1.995, cuts: [2]), 0.5, accuracy: 1e-9)
         XCTAssertEqual(cutGain(at: 2.0, cuts: [2]), 0)
         XCTAssertEqual(cutGain(at: 2.02, cuts: [2]), 1)
+    }
+
+    // MARK: time limit
+
+    /// One export test takes ~6 s on Apple Silicon; a stuck one fails here instead of hanging `swift test`.
+    static let deadline = 120.0
+
+    /// Fails after `seconds` instead of hanging. A stuck AVFoundation wait can't be cancelled, so this doesn't wait
+    /// for `body` to unwind; `executionTimeAllowance` only applies under xcodebuild with test timeouts on.
+    func withDeadline(_ seconds: Double, _ body: @escaping @Sendable () async throws -> Void) async throws {
+        let work = Task(operation: body)
+        let finished = XCTestExpectation(description: "finished within \(Int(seconds)) s")
+        Task { _ = await work.result; finished.fulfill() }
+        guard await XCTWaiter().fulfillment(of: [finished], timeout: seconds) == .completed else {
+            work.cancel()
+            XCTFail("timed out after \(Int(seconds)) s")
+            return
+        }
+        try await work.value
     }
 
     /// The "t = 0.00 s" label, read with Vision.
@@ -261,50 +288,58 @@ final class ExportTests: XCTestCase {
         try? FileManager.default.removeItem(at: url)
         let w = Int(size.width), h = Int(size.height)
         let writer = try AVAssetWriter(outputURL: url, fileType: .mov)
-        let vIn = AVAssetWriterInput(mediaType: .video, outputSettings: [
+        nonisolated(unsafe) let vIn = AVAssetWriterInput(mediaType: .video, outputSettings: [
             AVVideoCodecKey: AVVideoCodecType.hevc, AVVideoWidthKey: w, AVVideoHeightKey: h,
         ])
-        let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: vIn, sourcePixelBufferAttributes: [
+        nonisolated(unsafe) let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: vIn, sourcePixelBufferAttributes: [
             kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
             kCVPixelBufferWidthKey as String: w, kCVPixelBufferHeightKey as String: h,
         ])
         writer.add(vIn)
-        let sys = AVAssetWriterInput(mediaType: .audio, outputSettings: [
+        nonisolated(unsafe) let sys = AVAssetWriterInput(mediaType: .audio, outputSettings: [
             AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: 48_000, AVNumberOfChannelsKey: 2])
-        let mic = AVAssetWriterInput(mediaType: .audio, outputSettings: [
+        nonisolated(unsafe) let mic = AVAssetWriterInput(mediaType: .audio, outputSettings: [
             AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: 48_000, AVNumberOfChannelsKey: 1])
         writer.add(sys); writer.add(mic)
         XCTAssertTrue(writer.startWriting())
         writer.startSession(atSourceTime: .zero)
 
-        // interleave audio and video, or the writer stalls one input waiting for the other
-        let rate = 48_000, total = Int(duration) * rate
-        var audioFrame = 0
-        func feedAudio(until t: Double) async throws {
-            while audioFrame < min(total, Int(t * Double(rate))) {
-                let n = min(1024, total - audioFrame)
-                for (input, channels, amp) in [(sys, 2, 0.4), (mic, 1, 0.2)] {
-                    while !input.isReadyForMoreMediaData { try await Task.sleep(nanoseconds: 1_000_000) }
-                    input.append(tone(start: audioFrame, count: n, channels: channels, amplitude: amp))
-                }
-                audioFrame += n
-            }
+        // Each input pulls its own samples whenever the writer asks for them, so the writer does the interleaving.
+        // Polling video while pushing audio a fixed 0.25 s ahead deadlocked: the writer held video until audio
+        // covered more of its interleave window, with every encoder thread idle (sampled at the video wait).
+        let frames = (0..<Int(duration * 60)).filter { i in
+            !(staticScreen && i >= 240 && i < 360 && i != 240)   // static screen: SCStream sends no complete frames
         }
-        for i in 0..<Int(duration * 60) {
-            let t = Double(i) / 60
-            try await feedAudio(until: t + 0.25)
-            if staticScreen, t >= 4, t < 6, i != 240 { continue }   // static screen: SCStream sends no complete frames
-            while !vIn.isReadyForMoreMediaData { try await Task.sleep(nanoseconds: 1_000_000) }
+        let rate = 48_000, total = Int(duration) * rate, chunk = 1024, chunks = (total + chunk - 1) / chunk
+        async let video: Void = feed(vIn, count: frames.count) { k in
             var pb: CVPixelBuffer?
             CVPixelBufferPoolCreatePixelBuffer(nil, adaptor.pixelBufferPool!, &pb)
-            draw(into: pb!, t: t)
-            adaptor.append(pb!, withPresentationTime: CMTime(value: CMTimeValue(i), timescale: 60))
+            draw(into: pb!, t: Double(frames[k]) / 60)
+            adaptor.append(pb!, withPresentationTime: CMTime(value: CMTimeValue(frames[k]), timescale: 60))
         }
-        try await feedAudio(until: duration)
-        vIn.markAsFinished(); sys.markAsFinished(); mic.markAsFinished()
+        async let system: Void = feed(sys, count: chunks) { k in
+            sys.append(tone(start: k * chunk, count: min(chunk, total - k * chunk), channels: 2, amplitude: 0.4))
+        }
+        async let microphone: Void = feed(mic, count: chunks) { k in
+            mic.append(tone(start: k * chunk, count: min(chunk, total - k * chunk), channels: 1, amplitude: 0.2))
+        }
+        _ = await (video, system, microphone)
         writer.endSession(atSourceTime: CMTime(seconds: duration, preferredTimescale: 600))
         await writer.finishWriting()
         XCTAssertEqual(writer.status, .completed, "\(String(describing: writer.error))")
+    }
+
+    /// Drives one writer input from its own queue: `append(k)` for k in 0..<count, whenever the input is ready.
+    static func feed(_ input: AVAssetWriterInput, count: Int, _ append: @escaping @Sendable (Int) -> Void) async {
+        nonisolated(unsafe) let input = input
+        nonisolated(unsafe) var k = 0   // touched only on the input's queue
+        await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
+            input.requestMediaDataWhenReady(on: DispatchQueue(label: "loupecast.synthetic.\(input.mediaType.rawValue)")) {
+                guard k < count else { return }
+                while input.isReadyForMoreMediaData, k < count { append(k); k += 1 }
+                if k == count { input.markAsFinished(); done.resume() }
+            }
+        }
     }
 
     /// A fake desktop: window with text rows, a blue square the cursor follows, and a big time label.
