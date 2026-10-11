@@ -7,9 +7,14 @@ import LoupecastCore
 /// stamped with the host clock the sample buffers use.
 final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sendable {
     static var recordingsDir: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        #if DEBUG
+        if let dir = ProcessInfo.processInfo.environment["LOUPECAST_RECORDINGS_DIR"] { return URL(fileURLWithPath: dir, isDirectory: true) }
+        #endif
+        return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Loupecast/Recordings", isDirectory: true)
     }
+    /// An event-free project written at start: the size and name a crashed recording is recovered with.
+    static let recoveryFile = "recovery.json"
 
     let dir: URL
     var onStreamError: (@MainActor (Error) -> Void)?
@@ -53,13 +58,22 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
             inset = DisplayBounds.menuBarInset(frameMaxY: screen.frame.maxY, visibleMaxY: screen.visibleFrame.maxY,
                                                safeAreaTop: screen.safeAreaInsets.top)
         }
-        let r = try Recorder(filter: filter, displayID: scDisplay.displayID, topInset: inset, microphone: microphone, systemAudio: systemAudio)
-        try await r.stream.startCapture()
-        r.startInputMonitors()
-        return r
+        let dir = recordingsDir.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        var made: Recorder?
+        do {
+            let r = try Recorder(dir: dir, filter: filter, displayID: scDisplay.displayID, topInset: inset, microphone: microphone, systemAudio: systemAudio)
+            made = r
+            try await r.stream.startCapture()
+            r.startInputMonitors()
+            return r
+        } catch {
+            made?.writer.cancelWriting()   // no empty .mov or folder left behind
+            try? FileManager.default.removeItem(at: dir)
+            throw error
+        }
     }
 
-    private init(filter: SCContentFilter, displayID: CGDirectDisplayID, topInset: Double, microphone: Bool, systemAudio: Bool) throws {
+    private init(dir: URL, filter: SCContentFilter, displayID: CGDirectDisplayID, topInset: Double, microphone: Bool, systemAudio: Bool) throws {
         scale = Double(SCShareableContent.info(for: filter).pointPixelScale)
         let b = CGDisplayBounds(displayID)
         display = DisplayBounds(x: b.minX, y: b.minY, width: b.width, height: b.height, topInset: topInset)
@@ -82,9 +96,10 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
         cfg.channelCount = 2
         cfg.captureMicrophone = microphone
 
-        dir = Self.recordingsDir.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        self.dir = dir
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         writer = try AVAssetWriter(outputURL: dir.appendingPathComponent("recording.mov"), fileType: .mov)
+        writer.movieFragmentInterval = CMTime(seconds: 5, preferredTimescale: 600)   // a crash keeps all but the last ≤ 5 s
         videoIn = AVAssetWriterInput(mediaType: .video, outputSettings: [
             AVVideoCodecKey: AVVideoCodecType.hevc, AVVideoWidthKey: w, AVVideoHeightKey: h,
             AVVideoColorPropertiesKey: [
@@ -107,6 +122,8 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
             writer.add(i)
         }
         guard writer.startWriting() else { throw writer.error ?? LoupecastError("녹화 파일을 만들지 못했습니다.") }
+        try Project(name: Self.name(Date()), duration: 0, pixelWidth: w, pixelHeight: h, pointPixelScale: scale, cursor: [], clicks: [], keys: [])
+            .save(to: dir.appendingPathComponent(Self.recoveryFile))
 
         super.init()
         stream = SCStream(filter: filter, configuration: cfg, delegate: self)
@@ -215,13 +232,17 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
         Self.lastSessionStartHost = start.seconds
         #endif
         let events = log.relativized(sessionStartHost: start.seconds, duration: duration, display: display)
-        let f = DateFormatter()
-        f.dateFormat = "M월 d일 HH.mm.ss"
-        let project = Project(name: "녹화 \(f.string(from: Date()))", duration: duration,
+        let project = Project(name: Self.name(Date()), duration: duration,
                               pixelWidth: pixelSize.0, pixelHeight: pixelSize.1, pointPixelScale: scale,
                               cursor: events.cursor, clicks: events.clicks, keys: events.keys)
         try project.save(to: dir.appendingPathComponent(Project.fileName))
         return project
+    }
+
+    static func name(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "M월 d일 HH.mm.ss"
+        return "녹화 \(f.string(from: date))"
     }
 }
 

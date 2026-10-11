@@ -330,6 +330,7 @@ final class ExportTests: XCTestCase {
         try? FileManager.default.removeItem(at: url)
         let w = Int(size.width), h = Int(size.height)
         let writer = try AVAssetWriter(outputURL: url, fileType: .mov)
+        writer.movieFragmentInterval = CMTime(seconds: 5, preferredTimescale: 600)   // fragmented, like Recorder's
         nonisolated(unsafe) let vIn = AVAssetWriterInput(mediaType: .video, outputSettings: [
             AVVideoCodecKey: AVVideoCodecType.hevc, AVVideoWidthKey: w, AVVideoHeightKey: h,
         ])

@@ -33,6 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         updateStatusItem()
         Updater.finishRelaunch { HotKey.register { [weak self] in self?.toggleRecording() } }
         Updater.start { [weak self] in self?.isIdle ?? false }
+        Task { await Library.recoverCrashed() }
         // the user went to another app instead of clicking the floating window: stop floating
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification,
                                                           object: nil, queue: .main) { _ in
@@ -185,14 +186,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
 
     @objc private func trashRecent(_ sender: NSMenuItem) {
         guard let dir = sender.representedObject as? URL, editors[dir] == nil else { return }
-        do { try FileManager.default.trashItem(at: dir, resultingItemURL: nil) }
+        do { try Library.trash(dir) }
         catch { alert("녹화를 지우지 못했습니다", error) }
     }
 
     /// Every finished recording not open in an editor; the one being recorded has no project file yet.
     @objc private func trashAllRecent() {
         guard recorder == nil else { return }
-        do { for (dir, _) in Library.recent(.max) where editors[dir] == nil { try FileManager.default.trashItem(at: dir, resultingItemURL: nil) } }
+        do { for (dir, _) in Library.recent(.max) where editors[dir] == nil { try Library.trash(dir) } }
         catch { alert("녹화를 지우지 못했습니다", error) }
     }
 
@@ -588,6 +589,47 @@ enum Library {
             .compactMap { d, _ in (try? Project.load(from: d.appendingPathComponent(Project.fileName))).map { (d, $0) } }
             .filter { d, p in FileManager.default.fileExists(atPath: d.appendingPathComponent(p.videoFile).path) }
             .prefix(n).map { $0 }
+    }
+
+    /// Folders a crash left behind: no project.json. A movie that plays (the recorder writes a fragment every
+    /// 5 s) becomes a project without input events, so it shows up in 최근 녹화; anything else goes to the Trash.
+    /// Folders written to in the last minute are skipped: another Loupecast may be recording into one.
+    static func recoverCrashed() async {
+        let fm = FileManager.default
+        for dir in (try? fm.contentsOfDirectory(at: Recorder.recordingsDir, includingPropertiesForKeys: nil, options: .skipsHiddenFiles)) ?? []
+        where !fm.fileExists(atPath: dir.appendingPathComponent(Project.fileName).path) {
+            let movie = dir.appendingPathComponent("recording.mov")
+            let touched = [movie, dir].lazy.compactMap { try? $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate }.first
+            guard (touched ?? .distantPast) < Date(timeIntervalSinceNow: -60) else { continue }
+            do {
+                if let p = await recovered(dir, movie: movie) { try p.save(to: dir.appendingPathComponent(Project.fileName)) }
+                else { try trash(dir) }
+                NSLog("Loupecast: crashed recording %@ %@", dir.lastPathComponent, fm.fileExists(atPath: dir.path) ? "recovered" : "trashed")
+            } catch {
+                NSLog("Loupecast: recovering %@ failed: %@", dir.lastPathComponent, describe(error))
+            }
+        }
+    }
+
+    private static func recovered(_ dir: URL, movie: URL) async -> Project? {
+        guard let video = try? await AVURLAsset(url: movie).loadTracks(withMediaType: .video).first,
+              let (range, size) = try? await video.load(.timeRange, .naturalSize), range.end.seconds > 0 else { return nil }
+        let base = try? Project.load(from: dir.appendingPathComponent(Recorder.recoveryFile))
+        return Project(name: "\(base?.name ?? Recorder.name(Date())) (복구됨)", duration: range.end.seconds,
+                       pixelWidth: base?.pixelWidth ?? Int(size.width), pixelHeight: base?.pixelHeight ?? Int(size.height),
+                       pointPixelScale: base?.pointPixelScale ?? 1, cursor: [], clicks: [], keys: [])
+    }
+
+    /// A debug run on LOUPECAST_RECORDINGS_DIR moves to "<that dir>-trash" instead, so tests never fill the user's Trash.
+    static func trash(_ url: URL) throws {
+        #if DEBUG
+        if let dir = ProcessInfo.processInfo.environment["LOUPECAST_RECORDINGS_DIR"] {
+            let bin = URL(fileURLWithPath: dir + "-trash", isDirectory: true)
+            try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+            return try FileManager.default.moveItem(at: url, to: bin.appendingPathComponent(url.lastPathComponent))
+        }
+        #endif
+        try FileManager.default.trashItem(at: url, resultingItemURL: nil)
     }
 }
 
