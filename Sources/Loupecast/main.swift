@@ -116,7 +116,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         let hint = NSMenuItem(title: "⌥를 누르면 하나씩 지울 수 있습니다", action: nil, keyEquivalent: "")
         hint.isEnabled = false
         sub.addItem(hint)
-        let folder = item("녹화 원본 폴더 열기", #selector(openLink(_:)))
+        let bytes = Library.diskUsage()   // the originals pile up out of sight: ~4 MB/s
+        let folder = item("녹화 원본 폴더 열기" + (bytes > 0 ? " (\(ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)))" : ""),
+                          #selector(openLink(_:)))
         folder.representedObject = Recorder.recordingsDir
         sub.addItem(folder)
         let all = item("모두 휴지통으로 보내기", #selector(trashAllRecent))
@@ -600,6 +602,23 @@ enum Library {
         return out
     }
     @MainActor private static var names: [URL: (changed: Date, name: String, videoFile: String)] = [:]
+
+    /// Bytes on disk under Recordings. Summed again only when Recordings or a recording folder in it changed
+    /// (a recording starts, stops or is saved, or one is trashed), not on every menu open.
+    @MainActor static func diskUsage() -> Int64 {
+        let fm = FileManager.default, root = Recorder.recordingsDir
+        let dirs = (try? fm.contentsOfDirectory(at: root, includingPropertiesForKeys: [.contentModificationDateKey], options: .skipsHiddenFiles)) ?? []
+        let changed = ([root] + dirs).compactMap { try? $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate }.max()
+        if let usage, usage.changed == changed { return usage.bytes }
+        var bytes: Int64 = 0
+        let files = fm.enumerator(at: root, includingPropertiesForKeys: [.totalFileAllocatedSizeKey])
+        while let file = files?.nextObject() as? URL {
+            bytes += Int64((try? file.resourceValues(forKeys: [.totalFileAllocatedSizeKey]).totalFileAllocatedSize) ?? 0)
+        }
+        usage = (changed, bytes)
+        return bytes
+    }
+    @MainActor private static var usage: (changed: Date?, bytes: Int64)?
 
     /// Folders a crash left behind: no project.json. A movie that plays (the recorder writes a fragment every
     /// 5 s) becomes a project without input events, so it shows up in 최근 녹화; anything else goes to the Trash.

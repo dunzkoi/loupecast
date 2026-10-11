@@ -10,6 +10,7 @@
 //   LOUPECAST_PERMISSIONS=<png>       save the permission window and quit
 //   LOUPECAST_UPDATE_CHECK=1          fetch the latest GitHub release once, print current/available, quit
 //   LOUPECAST_STATUS=<png>            save the menu-bar button in its recording state, print the menu
+//   LOUPECAST_USAGE_TEST=1            print the recordings' size in the menu, trash the newest recording, print it again
 //   LOUPECAST_SELFTEST=<cycles>       record per cycle (mic off, menu bar hidden on odd cycles) with two
 //                                 CGEvent clicks; prints size/audio/click/strip checks, deletes them, quits
 //   LOUPECAST_WINDOW_TEST=<dir>       stop-path openEditor, minimize, wait for a reopen, close, launcher
@@ -83,6 +84,14 @@ enum DebugHooks {
                 print("LOUPECAST: recording menu \(app.debugMenuTitles()) items=\(menu?.items.count ?? 0) button=\(button.flatMap { ($0 as? NSButton)?.title } ?? "")")
                 NSApp.terminate(nil)
             }
+        }
+        if env["LOUPECAST_USAGE_TEST"] != nil {
+            let line = { app.debugMenuTitles().first { $0.contains("녹화 원본 폴더") } ?? "none" }
+            print("LOUPECAST: usage \(line())")
+            print("LOUPECAST: usage again (cached) \(line())")
+            if let newest = Library.recent(1).first { try? Library.trash(newest.dir); print("LOUPECAST: trashed \(newest.name)") }
+            print("LOUPECAST: usage after trash \(line())")
+            exit(0)
         }
         if let n = env["LOUPECAST_SELFTEST"].flatMap(Int.init) { Task { await selfTest(app, cycles: n) } }
         if let path = env["LOUPECAST_PERF"] { Task { await perfTest(app, dir: URL(fileURLWithPath: path)) } }
