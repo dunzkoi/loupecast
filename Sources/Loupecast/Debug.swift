@@ -6,7 +6,8 @@
 //   LOUPECAST_APPEARANCE=dark|light   force appearance
 //   LOUPECAST_SNAPSHOT=<png>          save the editor window (with the live preview frame) and quit
 //   LOUPECAST_SEEK=<seconds>          playhead time for the snapshot
-//   LOUPECAST_EXPORT=1|fake           run the editor's own export first (fake: just the done state)
+//   LOUPECAST_EXPORT=1|fake           run the editor's own export first (fake: just the done state, then the 복사
+//                                 button's copy: prints what NSPasteboard.general holds, then restores the clipboard)
 //                    cancel|twice     cancel it at 20 %, or export from two editors of the recording at once
 //   LOUPECAST_EXPORT_DIR=<dir>        where the editor exports (default ~/Movies)
 //   LOUPECAST_PERMISSIONS=<png>       save the permission window and quit
@@ -154,7 +155,21 @@ enum DebugHooks {
             do { try await Exporter.export(project: m.project, videoURL: m.videoURL, to: URL(fileURLWithPath: out)); print("LOUPECAST: exported \(out)") }
             catch { print("LOUPECAST: export failed \(describe(error))") }
         }
-        if env["LOUPECAST_EXPORT"] == "fake" { m.exportState = .done(URL(fileURLWithPath: "/tmp/Loupecast.mp4")) }
+        if env["LOUPECAST_EXPORT"] == "fake" {
+            let url = URL(fileURLWithPath: "/tmp/Loupecast.mp4")
+            m.exportState = .done(url)
+            let pb = NSPasteboard.general
+            let saved = (pb.pasteboardItems ?? []).map { item in
+                let copy = NSPasteboardItem()
+                for t in item.types { if let d = item.data(forType: t) { copy.setData(d, forType: t) } }
+                return copy
+            }
+            ExportStatus.copy(url)
+            let read = pb.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+            print("LOUPECAST: pasteboard after copy \(read.map(\.path)), same file \(read == [url])")
+            pb.clearContents()
+            pb.writeObjects(saved)
+        }
         if env["LOUPECAST_EXPORT"] == "1" {
             m.export()
             while m.exportState.isRunning { try? await Task.sleep(for: .milliseconds(100)) }

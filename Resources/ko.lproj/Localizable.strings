@@ -17,6 +17,9 @@
 "Cancel Export" = "내보내기 취소";
 "Check for Updates…" = "업데이트 확인…";
 "Close" = "닫기";
+"Copied" = "복사됨";
+"Copy" = "복사";
+"Copy the video to paste it into Slack, an issue or an email" = "영상을 복사해 Slack, 이슈, 메일에 붙여 넣기";
 "Couldn’t check for updates" = "업데이트를 확인하지 못했습니다";
 "Couldn’t create the recording file." = "녹화 파일을 만들지 못했습니다.";
 "Couldn’t delete the recording" = "녹화를 지우지 못했습니다";
@@ -35,6 +38,7 @@
 "Delete the selected zoom" = "선택한 줌 삭제";
 "Delete the selected zoom (Delete)" = "선택한 줌 삭제 (Delete)";
 "Downloading %@…" = "%@ 내려받는 중…";
+"Drag the video into another app" = "다른 앱으로 끌어 영상 첨부";
 "Edit: %@" = "편집: %@";
 "Export" = "내보내기";
 "Export frame" = "내보내기 비율";

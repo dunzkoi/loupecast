@@ -511,6 +511,14 @@ extension ExportState {
 
 struct ExportStatus: View {
     @Bindable var model: EditorModel
+    @State private var copied = false
+
+    /// The file itself, as Finder copies it: Slack, GitHub issues and Mail attach it on paste.
+    static func copy(_ url: URL) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.writeObjects([url as NSURL])
+    }
+
     var body: some View {
         switch model.exportState {
         case .idle:
@@ -527,10 +535,27 @@ struct ExportStatus: View {
                     .accessibilityLabel("Cancel Export")
             }
         case .done(let url):
-            Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
+            HStack(spacing: 10) {
+                Label(url.deletingPathExtension().lastPathComponent, systemImage: "film")
+                    .font(.callout)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .frame(maxWidth: 170)
+                    .onDrag { NSItemProvider(contentsOf: url) ?? NSItemProvider() }
+                    .help("Drag the video into another app")
+                Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
+                    .buttonStyle(.link)
+                    .focusable(false)
+                    .help(url.path)
+                Button(copied ? "Copied" : "Copy") {
+                    Self.copy(url)
+                    copied = true
+                    Task { try? await Task.sleep(for: .seconds(1.5)); copied = false }
+                }
                 .buttonStyle(.link)
                 .focusable(false)
-                .help(url.path)
+                .help("Copy the video to paste it into Slack, an issue or an email")
+            }
         case .failed(let text):
             Label(text, systemImage: "exclamationmark.triangle.fill")
                 .foregroundStyle(.red)
