@@ -14,8 +14,8 @@ only in the maintainer's checkout); the rules that matter are below.
   `AVVideoCompositing` with Core Image), `Exporter` (reader/writer pumps, H.264 + one stereo AAC track),
   `GIFExporter` (the same composition at 15 fps, long side 960 px, silent and looping).
 - `Sources/Loupecast`: the app. `main.swift` (AppDelegate, menu, quit handling, `Library`: recent recordings,
-  crash recovery, disk usage, `HotKey`), `Recorder` (SCStream → AVAssetWriter), `AreaPicker` (the 영역 지정 녹화
-  overlay), `Editor` (EditorModel and views), `Updater` (self-update), `Debug.swift` (verification hooks, DEBUG
+  crash recovery, disk usage, `HotKey`), `Recorder` (SCStream → AVAssetWriter), `CameraRecorder` (webcam →
+  `camera.mov`), `AreaPicker` (the 영역 지정 녹화 overlay), `Editor` (EditorModel and views), `Updater` (self-update), `Debug.swift` (verification hooks, DEBUG
   builds only).
 - `Resources`: app icon, chimes, `en.lproj`/`ko.lproj`. `build.sh` copies them into `Contents/Resources`.
 - `site/`: landing pages, Korean at `/loupecast/`, English at `/loupecast/en/`, shared `site.css`/`site.js`;
@@ -94,6 +94,9 @@ swift build --build-tests && swift test   # Core ~0.1 s; Render 10-40 s, each ex
   pushing the others deadlocked the writer.
 - The menu caches recording names by project.json modification date and the Recordings size by folder dates.
 - Frame look scales with the canvas's short side (1080 px), so every aspect ratio gets the same corners and shadow.
+- The webcam is its own file (`camera.mov`); `Project.camera.offset` is the recording time of its first frame (both
+  stamped on the host clock), and `Composer` inserts it as a second video track shifted by that offset, so cuts,
+  speed and export apply to it like the screen. The circle is drawn after the zoom, so it never moves.
 - The site's `x-default` hreflang is the English page; README's Website link points there.
 
 ## Open
@@ -104,5 +107,5 @@ swift build --build-tests && swift test   # Core ~0.1 s; Render 10-40 s, each ex
 - Recording-path changes (start-failure cleanup, finishing a recording on quit, pause/resume dropping samples, area
   recording's `sourceRect`) were
   verified only by reading the code and with synthetic movies here; they need a machine with the Screen Recording
-  grant. A crash while paused recovers without the pause cut (recovery.json has no pauses).
+  grant. The webcam capture (`CameraRecorder`) also needs the Camera grant; only its compositing is tested. A crash while paused recovers without the pause cut (recovery.json has no pauses).
 - Hour-long projects: each edit rebuilds the whole camera path (~5 ms) and redraws the timeline.

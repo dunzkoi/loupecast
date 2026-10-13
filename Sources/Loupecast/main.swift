@@ -11,7 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     /// UserDefaults keys; both apply to the next recording.
     static let micKey = "recordMicrophone", systemAudioKey = "recordSystemAudio", hideMenuBarKey = "hideMenuBar"
     static let screenRequestedKey = "screenAccessRequested"
-    static let soundsKey = "playSounds"
+    static let soundsKey = "playSounds", cameraKey = "recordCamera"
 
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private var recorder: Recorder?
@@ -28,7 +28,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     private var isIdle: Bool { recorder == nil && editors.isEmpty && !busy && EditorModel.exports.isEmpty }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        UserDefaults.standard.register(defaults: [Self.micKey: false, Self.systemAudioKey: true, Self.hideMenuBarKey: true, Self.soundsKey: true])
+        UserDefaults.standard.register(defaults: [Self.micKey: false, Self.systemAudioKey: true, Self.hideMenuBarKey: true, Self.soundsKey: true,
+                                                  Self.cameraKey: false])
         NSApp.mainMenu = Self.mainMenu()
         let menu = NSMenu()
         menu.delegate = self
@@ -92,6 +93,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         menu.addItem(.separator())
 
         for (title, key) in [(String(localized: "Record Microphone"), Self.micKey), (String(localized: "Record Computer Audio"), Self.systemAudioKey),
+                             (String(localized: "Record Camera"), Self.cameraKey),
                              (String(localized: "Hide Menu Bar in Video"), Self.hideMenuBarKey), (String(localized: "Start and Stop Sounds"), Self.soundsKey)] {
             let toggle = item(title, #selector(toggleSetting(_:)))
             toggle.representedObject = key
@@ -325,14 +327,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
 
     private func start(area: RecordingArea? = nil) async {
         let defaults = UserDefaults.standard
-        let mic = defaults.bool(forKey: Self.micKey)
+        let mic = defaults.bool(forKey: Self.micKey), camera = defaults.bool(forKey: Self.cameraKey)
         var prompted = false   // macOS showed its own prompt; our window on top of it would be a duplicate
         if mic, AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined {
             _ = await AVCaptureDevice.requestAccess(for: .audio)
         }
+        if camera, AVCaptureDevice.authorizationStatus(for: .video) == .notDetermined {
+            _ = await AVCaptureDevice.requestAccess(for: .video)
+        }
         let screenOK = CGPreflightScreenCaptureAccess()
         let micOK = !mic || AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
-        guard screenOK, micOK else {
+        let cameraOK = !camera || AVCaptureDevice.authorizationStatus(for: .video) == .authorized
+        guard screenOK, micOK, cameraOK else {
             if !screenOK {
                 let reset = await Self.resetStaleScreenGrantOnce()
                 // the system prompt appears only while the app has no record yet: first request, or right after a reset
@@ -340,13 +346,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 defaults.set(true, forKey: Self.screenRequestedKey)
                 CGRequestScreenCaptureAccess()   // registers Loupecast in the list
             }
-            if !prompted { showPermissions(needsMic: mic) }
+            if !prompted { showPermissions(needsMic: mic, needsCamera: camera) }
             return
         }
         await Self.chime("loupecast-start", wait: true)   // Resources/loupecast-start.wav (NSSound(named:) checks the bundle first)
         do {
             let r = try await Recorder.start(microphone: mic, systemAudio: defaults.bool(forKey: Self.systemAudioKey),
-                                             hideMenuBar: defaults.bool(forKey: Self.hideMenuBarKey), area: area)
+                                             hideMenuBar: defaults.bool(forKey: Self.hideMenuBarKey), area: area, camera: camera)
             r.onStreamError = { [weak self] error in self?.streamFailed(error) }
             recorder = r
             startedAt = ProcessInfo.processInfo.systemUptime
@@ -501,12 +507,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         return ok
     }
 
-    func showPermissions(needsMic: Bool) {
+    func showPermissions(needsMic: Bool, needsCamera: Bool = false) {
         permissionWindow?.close()
         let w = LoupecastWindow(contentRect: .zero, styleMask: [.titled, .closable], backing: .buffered, defer: false)
         w.title = String(localized: "Loupecast Permissions")
         w.isReleasedWhenClosed = false
-        w.contentView = NSHostingView(rootView: PermissionView(needsMic: needsMic) { [weak w] in w?.close() })
+        w.contentView = NSHostingView(rootView: PermissionView(needsMic: needsMic, needsCamera: needsCamera) { [weak w] in w?.close() })
         w.center()
         permissionWindow = w
         w.bringToFront()
@@ -585,9 +591,11 @@ struct LauncherView: View {
 
 struct PermissionView: View {
     let needsMic: Bool
+    let needsCamera: Bool
     let close: () -> Void
     @State private var screen = CGPreflightScreenCaptureAccess()
     @State private var mic = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+    @State private var camera = AVCaptureDevice.authorizationStatus(for: .video) == .authorized
     private let refresh = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
@@ -609,6 +617,11 @@ struct PermissionView: View {
                               detail: "In System Settings › Privacy & Security › Microphone, turn on Loupecast.",
                               pane: "Privacy_Microphone")
             }
+            if needsCamera {
+                PermissionRow(granted: camera, title: "Camera",
+                              detail: "In System Settings › Privacy & Security › Camera, turn on Loupecast.",
+                              pane: "Privacy_Camera")
+            }
             Text("Screen recording takes effect after you quit and reopen Loupecast. If this window keeps appearing while it is on, select Loupecast in the list, remove it with −, and start recording again.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
@@ -623,6 +636,7 @@ struct PermissionView: View {
         .onReceive(refresh) { _ in
             screen = CGPreflightScreenCaptureAccess()
             mic = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+            camera = AVCaptureDevice.authorizationStatus(for: .video) == .authorized
         }
     }
 }

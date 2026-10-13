@@ -347,6 +347,22 @@ final class ClipTests: XCTestCase {
         XCTAssertEqual(try Project.load(from: url).micVolume, 0.5)
     }
 
+    func testCameraOverlayRoundTrip() throws {
+        var p = project()
+        XCTAssertNil(p.camera, "no webcam unless one was recorded")
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("camera-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try p.save(to: url)
+        XCTAssertNil(try Project.load(from: url).camera, "older files and files without a webcam")
+        p.camera = CameraOverlay(offset: 0.42)
+        p.camera?.corner = .topLeft
+        p.camera?.isVisible = false
+        try p.save(to: url)
+        let back = try Project.load(from: url).camera
+        XCTAssertEqual(back, p.camera)
+        XCTAssertEqual(back?.file, "camera.mov"); XCTAssertEqual(back?.size, 0.28)
+    }
+
     func testStyleDefaultsAndRoundTrip() throws {
         var p = project()
         XCTAssertEqual(p.style, .pastel)

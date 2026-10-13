@@ -43,14 +43,18 @@ final class LoupecastInstruction: NSObject, AVVideoCompositionInstructionProtoco
     let path: CameraPath
     let style: FrameStyle
     let fill: Bool
+    /// The webcam track and how to show it; nil when hidden (then it isn't decoded at all).
+    let camera: (trackID: CMPersistentTrackID, overlay: CameraOverlay)?
 
-    init(timeRange: CMTimeRange, trackID: CMPersistentTrackID, path: CameraPath, style: FrameStyle, fill: Bool) {
+    init(timeRange: CMTimeRange, trackID: CMPersistentTrackID, path: CameraPath, style: FrameStyle, fill: Bool,
+         camera: (trackID: CMPersistentTrackID, overlay: CameraOverlay)?) {
         self.timeRange = timeRange
         self.trackID = trackID
-        self.requiredSourceTrackIDs = [NSNumber(value: trackID)]
+        self.requiredSourceTrackIDs = ([trackID] + (camera.map { [$0.trackID] } ?? [])).map { NSNumber(value: $0) }
         self.path = path
         self.style = style
         self.fill = fill
+        self.camera = camera
     }
 }
 
@@ -83,8 +87,12 @@ public final class LoupecastCompositor: NSObject, AVVideoCompositing, @unchecked
             }
             lastSource = src
             let size = request.renderContext.size
-            let image = render(src, camera: ins.path.camera(composition: request.compositionTime.seconds), canvas: size, style: ins.style,
+            var image = render(src, camera: ins.path.camera(composition: request.compositionTime.seconds), canvas: size, style: ins.style,
                                fill: ins.fill, window: ins.path.window)
+            // no webcam frame where the camera started late or stopped early: no circle there
+            if let cam = ins.camera, let face = request.sourceFrame(byTrackID: cam.trackID) {
+                image = Self.overlay(CIImage(cvPixelBuffer: face), on: image, canvas: size, cam.overlay)
+            }
             Self.context.render(image, to: out, bounds: CGRect(origin: .zero, size: size), colorSpace: Self.outputSpace)
             request.finish(withComposedVideoFrame: out)
         }
@@ -112,6 +120,33 @@ public final class LoupecastCompositor: NSObject, AVVideoCompositing, @unchecked
         return content.applyingFilter("CIBlendWithMask", parameters: [
             kCIInputBackgroundImageKey: bg,
             kCIInputMaskImageKey: Self.roundedRect(frame, canvas: canvas, style: style, color: .white),
+        ]).cropped(to: CGRect(origin: .zero, size: canvas))
+    }
+
+    /// Where the webcam circle sits on `canvas` (CI space, bottom-left origin): `size` of the short side, in a corner.
+    public static func cameraCircle(canvas: CGSize, _ overlay: CameraOverlay) -> CGRect {
+        let short = min(canvas.width, canvas.height), d = (overlay.size * short).rounded(), margin = (0.045 * short).rounded()
+        let left = overlay.corner == .topLeft || overlay.corner == .bottomLeft, bottom = overlay.corner == .bottomLeft || overlay.corner == .bottomRight
+        return CGRect(x: left ? margin : canvas.width - margin - d, y: bottom ? margin : canvas.height - margin - d, width: d, height: d)
+    }
+
+    /// The webcam's centered square in a white-ringed circle over the finished frame (zoom doesn't move it).
+    static func overlay(_ face: CIImage, on base: CIImage, canvas: CGSize, _ overlay: CameraOverlay) -> CIImage {
+        let circle = cameraCircle(canvas: canvas, overlay), ring = max(2, (0.006 * min(canvas.width, canvas.height)).rounded())
+        let e = face.extent, side = min(e.width, e.height), k = circle.width / side
+        let square = face.cropped(to: CGRect(x: e.midX - side / 2, y: e.midY - side / 2, width: side, height: side))
+        let placed = square.transformed(by: CGAffineTransform(translationX: -square.extent.minX, y: -square.extent.minY)
+            .concatenating(CGAffineTransform(scaleX: k, y: k)).concatenating(CGAffineTransform(translationX: circle.minX, y: circle.minY)))
+        func disc(_ r: CGRect) -> CIImage {
+            let g = CIFilter.roundedRectangleGenerator()
+            g.extent = r
+            g.radius = Float(r.width / 2)
+            g.color = .white
+            return g.outputImage!
+        }
+        return placed.applyingFilter("CIBlendWithMask", parameters: [
+            kCIInputBackgroundImageKey: disc(circle.insetBy(dx: -ring, dy: -ring)).composited(over: base),
+            kCIInputMaskImageKey: disc(circle),
         ]).cropped(to: CGRect(origin: .zero, size: canvas))
     }
 
@@ -164,6 +199,7 @@ public struct EditComposition: @unchecked Sendable {
     public let videoTrackID: CMPersistentTrackID
     /// Composition audio tracks holding the microphone (the others are computer audio).
     public let micTracks: Set<CMPersistentTrackID>
+    public let cameraTrackID: CMPersistentTrackID?
 }
 
 /// The recording's tracks, loaded once so the editor can rebuild compositions synchronously.
@@ -172,11 +208,18 @@ public struct SourceTracks: @unchecked Sendable {
     let video: (track: AVAssetTrack, range: CMTimeRange)
     /// The recorder writes computer audio in stereo and the microphone in mono.
     let audio: [(track: AVAssetTrack, range: CMTimeRange, mic: Bool)]
+    let camera: (asset: AVURLAsset, track: AVAssetTrack, range: CMTimeRange)?
 
     public var hasSystemAudio: Bool { audio.contains { !$0.mic } }
     public var hasMicrophone: Bool { audio.contains { $0.mic } }
 
-    public static func load(_ url: URL) async throws -> SourceTracks {
+    /// `camera`: the webcam movie's file name next to the recording; an unreadable one only drops the circle.
+    public static func load(_ url: URL, camera: String? = nil) async throws -> SourceTracks {
+        var cam: (AVURLAsset, AVAssetTrack, CMTimeRange)?
+        if let camera {
+            let a = AVURLAsset(url: url.deletingLastPathComponent().appendingPathComponent(camera))
+            if let t = try? await a.loadTracks(withMediaType: .video).first, let r = try? await t.load(.timeRange) { cam = (a, t, r) }
+        }
         let source = AVURLAsset(url: url)
         guard let v = try await source.loadTracks(withMediaType: .video).first else { throw LoupecastError("The recording has no video track.") }
         var audio: [(AVAssetTrack, CMTimeRange, Bool)] = []
@@ -185,7 +228,7 @@ public struct SourceTracks: @unchecked Sendable {
             let channels = formats.first.flatMap { CMAudioFormatDescriptionGetStreamBasicDescription($0)?.pointee.mChannelsPerFrame } ?? 2
             audio.append((a, range, channels == 1))
         }
-        return SourceTracks(asset: source, video: (v, try await v.load(.timeRange)), audio: audio)
+        return SourceTracks(asset: source, video: (v, try await v.load(.timeRange)), audio: audio, camera: cam)
     }
 }
 
@@ -205,30 +248,37 @@ public enum Composer {
         guard let video = comp.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid) else {
             throw LoupecastError("The recording has no video track.")
         }
-        var tracks = [(source.video.track, source.video.range, video)]
+        // (source, its range, composition track, recording time of the source's 0)
+        var tracks = [(source.video.track, source.video.range, video, 0.0)]
         var micTracks = Set<CMPersistentTrackID>()
         for a in source.audio {
             guard let t = comp.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) else { continue }
-            tracks.append((a.track, a.range, t))
+            tracks.append((a.track, a.range, t, 0))
             if a.mic { micTracks.insert(t.trackID) }
+        }
+        if let cam = source.camera, let overlay = project.camera,
+           let t = comp.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid) {
+            tracks.append((cam.track, cam.range, t, overlay.offset))
         }
         var at = CMTime.zero                     // exact running position: segments never overlap or gap
         for clip in project.clips.keptRanges {
             let range = CMTimeRange(start: time(clip.start), end: time(clip.end))
-            for (src, srcRange, dst) in tracks {
-                let r = CMTimeRangeGetIntersection(range, otherRange: srcRange)
+            for (src, srcRange, dst, offset) in tracks {
+                let wanted = CMTimeRange(start: range.start - time(offset), duration: range.duration)
+                let r = CMTimeRangeGetIntersection(wanted, otherRange: srcRange)
                 guard r.duration > .zero else { continue }
-                try dst.insertTimeRange(r, of: src, at: at + (r.start - range.start))
+                try dst.insertTimeRange(r, of: src, at: at + (r.start - wanted.start))
             }
             // a faster clip: every track's piece squeezed, sound kept at its pitch (pitchAlgorithm)
             let played = clip.speed == 1 ? range.duration : CMTimeMultiplyByFloat64(range.duration, multiplier: 1 / clip.speed)
             if clip.speed != 1 { comp.scaleTimeRange(CMTimeRange(start: at, duration: range.duration), toDuration: played) }
             at = at + played
         }
-        for (_, _, track) in tracks.dropFirst() where track.segments.isEmpty { comp.removeTrack(track) }
-        let vc = videoComposition(project: project, trackID: video.trackID, duration: comp.duration)
+        for (_, _, track, _) in tracks.dropFirst() where track.segments.isEmpty { comp.removeTrack(track) }
+        let cameraID = comp.tracks(withMediaType: .video).map(\.trackID).first { $0 != video.trackID }
+        let vc = videoComposition(project: project, trackID: video.trackID, cameraTrackID: cameraID, duration: comp.duration)
         return EditComposition(asset: comp, videoComposition: vc, audioMix: audioMix(comp, project: project, micTracks: micTracks),
-                               videoTrackID: video.trackID, micTracks: micTracks)
+                               videoTrackID: video.trackID, micTracks: micTracks, cameraTrackID: cameraID)
     }
 
     /// Each track at its volume, with the preview's fade around every cut on top (`fades`). AVAudioMix smooths ramps
@@ -275,7 +325,8 @@ public enum Composer {
     }
 
     /// Rebuilt on every zoom edit; cheap (the camera path is a few thousand spring steps).
-    public static func videoComposition(project: Project, trackID: CMPersistentTrackID, duration: CMTime) -> AVMutableVideoComposition {
+    public static func videoComposition(project: Project, trackID: CMPersistentTrackID, cameraTrackID: CMPersistentTrackID? = nil,
+                                        duration: CMTime) -> AVMutableVideoComposition {
         let vc = AVMutableVideoComposition()
         vc.customVideoCompositorClass = LoupecastCompositor.self
         vc.renderSize = renderSize(project.aspect)
@@ -284,7 +335,8 @@ public enum Composer {
         vc.colorTransferFunction = AVVideoTransferFunction_ITU_R_709_2
         vc.colorYCbCrMatrix = AVVideoYCbCrMatrix_ITU_R_709_2
         vc.instructions = [LoupecastInstruction(timeRange: CMTimeRange(start: .zero, duration: duration), trackID: trackID,
-                                            path: cameraPath(project), style: FrameStyle(project.style), fill: project.fillsFrame)]
+                                            path: cameraPath(project), style: FrameStyle(project.style), fill: project.fillsFrame,
+                                            camera: cameraTrackID.flatMap { id in project.camera.flatMap { $0.isVisible ? (id, $0) : nil } })]
         return vc
     }
 }

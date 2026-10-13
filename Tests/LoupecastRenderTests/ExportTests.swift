@@ -440,6 +440,87 @@ final class ExportTests: XCTestCase {
         XCTAssertEqual(Double(crossings), 2000, accuracy: 200)
     }
 
+    // MARK: webcam
+
+    /// A webcam movie that is green for its first 2 s and magenta after, starting 1 s into the recording: the circle
+    /// shows the camera at recording time − 1, sits in its corner with a white ring, and is absent before the camera
+    /// started.
+    func testCameraOverlayExport() async throws {
+        try XCTSkipIf(ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] != nil, "no video hardware on CI VMs")
+        try await withDeadline(Self.deadline) { try await Self.cameraOverlayExport() }
+    }
+
+    static func cameraOverlayExport() async throws {
+        let mov = outDir.appendingPathComponent("synthetic.mov"), cam = outDir.appendingPathComponent("camera.mov")
+        try await writeSyntheticMovie(to: mov)
+        try await writeSyntheticCamera(to: cam)
+        let canvas = Composer.renderSize(.landscape)
+        func frame(_ project: Project, at c: Double, _ name: String) async throws -> CGImage {
+            let out = outDir.appendingPathComponent("export-camera-\(name).mp4")
+            try await Exporter.export(project: project, videoURL: mov, to: out)
+            let gen = AVAssetImageGenerator(asset: AVURLAsset(url: out))
+            gen.requestedTimeToleranceBefore = .zero; gen.requestedTimeToleranceAfter = .zero
+            return try await gen.image(at: CMTime(seconds: c, preferredTimescale: 600)).image
+        }
+        func isGreen(_ p: (r: Int, g: Int, b: Int)) -> Bool { p.g > 150 && p.r < 90 && p.b < 90 }
+        func isMagenta(_ p: (r: Int, g: Int, b: Int)) -> Bool { p.r > 150 && p.b > 150 && p.g < 90 }
+
+        var project = makeProject()                                     // kept: recording 2.0 – 7.5
+        project.camera = CameraOverlay(offset: 1)
+        let c = LoupecastCompositor.cameraCircle(canvas: canvas, project.camera!)
+        let center = (c.midX, canvas.height - c.midY), cornerOfBox = (c.minX + 4, canvas.height - c.minY - 4)
+        let early = try await frame(project, at: 0.5, "a"), late = try await frame(project, at: 3.0, "b")
+        print("camera: circle \(c), center \(pixel(early, center.0, center.1)) then \(pixel(late, center.0, center.1))")
+        XCTAssertGreaterThan(c.minX, canvas.width / 2); XCTAssertLessThan(c.minY, canvas.height / 2)   // bottom right
+        XCTAssertTrue(isGreen(pixel(early, center.0, center.1)), "recording 2.5 s = camera 1.5 s: green")
+        XCTAssertTrue(isMagenta(pixel(late, center.0, center.1)), "recording 5 s = camera 4 s: magenta")
+        let box = pixel(late, cornerOfBox.0, cornerOfBox.1)
+        XCTAssertFalse(isMagenta(box), "a circle, not a square: \(box)")
+        let ring = pixel(late, c.midX, canvas.height - c.maxY - 2)
+        XCTAssertTrue(ring.r > 220 && ring.g > 220 && ring.b > 220, "white ring above the circle: \(ring)")
+
+        // a camera that started 4 s in, shown top left: nothing before it started, then its first frames
+        project.camera = CameraOverlay(offset: 4)
+        project.camera?.corner = .topLeft
+        let tl = LoupecastCompositor.cameraCircle(canvas: canvas, project.camera!)
+        XCTAssertLessThan(tl.minX, canvas.width / 2); XCTAssertGreaterThan(tl.minY, canvas.height / 2)
+        let before = try await frame(project, at: 0.5, "c"), after = try await frame(project, at: 3.0, "d")
+        XCTAssertFalse(isGreen(pixel(before, tl.midX, canvas.height - tl.midY)), "recording 2.5 s: the camera hadn't started")
+        XCTAssertTrue(isGreen(pixel(after, tl.midX, canvas.height - tl.midY)), "recording 5 s = camera 1 s: green, top left")
+
+        project.camera?.isVisible = false
+        let hidden = try await frame(project, at: 3.0, "e")
+        XCTAssertFalse(isGreen(pixel(hidden, tl.midX, canvas.height - tl.midY)), "hidden camera: no circle")
+    }
+
+    /// 640 × 480 at 30 fps for 8 s: green until 2 s, magenta after.
+    static func writeSyntheticCamera(to url: URL) async throws {
+        try? FileManager.default.removeItem(at: url)
+        let writer = try AVAssetWriter(outputURL: url, fileType: .mov)
+        nonisolated(unsafe) let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
+            AVVideoCodecKey: AVVideoCodecType.h264, AVVideoWidthKey: 640, AVVideoHeightKey: 480])
+        nonisolated(unsafe) let adaptor = AVAssetWriterInputPixelBufferAdaptor(assetWriterInput: input, sourcePixelBufferAttributes: [
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA, kCVPixelBufferWidthKey as String: 640, kCVPixelBufferHeightKey as String: 480])
+        writer.add(input)
+        XCTAssertTrue(writer.startWriting())
+        writer.startSession(atSourceTime: .zero)
+        await feed(input, count: 240) { k in
+            var pb: CVPixelBuffer?
+            CVPixelBufferPoolCreatePixelBuffer(nil, adaptor.pixelBufferPool!, &pb)
+            CVPixelBufferLockBaseAddress(pb!, [])
+            let ctx = CGContext(data: CVPixelBufferGetBaseAddress(pb!), width: 640, height: 480, bitsPerComponent: 8,
+                                bytesPerRow: CVPixelBufferGetBytesPerRow(pb!), space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue)!
+            ctx.setFillColor(k < 60 ? CGColor(srgbRed: 0, green: 0.8, blue: 0, alpha: 1) : CGColor(srgbRed: 0.9, green: 0, blue: 0.9, alpha: 1))
+            ctx.fill(CGRect(x: 0, y: 0, width: 640, height: 480))
+            CVPixelBufferUnlockBaseAddress(pb!, [])
+            adaptor.append(pb!, withPresentationTime: CMTime(value: CMTimeValue(k), timescale: 30))
+        }
+        writer.endSession(atSourceTime: CMTime(seconds: 8, preferredTimescale: 600))
+        await writer.finishWriting()
+        XCTAssertEqual(writer.status, .completed, "\(String(describing: writer.error))")
+    }
+
     // MARK: GIF
 
     /// The 5.5 s edit as a GIF: 960×540, looping forever, 15 frames a second, as long as the MP4 (delays 7, 7, 6…).

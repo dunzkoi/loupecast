@@ -1,1 +1,2 @@
 "NSMicrophoneUsageDescription" = "Loupecast needs access to record your microphone.";
+"NSCameraUsageDescription" = "Loupecast needs camera access to show your face in a corner of the recording.";

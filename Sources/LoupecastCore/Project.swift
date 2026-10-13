@@ -36,6 +36,8 @@ public struct Project: Codable, Sendable, Equatable {
     public var systemVolume = 1.0
     public var micVolume = 1.0
     public static let volumes = 0.0...2.0
+    /// The webcam recorded next to the screen; nil without one (and in older files).
+    public var camera: CameraOverlay?
 
     /// `paused`: recording-time ranges the recording was paused for. They start out cut, and the clicks and cursor
     /// samples in them are dropped, so the editor opens with the pauses already gone.
@@ -52,7 +54,7 @@ public struct Project: Codable, Sendable, Equatable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case version, name, videoFile, duration, pixelWidth, pixelHeight, pointPixelScale, cursor, clicks, keys, clips, zooms, aspect, style, fill, systemVolume, micVolume
+        case version, name, videoFile, duration, pixelWidth, pixelHeight, pointPixelScale, cursor, clicks, keys, clips, zooms, aspect, style, fill, systemVolume, micVolume, camera
     }
     private enum V1Keys: String, CodingKey { case trimIn, trimOut }
 
@@ -73,6 +75,7 @@ public struct Project: Codable, Sendable, Equatable {
         fill = try c.decodeIfPresent(Bool.self, forKey: .fill) ?? false
         systemVolume = Self.volumes.clamp(try c.decodeIfPresent(Double.self, forKey: .systemVolume) ?? 1)
         micVolume = Self.volumes.clamp(try c.decodeIfPresent(Double.self, forKey: .micVolume) ?? 1)
+        camera = try c.decodeIfPresent(CameraOverlay.self, forKey: .camera)
         if let clips = try c.decodeIfPresent([ClipRange].self, forKey: .clips) {
             self.clips = clips
         } else {                                // version 1: one trim range
@@ -203,6 +206,20 @@ public enum AspectRatio: String, Codable, CaseIterable, Sendable {
         case .square: (1080, 1080)
         }
     }
+}
+
+/// The webcam as a circle in a corner of the frame, fixed whatever the zoom does.
+public struct CameraOverlay: Codable, Equatable, Sendable {
+    public enum Corner: String, Codable, CaseIterable, Sendable { case topLeft, topRight, bottomLeft, bottomRight }
+    public var file = "camera.mov"
+    /// Recording time (s) at which the camera movie's first frame was taken: both clocks are the host clock.
+    public var offset: Double
+    public var isVisible = true
+    public var corner = Corner.bottomRight
+    /// Circle diameter as a share of the canvas's short side.
+    public var size = 0.28
+    public static let sizes = [0.2, 0.28, 0.38]
+    public init(offset: Double) { self.offset = offset }
 }
 
 /// Named looks for the frame around the recording (colors and sizes live in LoupecastRender's FrameStyle).

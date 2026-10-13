@@ -29,6 +29,8 @@
 //                                 popover opened) and saves its controls drawn in a plain window
 //   LOUPECAST_SPEED=2|4               play the first clip that fast through the editor (one undo step), print the preview's
 //                                 length; LOUPECAST_SPEED_UNDO=1 undoes it again
+//   LOUPECAST_CAMERA_CORNER=<corner>  move the webcam circle (topLeft, topRight, bottomLeft, bottomRight) through the
+//                                 editor (one undo step) before the snapshot; LOUPECAST_CAMERA_HIDE=1 hides it
 //   LOUPECAST_FILL=1                  turn on 화면 채우기 through the editor (one undo step) before the snapshot
 //   LOUPECAST_STYLE=<preset>          pick that background (pastel, dark, light, graphite, blue, plain) through the editor
 //                                 (one undo step) before the snapshot
@@ -85,7 +87,8 @@ enum DebugHooks {
             }
         }
         if let out = env["LOUPECAST_PERMISSIONS"] {
-            app.showPermissions(needsMic: UserDefaults.standard.bool(forKey: AppDelegate.micKey))
+            app.showPermissions(needsMic: UserDefaults.standard.bool(forKey: AppDelegate.micKey),
+                                needsCamera: UserDefaults.standard.bool(forKey: AppDelegate.cameraKey))
             let w = NSApp.windows.first { $0.title == String(localized: "Loupecast Permissions") }
             w?.setFrameOrigin(NSPoint(x: -20_000, y: -20_000))
             Task {
@@ -202,6 +205,11 @@ enum DebugHooks {
                 print("LOUPECAST: speed after undo \(m.project.clips[0].speed), preview item \(timecode(m.player.currentItem?.duration.seconds ?? -1))")
             }
         }
+        if let corner = env["LOUPECAST_CAMERA_CORNER"].flatMap(CameraOverlay.Corner.init(rawValue:)) {
+            m.edit("Camera Position") { $0.camera?.corner = corner }
+            print("LOUPECAST: camera \(m.project.camera.map { "\($0.corner) visible \($0.isVisible)" } ?? "none"), undo \(m.undo.undoActionName)")
+        }
+        if env["LOUPECAST_CAMERA_HIDE"] != nil { m.edit("Hide Camera") { $0.camera?.isVisible = false } }
         if env["LOUPECAST_FILL"] != nil {
             m.edit("Fill Frame") { $0.fill = true }
             print("LOUPECAST: fill \(m.project.fill) (fills frame \(m.project.fillsFrame)), undo \(m.undo.undoActionName)")

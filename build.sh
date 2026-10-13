@@ -50,6 +50,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Loupecast needs access to record your microphone.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Loupecast needs camera access to show your face in a corner of the recording.</string>
 </dict>
 </plist>
 PLIST

@@ -60,7 +60,7 @@ final class EditorModel {
 
     func load() async {
         do {
-            let source = try await SourceTracks.load(videoURL)
+            let source = try await SourceTracks.load(videoURL, camera: project.camera?.file)
             self.source = source
             hasSystemAudio = source.hasSystemAudio
             hasMicrophone = source.hasMicrophone
@@ -119,7 +119,8 @@ final class EditorModel {
         guard let item = player.currentItem, let edit else { return }
         built = project.clips
         if player.rate == 0 { seek(playhead) }   // off the item's last instant first, then re-render this frame
-        item.videoComposition = Composer.videoComposition(project: project, trackID: edit.videoTrackID, duration: edit.asset.duration)
+        item.videoComposition = Composer.videoComposition(project: project, trackID: edit.videoTrackID, cameraTrackID: edit.cameraTrackID,
+                                                          duration: edit.asset.duration)
         refreshAudio()
     }
 
@@ -550,6 +551,7 @@ struct ControlBar: View {
 
             ExportStatus(model: model)
             if model.hasSystemAudio || model.hasMicrophone { VolumeButton(model: model) }
+            if let cam = model.project.camera { CameraMenu(model: model, camera: cam) }
             Menu {
                 Picker("Background", selection: Binding(get: { model.project.style },
                                                         set: { s in model.edit("Background") { $0.style = s } })) {
@@ -672,6 +674,39 @@ struct SelectionBar: View {
             .help("Delete the selected zoom (Delete)")
             .accessibilityLabel("Delete the selected zoom")
         hint("Click the preview to hold this zoom on a spot.")
+    }
+}
+
+/// The webcam circle: on or off, which corner, how big. Each change is one undo step.
+struct CameraMenu: View {
+    @Bindable var model: EditorModel
+    let camera: CameraOverlay
+
+    var body: some View {
+        Menu {
+            Toggle("Show Camera", isOn: Binding(get: { camera.isVisible },
+                                                set: { on in model.edit(on ? "Show Camera" : "Hide Camera") { $0.camera?.isVisible = on } }))
+            Picker("Position", selection: Binding(get: { camera.corner }, set: { c in model.edit("Camera Position") { $0.camera?.corner = c } })) {
+                Text("Top Left").tag(CameraOverlay.Corner.topLeft)
+                Text("Top Right").tag(CameraOverlay.Corner.topRight)
+                Text("Bottom Left").tag(CameraOverlay.Corner.bottomLeft)
+                Text("Bottom Right").tag(CameraOverlay.Corner.bottomRight)
+            }
+            .pickerStyle(.inline)
+            Picker("Size", selection: Binding(get: { camera.size }, set: { s in model.edit("Camera Size") { $0.camera?.size = s } })) {
+                ForEach(Array(zip(CameraOverlay.sizes, [String(localized: "Small"), String(localized: "Medium"), String(localized: "Large")])), id: \.0) {
+                    Text($0.1).tag($0.0)
+                }
+            }
+            .pickerStyle(.inline)
+        } label: {
+            Image(systemName: camera.isVisible ? "person.crop.circle" : "person.crop.circle.badge.xmark")
+        }
+        .menuIndicator(.visible)
+        .fixedSize()
+        .focusable(false)
+        .help("Camera")
+        .accessibilityLabel("Camera")
     }
 }
 

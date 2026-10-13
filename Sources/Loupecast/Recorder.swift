@@ -26,6 +26,8 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
     private let systemIn: AVAssetWriterInput?
     private let micIn: AVAssetWriterInput?
     private let display: DisplayBounds
+    /// The webcam, when 카메라 함께 녹화 is on.
+    private var camera: CameraRecorder?
     private let pixelSize: (Int, Int)
     private let scale: Double
     // capture queue only
@@ -44,9 +46,9 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
     #endif
 
     /// `hideMenuBar` crops the menu-bar strip (or notch) off the top of the display; an `area` records only that rect
-    /// of its display instead.
+    /// of its display instead. `camera` records the default camera next to it (started first: it takes a moment).
     @MainActor
-    static func start(microphone: Bool, systemAudio: Bool, hideMenuBar: Bool, area: RecordingArea? = nil) async throws -> Recorder {
+    static func start(microphone: Bool, systemAudio: Bool, hideMenuBar: Bool, area: RecordingArea? = nil, camera: Bool = false) async throws -> Recorder {
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
         let mouse = CGEvent(source: nil)?.location ?? .zero
         let display = area.map { a in content.displays.first { $0.displayID == a.displayID } }
@@ -67,7 +69,17 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
         do {   // no empty .mov or folder left behind
             let r = try Recorder(dir: dir, filter: filter, displayID: scDisplay.displayID, topInset: inset, area: area?.rect,
                                  microphone: microphone, systemAudio: systemAudio)
-            do { try await r.stream.startCapture() } catch { r.writer.cancelWriting(); throw error }
+            do {
+                if camera {
+                    r.camera = try CameraRecorder(dir: dir)
+                    await r.camera?.start()
+                }
+                try await r.stream.startCapture()
+            } catch {
+                r.writer.cancelWriting()
+                _ = await r.camera?.stop()
+                throw error
+            }
             r.startInputMonitors()
             return r
         } catch {
@@ -170,6 +182,7 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
             if on, pauses.last.map({ $0.end.isValid }) ?? true { pauses.append((now, .invalid)) }
             if !on, let last = pauses.last, !last.end.isValid { pauses[pauses.count - 1].end = now }
         }
+        camera?.setPaused(on)
     }
 
     private func appendAudio(_ sb: CMSampleBuffer, to input: AVAssetWriterInput) {
@@ -221,6 +234,7 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
         try? await stream.stopCapture()
         for t in [SCStreamOutputType.screen, .audio, .microphone] { try? stream.removeStreamOutput(self, type: t) }
         stream = nil
+        let cameraStart = await camera?.stop()
 
         // drain the capture queue, then close the file
         let (start, last, dropped, pauses): (CMTime?, CMTime, Int, [(start: CMTime, end: CMTime)]) = await withCheckedContinuation { cont in
@@ -248,9 +262,10 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
         #endif
         let events = log.relativized(sessionStartHost: start.seconds, duration: duration, display: display)
         let paused = pauses.map { ClipRange(start: max(0, ($0.start - start).seconds), end: (($0.end.isValid ? $0.end : end) - start).seconds) }
-        let project = Project(name: Self.name(Date()), duration: duration,
+        var project = Project(name: Self.name(Date()), duration: duration,
                               pixelWidth: pixelSize.0, pixelHeight: pixelSize.1, pointPixelScale: scale,
                               cursor: events.cursor, clicks: events.clicks, paused: paused)
+        project.camera = cameraStart.map { CameraOverlay(offset: $0 - start.seconds) }   // recording-relative, like everything stored
         try project.save(to: dir.appendingPathComponent(Project.fileName))
         return project
     }

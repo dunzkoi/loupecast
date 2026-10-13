@@ -1,1 +1,2 @@
 "NSMicrophoneUsageDescription" = "마이크 소리를 녹음하려면 접근 권한이 필요합니다.";
+"NSCameraUsageDescription" = "녹화 화면 모서리에 얼굴을 함께 보여 주려면 카메라 접근 권한이 필요합니다.";

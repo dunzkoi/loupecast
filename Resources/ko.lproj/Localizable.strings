@@ -15,6 +15,11 @@
 "Aspect Ratio" = "비율";
 "Background" = "배경";
 "Blue" = "파랑";
+"Bottom Left" = "왼쪽 아래";
+"Bottom Right" = "오른쪽 아래";
+"Camera" = "카메라";
+"Camera Position" = "카메라 위치";
+"Camera Size" = "카메라 크기";
 "Cancel" = "취소";
 "Cancel Export" = "내보내기 취소";
 "Check for Updates…" = "업데이트 확인…";
@@ -36,6 +41,7 @@
 "Couldn’t save the recording" = "녹화를 저장하지 못했습니다";
 "Couldn’t start reading." = "읽기를 시작하지 못했습니다.";
 "Couldn’t start recording" = "녹화를 시작하지 못했습니다";
+"Couldn’t start the camera." = "카메라를 켜지 못했습니다.";
 "Couldn’t start writing." = "쓰기를 시작하지 못했습니다.";
 "Crop the recording to fill the frame; it follows the cursor" = "녹화 화면을 잘라 프레임을 채우고 커서를 따라갑니다";
 "Cut %@" = "잘라냄 %@";
@@ -57,12 +63,15 @@
 "Follow Cursor" = "커서 따라가기";
 "GIF (no sound, loops)" = "GIF (소리 없음, 반복)";
 "Graphite" = "짙은 회색";
+"Hide Camera" = "카메라 숨기기";
 "Hide Menu Bar in Video" = "영상 속 메뉴 막대 숨기기";
 "Hold ⌥ to delete one at a time" = "⌥를 누르면 하나씩 지울 수 있습니다";
+"In System Settings › Privacy & Security › Camera, turn on Loupecast." = "시스템 설정 › 개인정보 보호 및 보안 › 카메라에서 Loupecast를 켭니다.";
 "In System Settings › Privacy & Security › Microphone, turn on Loupecast." = "시스템 설정 › 개인정보 보호 및 보안 › 마이크에서 Loupecast를 켭니다.";
 "In System Settings › Privacy & Security › Screen & System Audio Recording, turn on Loupecast." = "시스템 설정 › 개인정보 보호 및 보안 › 화면 및 시스템 오디오 녹음에서 Loupecast를 켭니다.";
 "Install %@ and Restart" = "%@ 설치 후 다시 시작";
 "It installs once recording and exports finish and every editor window is closed." = "녹화와 내보내기가 끝나고 편집 창을 모두 닫으면 설치됩니다.";
+"Large" = "크게";
 "Length cut out (D splits, Delete removes, ⌘Z undoes)" = "잘라낸 길이 (D 자르기, Delete 삭제, ⌘Z 되돌리기)";
 "Light Gray" = "밝은 회색";
 "Loupecast %@ is the latest version." = "Loupecast %@이 최신 버전입니다.";
@@ -72,6 +81,7 @@
 "Loupecast restarted with the new version." = "Loupecast가 새 버전으로 다시 시작했습니다.";
 "MMM d HH.mm.ss" = "M월 d일 HH.mm.ss";
 "MP4 Video" = "MP4 영상";
+"Medium" = "보통";
 "Microphone" = "마이크";
 "Move All to Trash" = "모두 휴지통으로 보내기";
 "Move to Trash: %@" = "휴지통으로: %@";
@@ -79,6 +89,7 @@
 "Needed" = "필요함";
 "No Padding" = "여백 없음";
 "No Recordings" = "녹화 없음";
+"No camera is connected." = "연결된 카메라가 없습니다.";
 "No screen frames arrived. Check the Screen Recording permission." = "화면 프레임을 하나도 받지 못했습니다. 화면 녹화 권한을 확인해 주세요.";
 "No source frame to compose." = "합성할 원본 프레임이 없습니다.";
 "OK" = "확인";
@@ -98,11 +109,13 @@
 "Play (Space)" = "재생 (스페이스)";
 "Play the selected clip faster" = "선택한 클립을 빠르게 재생";
 "Plays at %lld× speed" = "%lld배속 재생";
+"Position" = "위치";
 "Quit" = "종료";
 "Quit Loupecast" = "Loupecast 종료";
 "Reading failed" = "읽기 실패";
 "Recent Recordings" = "최근 녹화";
 "Record Area…" = "영역 지정 녹화…";
+"Record Camera" = "카메라 함께 녹화";
 "Record Computer Audio" = "컴퓨터 소리 녹음";
 "Record Microphone" = "마이크 녹음";
 "Recording %@" = "녹화 %@";
@@ -117,7 +130,9 @@
 "Set End" = "끝 지점";
 "Set Start" = "시작 지점";
 "Shortcut unavailable: %@" = "단축키 사용 불가: %@";
+"Show Camera" = "카메라 보이기";
 "Show in Finder" = "Finder에서 보기";
+"Small" = "작게";
 "Speed" = "속도";
 "Split" = "자르기";
 "Sponsor…" = "후원하기…";
@@ -132,6 +147,8 @@
 "The recording has no video track." = "녹화 파일에 영상 트랙이 없습니다.";
 "The recording’s video file is missing." = "녹화 영상 파일이 없습니다.";
 "Timeline" = "타임라인";
+"Top Left" = "왼쪽 위";
+"Top Right" = "오른쪽 위";
 "Trim" = "다듬기";
 "Turn Zoom Off" = "줌 끄기";
 "Turn Zoom On" = "줌 켜기";

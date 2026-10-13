@@ -20,7 +20,7 @@ public enum Exporter {
 
     public static func export(project: Project, videoURL: URL, to output: URL,
                               progress: @escaping @Sendable (Double) -> Void = { _ in }) async throws {
-        let edit = try Composer.make(project: project, source: try await SourceTracks.load(videoURL))
+        let edit = try Composer.make(project: project, source: try await SourceTracks.load(videoURL, camera: project.camera?.file))
         let duration = edit.asset.duration
         let reader = try AVAssetReader(asset: edit.asset)
 
