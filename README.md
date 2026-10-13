@@ -6,6 +6,7 @@
   <a href="https://github.com/sponsors/dunzkoi">Sponsor</a> ·
   <a href="README.ko.md">한국어</a>
 </p>
+<p align="center"><img src=".github/demo.gif" width="720" alt="Loupecast demo: each click in a to-do app zooms in on its own, the zoom follows the cursor, and the waiting is cut out"></p>
 
 ## Install
 

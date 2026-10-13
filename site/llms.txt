@@ -5,8 +5,9 @@
 - 설치: `brew install --cask dunzkoi/tap/loupecast` 또는 https://github.com/dunzkoi/loupecast/releases/latest/download/Loupecast.zip
 - 공증 전이라 처음 한 번 `xattr -dr com.apple.quarantine /Applications/Loupecast.app` 실행이 필요할 수 있습니다.
 - 녹화 단축키: ⌘⇧2. 편집: D 나누기, Delete 잘라내기, ⌘Z 되돌리기.
+- 데모 영상: https://dunzkoi.github.io/loupecast/demo.mp4 (16초, Loupecast로 내보낸 결과). 할 일 앱 화면에서 클릭한 곳이 자동으로 확대되고, 확대한 채 커서를 따라가며, 기다리는 구간은 잘려 나갑니다.
 
-In English: Loupecast is a free, open-source (MIT) macOS menu bar screen recorder that zooms in where you click, cuts the parts you don't need and exports a 1080p60 H.264 MP4 (16:9, 9:16 or 1:1). The app follows the macOS language (English or Korean). It has no telemetry; its only network request is the update check against GitHub Releases. macOS 15 or later, Apple Silicon only. Install with `brew install --cask dunzkoi/tap/loupecast`.
+In English: Loupecast is a free, open-source (MIT) macOS menu bar screen recorder that zooms in where you click, cuts the parts you don't need and exports a 1080p60 H.264 MP4 (16:9, 9:16 or 1:1). The app follows the macOS language (English or Korean). It has no telemetry; its only network request is the update check against GitHub Releases. macOS 15 or later, Apple Silicon only. Install with `brew install --cask dunzkoi/tap/loupecast`. Demo video (16 s, a Loupecast export of a to-do app recording: click zooms that follow the cursor, the waiting cut out): https://dunzkoi.github.io/loupecast/demo.mp4
 
 ## Pages
 

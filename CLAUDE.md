@@ -19,7 +19,9 @@ only in the maintainer's checkout); the rules that matter are below.
   builds only).
 - `Resources`: app icon, chimes, `en.lproj`/`ko.lproj`. `build.sh` copies them into `Contents/Resources`.
 - `site/`: landing pages, Korean at `/loupecast/`, English at `/loupecast/en/`, shared `site.css`/`site.js`;
-  deployed by `pages.yml` on pushes to `main` that touch `site/`.
+  deployed by `pages.yml` on pushes to `main` that touch `site/`. `scripts/make-demo.sh` rebuilds the demo
+  (`site/demo.mp4`, `site/demo-poster.jpg`, `.github/demo.gif` for the READMEs): `scripts/make-demo.swift` draws a
+  to-do app screen with its clicks, zooms and cut, and a debug build exports it (`LOUPECAST_EXPORT_TO`).
 - `Tests/LoupecastCoreTests` (fast) and `Tests/LoupecastRenderTests` (real exports of a synthetic movie).
 
 ## Build and verify
@@ -108,4 +110,9 @@ swift build --build-tests && swift test   # Core ~0.1 s; Render 10-40 s, each ex
   recording's `sourceRect`) were
   verified only by reading the code and with synthetic movies here; they need a machine with the Screen Recording
   grant. The webcam capture (`CameraRecorder`) also needs the Camera grant; only its compositing is tested. A crash while paused recovers without the pause cut (recovery.json has no pauses).
-- Hour-long projects: each edit rebuilds the whole camera path (~5 ms) and redraws the timeline.
+- Hour-long projects: each edit rebuilds the whole camera path (~5 ms) and redraws the timeline; 화면 채우기 adds a
+  cursor-following track over the whole edit (tens of ms an hour).
+- The demo's screen is drawn by a script, not recorded (no Screen Recording grant here, and a real desktop would be
+  public); swap in a real recording run through the same export when there is one.
+- The GIF export writes every frame whole (ImageIO): ~0.6 MB a second at 960 px, so GitHub's 10 MB image limit fits
+  about 15 s. Frame differencing or a smaller size would stretch that.

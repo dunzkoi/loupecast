@@ -99,6 +99,12 @@ code { font-family: var(--mono); font-size: 0.92em; }
 @media (max-width: 880px) {
   .hero .wrap { grid-template-columns: 1fr; }
 }
+.demo { grid-column: 1 / -1; margin: clamp(8px, 2vw, 24px) auto 0; width: 100%; max-width: 960px; }
+.demo video {
+  display: block; width: 100%; height: auto; border-radius: var(--radius); background: var(--surface-2);
+  box-shadow: 0 24px 48px light-dark(rgb(60 30 20 / .14), rgb(0 0 0 / .5));
+}
+.demo figcaption { margin-top: 14px; text-align: center; color: var(--muted); font-size: 15px; text-wrap: balance; }
 
 /* editor illustration */
 .ed-win { fill: var(--surface); stroke: var(--line); }

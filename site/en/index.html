@@ -58,6 +58,21 @@
   "sameAs": ["https://github.com/dunzkoi/loupecast"]
 }
 </script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "VideoObject",
+  "name": "Loupecast demo: click zooms and cuts",
+  "description": "A 16-second Loupecast export of a to-do app recording: each click zooms in on its own, the zoom follows the cursor, and the waiting is cut out.",
+  "thumbnailUrl": "https://dunzkoi.github.io/loupecast/demo-poster.jpg",
+  "contentUrl": "https://dunzkoi.github.io/loupecast/demo.mp4",
+  "uploadDate": "2026-10-14",
+  "duration": "PT16S",
+  "width": 1280,
+  "height": 720,
+  "inLanguage": "en"
+}
+</script>
 
 <link rel="stylesheet" href="../site.css">
 </head>
@@ -164,6 +179,11 @@
         <path class="ed-play" d="M134 378h12v6l-6 6-6-6z"/>
       </g>
     </svg>
+    <figure class="demo">
+      <video src="../demo.mp4" poster="../demo-poster.jpg" width="1280" height="720" muted loop playsinline controls preload="metadata"
+             data-autoplay aria-describedby="demo-caption"></video>
+      <figcaption id="demo-caption">Straight out of Loupecast: each click zooms in on its own, the zoom follows the cursor, and the waiting is cut out.</figcaption>
+    </figure>
   </div>
 </section>
 

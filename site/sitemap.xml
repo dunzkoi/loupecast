@@ -1,17 +1,31 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml" xmlns:video="http://www.google.com/schemas/sitemap-video/1.1">
   <url>
     <loc>https://dunzkoi.github.io/loupecast/</loc>
-    <lastmod>2026-10-12</lastmod>
+    <lastmod>2026-10-14</lastmod>
     <xhtml:link rel="alternate" hreflang="ko" href="https://dunzkoi.github.io/loupecast/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://dunzkoi.github.io/loupecast/en/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://dunzkoi.github.io/loupecast/en/"/>
+    <video:video>
+      <video:thumbnail_loc>https://dunzkoi.github.io/loupecast/demo-poster.jpg</video:thumbnail_loc>
+      <video:title>Loupecast 데모: 클릭 줌과 컷</video:title>
+      <video:description>할 일 앱 녹화를 Loupecast로 내보낸 16초 영상. 클릭한 곳이 자동으로 확대되고 기다리는 구간은 잘려 나갑니다.</video:description>
+      <video:content_loc>https://dunzkoi.github.io/loupecast/demo.mp4</video:content_loc>
+      <video:duration>16</video:duration>
+    </video:video>
   </url>
   <url>
     <loc>https://dunzkoi.github.io/loupecast/en/</loc>
-    <lastmod>2026-10-12</lastmod>
+    <lastmod>2026-10-14</lastmod>
     <xhtml:link rel="alternate" hreflang="ko" href="https://dunzkoi.github.io/loupecast/"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://dunzkoi.github.io/loupecast/en/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://dunzkoi.github.io/loupecast/en/"/>
+    <video:video>
+      <video:thumbnail_loc>https://dunzkoi.github.io/loupecast/demo-poster.jpg</video:thumbnail_loc>
+      <video:title>Loupecast demo: click zooms and cuts</video:title>
+      <video:description>A 16-second Loupecast export of a to-do app recording: each click zooms in on its own and the waiting is cut out.</video:description>
+      <video:content_loc>https://dunzkoi.github.io/loupecast/demo.mp4</video:content_loc>
+      <video:duration>16</video:duration>
+    </video:video>
   </url>
 </urlset>

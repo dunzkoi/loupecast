@@ -6,6 +6,7 @@
   <a href="https://github.com/sponsors/dunzkoi">후원</a> ·
   <a href="README.md">English</a>
 </p>
+<p align="center"><img src=".github/demo.gif" width="720" alt="Loupecast 데모: 할 일 앱에서 클릭한 곳이 자동으로 확대되고, 확대한 채 커서를 따라가며, 기다리는 구간은 잘려 나갑니다"></p>
 
 ## 설치
 

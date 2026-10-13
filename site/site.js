@@ -1,3 +1,11 @@
+// The demo plays by itself unless the visitor asked for less motion (then the poster stays, with controls to play it).
+const reduce = matchMedia('(prefers-reduced-motion: reduce)');
+for (const v of document.querySelectorAll('video[data-autoplay]')) {
+  const sync = () => { if (reduce.matches) v.pause(); else v.play().catch(() => {}); };
+  sync();
+  reduce.addEventListener('change', sync);
+}
+
 // Copy buttons on both pages; the wording follows <html lang>.
 const say = document.documentElement.lang === 'ko'
   ? { copy: '복사', done: '복사됨', copied: '복사했습니다.', selected: '명령을 선택했습니다. ⌘C로 복사하세요.' }
