@@ -436,6 +436,21 @@ enum DebugHooks {
             check(end > z.end + 0.3, "dragging the zoom's right edge lengthened it (\(timecode(z.end)) → \(timecode(end)))")
             m.undoEdit()
             check(m.project.zooms.first { $0.id == z.id }?.end == z.end, "one undo restored the zoom length")
+
+            // 1c. with the zoom selected, a click on the preview pins its focus there (one undo step)
+            if let pv = find(AVPlayerView.self, in: content) {
+                let r = pv.convert(pv.bounds, to: nil), f = CGPoint(x: 0.3, y: 0.4)
+                let canvas = Composer.renderSize(m.project.aspect)
+                let want = Composer.recordingPoint(canvas: CGPoint(x: f.x * canvas.width, y: f.y * canvas.height), project: m.project, at: m.playhead)
+                let p = NSPoint(x: r.minX + f.x * r.width, y: r.maxY - f.y * r.height)
+                mouse(.leftMouseDown, p); mouse(.leftMouseUp, p)
+                try? await Task.sleep(for: .seconds(0.5))
+                let seg = m.project.zooms.first { $0.id == z.id }
+                check(seg?.followsCursor == false && want.map { abs($0.x - seg!.focus.x) < 1e-3 && abs($0.y - seg!.focus.y) < 1e-3 } == true,
+                      "a preview click pinned the zoom's focus (\(z.focus) → \(seg?.focus ?? z.focus), expected \(want.map { "\($0)" } ?? "nil"))")
+                m.undoEdit()
+                check(m.project.zooms.first { $0.id == z.id } == z, "one undo restored the focus and the following")
+            }
         }
 
         // 2. a button click: 줌 추가 (borderedProminent 내보내기 is the last button, 줌 추가 the one before it)

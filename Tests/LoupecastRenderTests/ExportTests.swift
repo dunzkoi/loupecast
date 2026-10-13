@@ -133,6 +133,33 @@ final class ExportTests: XCTestCase {
         XCTAssertLessThan(below.r + below.g + below.b, far.r + far.g + far.b - 30, "shadow under the frame: \(below) vs \(far)")
     }
 
+    /// A click on the preview maps back through the padding, the camera and the fill window: frame corners are the
+    /// visible window's corners, the padding maps to nothing.
+    func testPreviewPointMapsToRecording() {
+        for (aspect, fill) in [(AspectRatio.landscape, false), (.portrait, true)] {
+            var p = Self.makeProject()
+            p.aspect = aspect; p.fill = fill
+            let canvas = Composer.renderSize(aspect)
+            let f = LoupecastCompositor.frameRect(source: Self.size, canvas: canvas, style: FrameStyle(p.style), fill: fill)
+            let topLeft = CGPoint(x: f.minX, y: canvas.height - f.maxY), bottomRight = CGPoint(x: f.maxX, y: canvas.height - f.minY)
+            for t in [2.1, 4.0] {                                       // before the zoom, fully zoomed in
+                let path = Composer.cameraPath(p), cam = path.camera(at: t)
+                let hx = path.window.width / 2 / cam.scale, hy = path.window.height / 2 / cam.scale
+                let a = Composer.recordingPoint(canvas: topLeft, project: p, at: t)!, b = Composer.recordingPoint(canvas: bottomRight, project: p, at: t)!
+                let mid = Composer.recordingPoint(canvas: CGPoint(x: f.midX, y: canvas.height - f.midY), project: p, at: t)!
+                XCTAssertEqual(a.x, cam.center.x - hx, accuracy: 1e-9, "\(aspect) \(t)"); XCTAssertEqual(a.y, cam.center.y - hy, accuracy: 1e-9)
+                XCTAssertEqual(b.x, cam.center.x + hx, accuracy: 1e-9); XCTAssertEqual(b.y, cam.center.y + hy, accuracy: 1e-9)
+                XCTAssertEqual(mid.x, cam.center.x, accuracy: 1e-9); XCTAssertEqual(mid.y, cam.center.y, accuracy: 1e-9)
+            }
+            XCTAssertNil(Composer.recordingPoint(canvas: CGPoint(x: 5, y: 5), project: p, at: 4), "the padding is not the recording")
+        }
+        // unzoomed and not filling, the frame is the whole recording
+        var p = Self.makeProject()
+        p.zooms = []
+        let canvas = Composer.renderSize(p.aspect), f = LoupecastCompositor.frameRect(source: Self.size, canvas: canvas, style: .standard)
+        XCTAssertEqual(Composer.recordingPoint(canvas: CGPoint(x: f.minX, y: canvas.height - f.maxY), project: p, at: 3), Point(x: 0, y: 0))
+    }
+
     /// sRGB 8-bit color at (x, y), top-left origin.
     static func pixel(_ cg: CGImage, _ x: Double, _ y: Double) -> (r: Int, g: Int, b: Int) {
         var px = [UInt8](repeating: 0, count: 4)

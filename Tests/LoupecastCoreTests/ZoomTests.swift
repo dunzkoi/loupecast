@@ -203,6 +203,33 @@ final class ZoomTests: XCTestCase {
         XCTAssertTrue(p.zooms.isEmpty)
     }
 
+    // MARK: pinned focus
+
+    func testPinnedFocusIgnoresCursor() throws {
+        // the cursor sweeps the bottom of the screen over and over
+        let cursor = (0..<600).map { i in CursorSample(t: Double(i) / 60, x: Double(i % 120) / 120, y: 0.9) }
+        var seg = ZoomSegment(start: 0, end: 10, focus: Point(x: 0.3, y: 0.4), followsCursor: false)
+        let pinned = CameraPath(segments: [seg], cursor: cursor, trimIn: 0, trimOut: 10)
+        for t in stride(from: 0.7, through: 9.3, by: 0.1) {
+            let c = pinned.camera(at: t)
+            XCTAssertEqual(c.center.x, 0.3, accuracy: 1e-12, "\(t)"); XCTAssertEqual(c.center.y, 0.4, accuracy: 1e-12, "\(t)")
+        }
+        seg.followsCursor = true
+        XCTAssertGreaterThan(CameraPath(segments: [seg], cursor: cursor, trimIn: 0, trimOut: 10).camera(at: 5).center.y, 0.7, "following: down by the cursor")
+        // files from before the switch follow the cursor
+        let old = #"{"end":4.5,"focus":{"x":0.5,"y":0.5},"id":"824B7703-A817-44F2-B7B0-4CD84494E318","isEnabled":true,"scale":2,"start":2.6}"#
+        XCTAssertTrue(try JSONDecoder().decode(ZoomSegment.self, from: Data(old.utf8)).followsCursor)
+        let pinnedJSON = try JSONEncoder().encode(ZoomSegment(start: 1, end: 2, focus: .center, followsCursor: false))
+        XCTAssertFalse(try JSONDecoder().decode(ZoomSegment.self, from: pinnedJSON).followsCursor)
+        // a picked focus is clamped to the recording and stops the following; the switch turns it back on
+        var p = Project(name: "t", duration: 10, pixelWidth: 100, pixelHeight: 50, pointPixelScale: 2, cursor: [], clicks: [])
+        let z = p.addZoom(at: 1)
+        p.setZoomFocus(id: z.id, Point(x: 1.4, y: -0.2))
+        XCTAssertEqual(p.zooms[0].focus, Point(x: 1, y: 0)); XCTAssertFalse(p.zooms[0].followsCursor)
+        p.setZoomFollowsCursor(id: z.id, true)
+        XCTAssertTrue(p.zooms[0].followsCursor)
+    }
+
     // MARK: fill
 
     func testFillWindowFromAspects() {

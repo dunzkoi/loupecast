@@ -150,6 +150,17 @@ public struct Project: Codable, Sendable, Equatable {
     /// How far a zoom may magnify: below 1.25 it barely shows, past 4 the recording turns to mush.
     public static let zoomScales = 1.25...4.0
 
+    /// A focus picked on the preview: the zoom stops following the cursor and holds there.
+    public mutating func setZoomFocus(id: UUID, _ p: Point) {
+        guard let i = zooms.firstIndex(where: { $0.id == id }) else { return }
+        zooms[i].focus = Point(x: clamp01(p.x), y: clamp01(p.y))
+        zooms[i].followsCursor = false
+    }
+
+    public mutating func setZoomFollowsCursor(id: UUID, _ on: Bool) {
+        if let i = zooms.firstIndex(where: { $0.id == id }) { zooms[i].followsCursor = on }
+    }
+
     public mutating func setZoomScale(id: UUID, _ scale: Double) {
         if let i = zooms.firstIndex(where: { $0.id == id }) { zooms[i].scale = Self.zoomScales.clamp(scale) }
     }

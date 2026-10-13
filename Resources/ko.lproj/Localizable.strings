@@ -18,6 +18,8 @@
 "Cancel" = "취소";
 "Cancel Export" = "내보내기 취소";
 "Check for Updates…" = "업데이트 확인…";
+"Click the preview to hold this zoom on a spot." = "미리보기를 클릭하면 이 줌을 그 자리에 고정합니다.";
+"Click to hold the selected zoom on that spot" = "클릭한 곳에 선택한 줌을 고정";
 "Close" = "닫기";
 "Copied" = "복사됨";
 "Copy" = "복사";
@@ -36,6 +38,7 @@
 "Couldn’t start writing." = "쓰기를 시작하지 못했습니다.";
 "Crop the recording to fill the frame; it follows the cursor" = "녹화 화면을 잘라 프레임을 채우고 커서를 따라갑니다";
 "Cut %@" = "잘라냄 %@";
+"D splits at the playhead, Delete removes the selected clip." = "D는 재생 위치에서 자르고, Delete는 선택한 클립을 지웁니다.";
 "Dark Gradient" = "어두운 그라데이션";
 "Delete Clip" = "클립 삭제";
 "Delete Zoom" = "줌 삭제";
@@ -48,6 +51,7 @@
 "Export frame" = "내보내기 비율";
 "Export frame (16:9 landscape, 9:16 portrait, 1:1 square)" = "내보내기 비율 (16:9 가로, 9:16 세로, 1:1 정사각)";
 "Fill Frame" = "화면 채우기";
+"Follow Cursor" = "커서 따라가기";
 "Graphite" = "짙은 회색";
 "Hide Menu Bar in Video" = "영상 속 메뉴 막대 숨기기";
 "Hold ⌥ to delete one at a time" = "⌥를 누르면 하나씩 지울 수 있습니다";
@@ -72,6 +76,7 @@
 "No screen frames arrived. Check the Screen Recording permission." = "화면 프레임을 하나도 받지 못했습니다. 화면 녹화 권한을 확인해 주세요.";
 "No source frame to compose." = "합성할 원본 프레임이 없습니다.";
 "OK" = "확인";
+"Off: the zoom holds still. Click the preview to pick the spot." = "끄면 줌이 한곳에 머뭅니다. 미리보기를 클릭해 위치를 고르세요.";
 "Open" = "열기";
 "Open Exports Folder" = "저장 폴더 열기";
 "Open Recordings Folder" = "녹화 원본 폴더 열기";
@@ -96,6 +101,7 @@
 "Restarting…" = "다시 시작하는 중…";
 "Screen & System Audio Recording" = "화면 및 시스템 오디오 녹음";
 "Screen recording takes effect after you quit and reopen Loupecast. If this window keeps appearing while it is on, select Loupecast in the list, remove it with −, and start recording again." = "화면 녹화 권한은 켠 다음 Loupecast를 종료했다가 다시 열어야 적용됩니다. 켜져 있는데도 이 창이 계속 뜨면, 목록에서 Loupecast를 선택해 −로 지운 뒤 녹화를 다시 시작하세요.";
+"Select a zoom or a clip to change it." = "줌이나 클립을 선택하면 여기서 바꿀 수 있습니다.";
 "Set End" = "끝 지점";
 "Set Start" = "시작 지점";
 "Shortcut unavailable: %@" = "단축키 사용 불가: %@";
@@ -126,6 +132,7 @@
 "You can also start from the menu bar icon." = "메뉴 막대 아이콘에서도 시작합니다.";
 "You’re up to date" = "최신 버전입니다";
 "Zoom" = "줌";
+"Zoom Focus" = "줌 초점";
 "Zoom Length" = "줌 길이";
 "Zoom Level" = "확대 정도";
 "Zoom level of the selected zoom" = "선택한 줌의 확대 정도";

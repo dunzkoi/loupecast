@@ -173,6 +173,14 @@ final class EditorModel {
         edit("Add Zoom") { selection = .zoom($0.addZoom(at: playhead, scale: scale).id) }
     }
 
+    /// `f`: the click as a fraction of the preview (top-left origin), which shows the whole canvas.
+    func pinFocus(_ id: UUID, at f: CGPoint) {
+        let canvas = Composer.renderSize(project.aspect)
+        guard let p = Composer.recordingPoint(canvas: CGPoint(x: f.x * canvas.width, y: f.y * canvas.height), project: project, at: playhead)
+        else { return }
+        edit("Zoom Focus") { $0.setZoomFocus(id: id, p) }
+    }
+
     func setZoomScale(_ id: UUID, _ scale: Double) {
         UserDefaults.standard.set(scale, forKey: Self.zoomScaleKey)
         edit("Zoom Level") { $0.setZoomScale(id: id, scale) }
@@ -418,11 +426,23 @@ struct EditorView: View {
         VStack(spacing: 0) {
             let size = Composer.renderSize(model.project.aspect)
             PlayerView(player: model.player)
+                .allowsHitTesting(false)                // a click here must not take keyboard focus
                 .aspectRatio(size.width / size.height, contentMode: .fit)
                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay {
+                    // with a zoom selected, a click on the picture pins that zoom's focus there
+                    if let seg = model.selectedZoom {
+                        GeometryReader { g in
+                            Color.clear
+                                .contentShape(Rectangle())
+                                .onTapGesture { p in model.pinFocus(seg.id, at: CGPoint(x: p.x / g.size.width, y: p.y / g.size.height)) }
+                                .pointerStyle(.rectSelection)
+                                .help("Click to hold the selected zoom on that spot")
+                        }
+                    }
+                }
                 .shadow(color: .black.opacity(0.14), radius: 10, y: 3)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .allowsHitTesting(false)                // a click here must not take keyboard focus
             ControlBar(model: model)
                 .padding(.top, 16)
             TimelineView(model: model)
@@ -449,10 +469,18 @@ struct PlayerView: NSViewRepresentable {
     func updateNSView(_ v: AVPlayerView, context: Context) {}
 }
 
+/// Transport and output on top, the selection's own controls below.
 struct ControlBar: View {
     @Bindable var model: EditorModel
 
     var body: some View {
+        VStack(spacing: 10) {
+            topRow
+            SelectionBar(model: model)
+        }
+    }
+
+    private var topRow: some View {
         HStack(spacing: 12) {
             Button(action: model.togglePlay) {
                 Image(systemName: model.isPlaying ? "pause.fill" : "play.fill")
@@ -467,6 +495,7 @@ struct ControlBar: View {
 
             Text("\(Text(timecode(model.position)))\(Text(" / \(timecode(model.total))").foregroundStyle(.secondary))")
                 .font(.callout.monospacedDigit())
+                .fixedSize()
             let removed = model.project.duration - model.total
             if removed > 0.005 {
                 Label {
@@ -476,36 +505,12 @@ struct ControlBar: View {
                 }
                 .font(.callout.monospacedDigit())
                 .foregroundStyle(.secondary)
+                .fixedSize()
                 .help("Length cut out (D splits, Delete removes, ⌘Z undoes)")
             }
 
             Spacer(minLength: 12)
 
-            if let seg = model.selectedZoom {
-                Toggle("Use Zoom", isOn: Binding(get: { seg.isEnabled },
-                                              set: { on in model.edit(on ? "Turn Zoom On" : "Turn Zoom Off") { $0.setZoomEnabled(id: seg.id, on) } }))
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
-                    .focusable(false)
-                // a percentage and a magnifier, never "2×": that reads as playback speed
-                HStack(spacing: 4) {
-                    Image(systemName: "magnifyingglass").foregroundStyle(.secondary).accessibilityHidden(true)
-                    Picker("Zoom Level", selection: Binding(get: { seg.scale }, set: { model.setZoomScale(seg.id, $0) })) {
-                        ForEach(EditorModel.zoomLevels, id: \.self) { Text(verbatim: "\(Int($0 * 100))%").tag($0) }
-                    }
-                    .pickerStyle(.menu)
-                    .labelsHidden()
-                    .fixedSize()
-                    .focusable(false)
-                }
-                .help("Zoom level of the selected zoom")
-                Button(role: .destructive, action: model.deleteSelected) { Image(systemName: "trash") }
-                    .buttonStyle(.borderless)
-                    .focusable(false)
-                    .help("Delete the selected zoom (Delete)")
-                    .accessibilityLabel("Delete the selected zoom")
-                Divider().frame(height: 18)
-            }
             ExportStatus(model: model)
             Menu {
                 Picker("Background", selection: Binding(get: { model.project.style },
@@ -551,6 +556,64 @@ struct ControlBar: View {
                 .focusable(false)
                 .disabled(model.exportState.isRunning || model.edit == nil)
         }
+    }
+}
+
+/// One row tall whatever is selected, so selecting never moves the preview.
+struct SelectionBar: View {
+    @Bindable var model: EditorModel
+
+    var body: some View {
+        HStack(spacing: 12) {
+            switch model.selection {
+            case .zoom:
+                if let seg = model.selectedZoom { zoomControls(seg) }
+            case .clip:
+                hint("D splits at the playhead, Delete removes the selected clip.")
+            case .none:
+                hint("Select a zoom or a clip to change it.")
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(height: 22)
+    }
+
+    private func hint(_ text: LocalizedStringKey) -> some View {
+        Text(text).font(.callout).foregroundStyle(.secondary).lineLimit(1)
+    }
+
+    @ViewBuilder private func zoomControls(_ seg: ZoomSegment) -> some View {
+        Toggle("Use Zoom", isOn: Binding(get: { seg.isEnabled },
+                                      set: { on in model.edit(on ? "Turn Zoom On" : "Turn Zoom Off") { $0.setZoomEnabled(id: seg.id, on) } }))
+            .toggleStyle(.switch)
+            .controlSize(.small)
+            .fixedSize()
+            .focusable(false)
+        // a percentage and a magnifier, never "2×": that reads as playback speed
+        HStack(spacing: 4) {
+            Image(systemName: "magnifyingglass").foregroundStyle(.secondary).accessibilityHidden(true)
+            Picker("Zoom Level", selection: Binding(get: { seg.scale }, set: { model.setZoomScale(seg.id, $0) })) {
+                ForEach(EditorModel.zoomLevels, id: \.self) { Text(verbatim: "\(Int($0 * 100))%").tag($0) }
+            }
+            .pickerStyle(.menu)
+            .labelsHidden()
+            .fixedSize()
+            .focusable(false)
+        }
+        .help("Zoom level of the selected zoom")
+        Toggle("Follow Cursor", isOn: Binding(get: { seg.followsCursor },
+                                             set: { on in model.edit("Follow Cursor") { $0.setZoomFollowsCursor(id: seg.id, on) } }))
+            .toggleStyle(.switch)
+            .controlSize(.small)
+            .fixedSize()
+            .focusable(false)
+            .help("Off: the zoom holds still. Click the preview to pick the spot.")
+        Button(role: .destructive, action: model.deleteSelected) { Image(systemName: "trash") }
+            .buttonStyle(.borderless)
+            .focusable(false)
+            .help("Delete the selected zoom (Delete)")
+            .accessibilityLabel("Delete the selected zoom")
+        hint("Click the preview to hold this zoom on a spot.")
     }
 }
 
@@ -610,15 +673,13 @@ struct ExportStatus: View {
             }
         case .done(let url):
             HStack(spacing: 10) {
-                Label(url.deletingPathExtension().lastPathComponent, systemImage: "film")
-                    .font(.callout)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .frame(maxWidth: 170)
+                Image(systemName: "film")
                     .onDrag { NSItemProvider(contentsOf: url) ?? NSItemProvider() }
                     .help("Drag the video into another app")
+                    .accessibilityLabel(url.lastPathComponent)
                 Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
                     .buttonStyle(.link)
+                    .fixedSize()
                     .focusable(false)
                     .help(url.path)
                 Button(copied ? "Copied" : "Copy") {
@@ -627,6 +688,7 @@ struct ExportStatus: View {
                     Task { try? await Task.sleep(for: .seconds(1.5)); copied = false }
                 }
                 .buttonStyle(.link)
+                .fixedSize()
                 .focusable(false)
                 .help("Copy the video to paste it into Slack, an issue or an email")
             }

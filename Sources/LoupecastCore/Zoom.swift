@@ -35,10 +35,22 @@ public struct ZoomSegment: Codable, Hashable, Identifiable, Sendable {
     public var scale: Double
     public var focus: Point
     public var isEnabled: Bool
+    /// Off: the zoom holds still on `focus` instead of following the cursor (files without it follow).
+    public var followsCursor: Bool
     public init(id: UUID = UUID(), start: Double, end: Double, scale: Double = AutoZoom.defaultScale,
-                focus: Point, isEnabled: Bool = true) {
+                focus: Point, isEnabled: Bool = true, followsCursor: Bool = true) {
         self.id = id; self.start = start; self.end = end; self.scale = scale
-        self.focus = focus; self.isEnabled = isEnabled
+        self.focus = focus; self.isEnabled = isEnabled; self.followsCursor = followsCursor
+    }
+
+    private enum CodingKeys: String, CodingKey { case id, start, end, scale, focus, isEnabled, followsCursor }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(id: try c.decode(UUID.self, forKey: .id), start: try c.decode(Double.self, forKey: .start),
+                  end: try c.decode(Double.self, forKey: .end), scale: try c.decode(Double.self, forKey: .scale),
+                  focus: try c.decode(Point.self, forKey: .focus), isEnabled: try c.decode(Bool.self, forKey: .isEnabled),
+                  followsCursor: try c.decodeIfPresent(Bool.self, forKey: .followsCursor) ?? true)
     }
 }
 
@@ -166,7 +178,7 @@ public struct CameraPath: Sendable {
                 else { pieces.append(piece) }
             }
             return pieces.map { Track(start: $0.start, end: $0.end, scale: seg.scale,
-                                      points: Self.follow($0, from: seg.focus, cursor: cursor, clips: clips)) }
+                                      points: Self.follow($0, from: seg.focus, cursor: seg.followsCursor ? cursor : [], clips: clips)) }
         }
         guard window != .full, !cursor.isEmpty else { base = []; return }
         // ponytail: a point per 1/240 s of the whole edit (~14 MB, tens of ms for an hour), built only while filling

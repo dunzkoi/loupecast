@@ -238,6 +238,20 @@ public enum Composer {
         return CameraPath(project: project, window: .filling(source: (source.width, source.height), frame: (frame.width, frame.height)))
     }
 
+    /// The recording point (normalized, top-left origin) shown at canvas point `p` (pixels, top-left origin) at
+    /// recording time `t`, through the padding, the fill window and the camera then; nil outside the frame.
+    public static func recordingPoint(canvas p: CGPoint, project: Project, at t: Double) -> Point? {
+        let canvas = renderSize(project.aspect)
+        let frame = LoupecastCompositor.frameRect(source: CGSize(width: project.pixelWidth, height: project.pixelHeight), canvas: canvas,
+                                                  style: FrameStyle(project.style), fill: project.fillsFrame)
+        let y = canvas.height - p.y                                  // the frame is in CI space, bottom-left origin
+        guard (frame.minX...frame.maxX).contains(p.x), (frame.minY...frame.maxY).contains(y) else { return nil }   // edges included
+        let path = cameraPath(project), cam = path.camera(at: t)
+        let hx = path.window.width / 2 / cam.scale, hy = path.window.height / 2 / cam.scale
+        return Point(x: cam.center.x - hx + (p.x - frame.minX) / frame.width * 2 * hx,
+                     y: cam.center.y - hy + (frame.maxY - y) / frame.height * 2 * hy)
+    }
+
     /// Rebuilt on every zoom edit; cheap (the camera path is a few thousand spring steps).
     public static func videoComposition(project: Project, trackID: CMPersistentTrackID, duration: CMTime) -> AVMutableVideoComposition {
         let vc = AVMutableVideoComposition()
