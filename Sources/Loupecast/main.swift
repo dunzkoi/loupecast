@@ -114,6 +114,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             sub.addItem(del)
         }
         sub.addItem(.separator())
+        sub.addItem(item(String(localized: "Open Recording…"), #selector(openRecordingPanel)))   // older than the five above
         let hint = NSMenuItem(title: String(localized: "Hold ⌥ to delete one at a time"), action: nil, keyEquivalent: "")
         hint.isEnabled = false
         sub.addItem(hint)
@@ -174,8 +175,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
 
     @objc private func openRecent(_ sender: NSMenuItem) {
         guard let dir = sender.representedObject as? URL else { return }
-        do { openEditor(dir: dir, project: try Project.load(from: dir.appendingPathComponent(Project.fileName))) }
-        catch { alert(String(localized: "Couldn’t open the recording"), error) }
+        openRecording(dir)
+    }
+
+    /// Any recording folder, starting in Recordings: the menu lists only the newest five.
+    @objc private func openRecordingPanel() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.directoryURL = Recorder.recordingsDir
+        panel.prompt = String(localized: "Open")
+        NSApp.activate(ignoringOtherApps: true)
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        openRecording(url)
+    }
+
+    /// An editor already open on the folder comes to the front (matched by path: a panel URL and a listed one can
+    /// differ in the trailing slash).
+    func openRecording(_ url: URL) {
+        let dir = editors.keys.first { $0.path == url.path } ?? url
+        do {
+            let project = try editors[dir]?.model.project ?? Project.load(from: dir.appendingPathComponent(Project.fileName))
+            guard FileManager.default.fileExists(atPath: dir.appendingPathComponent(project.videoFile).path) else {
+                throw LoupecastError("The recording’s video file is missing.")
+            }
+            openEditor(dir: dir, project: project)
+        } catch {
+            alert(String(localized: "Couldn’t open the recording"), error)
+        }
     }
 
     @objc private func installUpdate() { Updater.installFromMenu() }

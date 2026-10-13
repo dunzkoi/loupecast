@@ -27,6 +27,8 @@
 //                                 LOUPECAST_QUIT_EDIT=<dir> splits a second recording right before quitting
 //   LOUPECAST_PERF=<dir>              open that recording off screen, make three edits and print the longest main-thread
 //                                 stall after each (debounced autosave included), the close time and two menu builds
+//   LOUPECAST_OPEN_TEST=<dir>         open that recording the way 녹화 열기… does after the panel, twice (with and
+//                                 without a trailing slash: one editor), print the menu and the editors, quit
 //   LOUPECAST_EDITOR_TEST=<dir>       trim drag + button click + Space/D/Delete/⌘Z through the window's key
 //                                 handler, off screen and without activating; logs each state change
 import AVFoundation
@@ -56,6 +58,17 @@ enum DebugHooks {
             }
         }
         if let path = env["LOUPECAST_EDITOR_TEST"] { Task { await editorTest(URL(fileURLWithPath: path)) } }
+        if let path = env["LOUPECAST_OPEN_TEST"] {
+            Task {
+                try? await Task.sleep(for: .seconds(1))
+                print("LOUPECAST: menu \(app.debugMenuTitles())")
+                app.openRecording(URL(fileURLWithPath: path, isDirectory: false))
+                app.openRecording(URL(fileURLWithPath: path, isDirectory: true))
+                print("LOUPECAST: editors \(app.openEditors.map { "\($0.model.project.name) @ \($0.model.dir.lastPathComponent)" })")
+                try? await Task.sleep(for: .seconds(1))
+                NSApp.terminate(nil)
+            }
+        }
         if let out = env["LOUPECAST_PERMISSIONS"] {
             app.showPermissions(needsMic: UserDefaults.standard.bool(forKey: AppDelegate.micKey))
             let w = NSApp.windows.first { $0.title == String(localized: "Loupecast Permissions") }

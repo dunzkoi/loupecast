@@ -60,9 +60,11 @@
 "No screen frames arrived. Check the Screen Recording permission." = "화면 프레임을 하나도 받지 못했습니다. 화면 녹화 권한을 확인해 주세요.";
 "No source frame to compose." = "합성할 원본 프레임이 없습니다.";
 "OK" = "확인";
+"Open" = "열기";
 "Open Exports Folder" = "저장 폴더 열기";
 "Open Recordings Folder" = "녹화 원본 폴더 열기";
 "Open Recordings Folder (%@)" = "녹화 원본 폴더 열기 (%@)";
+"Open Recording…" = "녹화 열기…";
 "Open Settings" = "설정 열기";
 "Open the %@ Download Page" = "%@ 다운로드 페이지 열기";
 "Pause" = "일시정지";
@@ -95,6 +97,7 @@
 "The file is complete only when the export finishes. Quitting now cancels the export and deletes the unfinished file." = "내보내기가 끝나야 파일이 완성됩니다. 지금 종료하면 내보내기를 취소하고 만들던 파일을 지웁니다.";
 "The new version is installed but couldn’t be opened. Open Loupecast again yourself. (%@)" = "새 버전은 설치됐지만 다시 열지 못했습니다. Loupecast를 직접 다시 열어 주세요. (%@)";
 "The recording has no video track." = "녹화 파일에 영상 트랙이 없습니다.";
+"The recording’s video file is missing." = "녹화 영상 파일이 없습니다.";
 "Timeline" = "타임라인";
 "Trim" = "다듬기";
 "Turn Zoom Off" = "줌 끄기";
