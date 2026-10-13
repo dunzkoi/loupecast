@@ -237,8 +237,8 @@ final class EditorModel {
 
     private func applyToPlayer(old: Project) {
         func material(_ c: [ClipRange]) -> [[Double]] { c.keptRanges.map { [$0.start, $0.end] } }
-        if material(project.clips) != material(built) { rebuild() }
-        else if project.zooms != old.zooms || project.clips != built || project.aspect != old.aspect { refreshComposition() }
+        // same material: every other edit (zooms, clip ids, aspect, style…) is a new video composition
+        if material(project.clips) != material(built) { rebuild() } else { refreshComposition() }
     }
 
     private func scheduleSave() {
@@ -507,6 +507,23 @@ struct ControlBar: View {
                 Divider().frame(height: 18)
             }
             ExportStatus(model: model)
+            Menu {
+                Picker("Background", selection: Binding(get: { model.project.style },
+                                                        set: { s in model.edit("Background") { $0.style = s } })) {
+                    ForEach(StylePreset.allCases, id: \.self) { p in
+                        Label { Text(p.title) } icon: { Image(nsImage: p.swatch) }.tag(p)
+                    }
+                }
+                .pickerStyle(.inline)
+                .labelsHidden()
+            } label: {
+                Image(nsImage: model.project.style.swatch)
+            }
+            .menuIndicator(.visible)
+            .fixedSize()
+            .focusable(false)
+            .help("Background")
+            .accessibilityLabel("Background")
             Picker("Aspect Ratio", selection: Binding(get: { model.project.aspect },
                                               set: { a in model.edit("Aspect Ratio") { $0.aspect = a } })) {
                 ForEach(AspectRatio.allCases, id: \.self) { Text($0.rawValue).tag($0) }
@@ -525,6 +542,31 @@ struct ControlBar: View {
                 .buttonStyle(.borderedProminent)
                 .focusable(false)
                 .disabled(model.exportState.isRunning || model.edit == nil)
+        }
+    }
+}
+
+extension StylePreset {
+    var title: String {
+        switch self {
+        case .pastel: String(localized: "Pastel Gradient")
+        case .dark: String(localized: "Dark Gradient")
+        case .light: String(localized: "Light Gray")
+        case .graphite: String(localized: "Graphite")
+        case .blue: String(localized: "Blue")
+        case .plain: String(localized: "No Padding")
+        }
+    }
+
+    /// The background's two corners as a small rounded gradient.
+    var swatch: NSImage {
+        let s = FrameStyle(self)
+        return NSImage(size: NSSize(width: 16, height: 16), flipped: false) { r in
+            let path = NSBezierPath(roundedRect: r.insetBy(dx: 1, dy: 1), xRadius: 4, yRadius: 4)
+            NSGradient(starting: NSColor(ciColor: s.topLeft), ending: NSColor(ciColor: s.bottomRight))?.draw(in: path, angle: -45)
+            NSColor.separatorColor.setStroke()
+            path.stroke()
+            return true
         }
     }
 }

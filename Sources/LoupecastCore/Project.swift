@@ -26,6 +26,8 @@ public struct Project: Codable, Sendable, Equatable {
     public var zooms: [ZoomSegment]
     /// Output frame; files without it (older versions) are 16:9.
     public var aspect = AspectRatio.landscape
+    /// Background around the recording; files without it get the pastel gradient every version had.
+    public var style = StylePreset.pastel
 
     public init(name: String, videoFile: String = "recording.mov", duration: Double,
                 pixelWidth: Int, pixelHeight: Int, pointPixelScale: Double,
@@ -39,7 +41,7 @@ public struct Project: Codable, Sendable, Equatable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case version, name, videoFile, duration, pixelWidth, pixelHeight, pointPixelScale, cursor, clicks, keys, clips, zooms, aspect
+        case version, name, videoFile, duration, pixelWidth, pixelHeight, pointPixelScale, cursor, clicks, keys, clips, zooms, aspect, style
     }
     private enum V1Keys: String, CodingKey { case trimIn, trimOut }
 
@@ -56,6 +58,7 @@ public struct Project: Codable, Sendable, Equatable {
         clicks = try c.decode([ClickEvent].self, forKey: .clicks)
         zooms = try c.decode([ZoomSegment].self, forKey: .zooms)
         aspect = try c.decodeIfPresent(AspectRatio.self, forKey: .aspect) ?? .landscape
+        style = try c.decodeIfPresent(StylePreset.self, forKey: .style) ?? .pastel
         if let clips = try c.decodeIfPresent([ClipRange].self, forKey: .clips) {
             self.clips = clips
         } else {                                // version 1: one trim range
@@ -167,6 +170,13 @@ public enum AspectRatio: String, Codable, CaseIterable, Sendable {
         case .square: (1080, 1080)
         }
     }
+}
+
+/// Named looks for the frame around the recording (colors and sizes live in LoupecastRender's FrameStyle).
+public enum StylePreset: String, Codable, CaseIterable, Sendable {
+    case pastel, dark, light, graphite, blue
+    /// Recording edge to edge: no padding, square corners, no shadow, black where the aspects differ.
+    case plain
 }
 
 // MARK: - Cut list: composition time ↔ recording time

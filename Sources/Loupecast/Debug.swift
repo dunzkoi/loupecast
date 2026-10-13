@@ -23,6 +23,8 @@
 //   LOUPECAST_EXPORT_TO=<mp4>         export the snapshot's edit to that path first
 //   LOUPECAST_ASPECT=9:16|1:1|16:9    pick that output aspect through the editor (one undo step) before the snapshot;
 //                                 LOUPECAST_ASPECT_UNDO=1 undoes it again
+//   LOUPECAST_STYLE=<preset>          pick that background (pastel, dark, light, graphite, blue, plain) through the editor
+//                                 (one undo step) before the snapshot
 //   LOUPECAST_ZOOM_SCALE=<scale>      set the first zoom's level through the editor (one undo step) before the snapshot;
 //                                 LOUPECAST_ZOOM_SCALE_UNDO=1 undoes it again
 //   LOUPECAST_QUIT_TEST=<dir>         export from that recording's editor, close the editor, then quit;
@@ -147,6 +149,10 @@ enum DebugHooks {
             m.edit("Aspect Ratio") { $0.aspect = a }
             print("LOUPECAST: aspect \(m.project.aspect.rawValue), undo \(m.undo.undoActionName)")
             if env["LOUPECAST_ASPECT_UNDO"] != nil { m.undoEdit(); print("LOUPECAST: aspect after undo \(m.project.aspect.rawValue)") }
+        }
+        if let s = env["LOUPECAST_STYLE"].flatMap(StylePreset.init(rawValue:)) {
+            m.edit("Background") { $0.style = s }
+            print("LOUPECAST: style \(m.project.style.rawValue), undo \(m.undo.undoActionName)")
         }
         if let s = env["LOUPECAST_ZOOM_SCALE"].flatMap(Double.init), let z = m.project.zooms.first {
             m.setZoomScale(z.id, s)

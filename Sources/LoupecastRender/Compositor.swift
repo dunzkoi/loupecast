@@ -4,7 +4,7 @@ import CoreImage.CIFilterBuiltins
 import LoupecastCore
 
 /// Look of the exported frame. Values are for a canvas whose short side is 1080 pixels and scale with it.
-public struct FrameStyle: Sendable {
+public struct FrameStyle: Sendable, Equatable {
     public var topLeft = CIColor(red: 0.62, green: 0.69, blue: 0.97)
     public var bottomRight = CIColor(red: 0.97, green: 0.76, blue: 0.82)
     public var padding = 0.06
@@ -13,6 +13,23 @@ public struct FrameStyle: Sendable {
     public var shadowOffset = 10.0
     public var shadowOpacity = 0.32
     public static let standard = FrameStyle()
+
+    /// One color top-left to bottom-right is a solid background.
+    public init(_ preset: StylePreset = .pastel) {
+        func solid(_ r: Double, _ g: Double, _ b: Double) { topLeft = CIColor(red: r, green: g, blue: b); bottomRight = topLeft }
+        switch preset {
+        case .pastel: break
+        case .dark:
+            topLeft = CIColor(red: 0.10, green: 0.12, blue: 0.22)
+            bottomRight = CIColor(red: 0.30, green: 0.17, blue: 0.36)
+        case .light: solid(0.93, 0.93, 0.95)
+        case .graphite: solid(0.13, 0.13, 0.14)
+        case .blue: solid(0.18, 0.40, 0.86)
+        case .plain:
+            solid(0, 0, 0)
+            padding = 0; cornerRadius = 0; shadowOpacity = 0
+        }
+    }
 }
 
 /// Carries everything one render needs. Same type for preview and export.
@@ -44,7 +61,7 @@ public final class LoupecastCompositor: NSObject, AVVideoCompositing, @unchecked
     ]
 
     private let queue = DispatchQueue(label: "loupecast.compositor", qos: .userInitiated)
-    private var background: (frame: CGRect, canvas: CGSize, image: CIImage)?   // touched only on `queue`
+    private var background: (frame: CGRect, canvas: CGSize, style: FrameStyle, image: CIImage)?   // touched only on `queue`
     private var lastSource: CIImage?                                            // touched only on `queue`
 
     public var sourcePixelBufferAttributes: [String: any Sendable]? { Self.bgra }
@@ -112,7 +129,7 @@ public final class LoupecastCompositor: NSObject, AVVideoCompositing, @unchecked
 
     /// Gradient and drop shadow never change within a render, so they are rendered once and cached.
     private func backgroundImage(frame: CGRect, canvas: CGSize, style: FrameStyle) -> CIImage {
-        if let bg = background, bg.frame == frame, bg.canvas == canvas { return bg.image }
+        if let bg = background, bg.frame == frame, bg.canvas == canvas, bg.style == style { return bg.image }
         let k = min(canvas.width, canvas.height) / 1080
         let full = CGRect(origin: .zero, size: canvas)
         let gradient = CIFilter.linearGradient()
@@ -127,7 +144,7 @@ public final class LoupecastCompositor: NSObject, AVVideoCompositing, @unchecked
         let composed = shadow.composited(over: gradient.outputImage!).cropped(to: full)
         let cg = Self.context.createCGImage(composed, from: full, format: .RGBA8, colorSpace: Self.outputSpace)!
         let image = CIImage(cgImage: cg)
-        background = (frame, canvas, image)
+        background = (frame, canvas, style, image)
         return image
     }
 }
@@ -165,7 +182,7 @@ public enum Composer {
     public static func time(_ s: Double) -> CMTime { CMTime(seconds: s, preferredTimescale: 60_000) }
 
     /// The kept clips back to back, for preview and export alike, with the same compositor and camera path.
-    public static func make(project: Project, source: SourceTracks, style: FrameStyle = .standard) throws -> EditComposition {
+    public static func make(project: Project, source: SourceTracks) throws -> EditComposition {
         let comp = AVMutableComposition()
         guard let video = comp.addMutableTrack(withMediaType: .video, preferredTrackID: kCMPersistentTrackID_Invalid) else {
             throw LoupecastError("The recording has no video track.")
@@ -185,7 +202,7 @@ public enum Composer {
             at = at + range.duration
         }
         for (_, _, track) in tracks.dropFirst() where track.segments.isEmpty { comp.removeTrack(track) }
-        let vc = videoComposition(project: project, trackID: video.trackID, duration: comp.duration, style: style)
+        let vc = videoComposition(project: project, trackID: video.trackID, duration: comp.duration)
         return EditComposition(asset: comp, videoComposition: vc, audioMix: audioMix(comp, cuts: project.clips.cutTimes),
                                videoTrackID: video.trackID)
     }
@@ -208,8 +225,7 @@ public enum Composer {
     }
 
     /// Rebuilt on every zoom edit; cheap (the camera path is a few thousand spring steps).
-    public static func videoComposition(project: Project, trackID: CMPersistentTrackID, duration: CMTime,
-                                        style: FrameStyle = .standard) -> AVMutableVideoComposition {
+    public static func videoComposition(project: Project, trackID: CMPersistentTrackID, duration: CMTime) -> AVMutableVideoComposition {
         let vc = AVMutableVideoComposition()
         vc.customVideoCompositorClass = LoupecastCompositor.self
         vc.renderSize = renderSize(project.aspect)
@@ -218,7 +234,7 @@ public enum Composer {
         vc.colorTransferFunction = AVVideoTransferFunction_ITU_R_709_2
         vc.colorYCbCrMatrix = AVVideoYCbCrMatrix_ITU_R_709_2
         vc.instructions = [LoupecastInstruction(timeRange: CMTimeRange(start: .zero, duration: duration), trackID: trackID,
-                                            path: CameraPath(project: project), style: style)]
+                                            path: CameraPath(project: project), style: FrameStyle(project.style))]
         return vc
     }
 }

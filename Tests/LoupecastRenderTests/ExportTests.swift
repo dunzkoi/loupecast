@@ -90,16 +90,62 @@ final class ExportTests: XCTestCase {
         try await withDeadline(Self.deadline) { try await Self.exportMatchesTrim(zoomScale: 3) }
     }
 
-    static func exportMatchesTrim(_ aspect: AspectRatio = .landscape, zoomScale: Double? = nil) async throws {
+    /// Dark gradient: the exported background is that preset's color, the rest of the export as usual.
+    func testStyledExport() async throws {
+        try XCTSkipIf(ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] != nil, "no video hardware on CI VMs")
+        try await withDeadline(Self.deadline) { try await Self.exportMatchesTrim(style: .dark) }
+    }
+
+    /// 여백 없음: the recording reaches the canvas edges with square corners and no shadow, black where the aspects
+    /// differ; the default keeps padding, rounded corners and a shadow. Rendered without video, through the compositor.
+    func testPlainStyleHasNoPaddingCornersOrShadow() throws {
+        let canvas = CGSize(width: 1920, height: 1080)
+        let source = CIImage(color: CIColor(red: 1, green: 0, blue: 0)).cropped(to: CGRect(origin: .zero, size: Self.size))
+        func render(_ preset: StylePreset) -> (frame: CGRect, px: (Double, Double) -> (r: Int, g: Int, b: Int)) {
+            let style = FrameStyle(preset)
+            let image = LoupecastCompositor().render(source, camera: .identity, canvas: canvas, style: style)
+            let cg = LoupecastCompositor.context.createCGImage(image, from: CGRect(origin: .zero, size: canvas))!
+            return (LoupecastCompositor.frameRect(source: Self.size, canvas: canvas, style: style), { x, y in Self.pixel(cg, x, y) })
+        }
+        let plain = render(.plain)
+        XCTAssertEqual(plain.frame, CGRect(x: 96, y: 0, width: 1728, height: 1080), "no padding: as tall as the canvas")
+        let f = plain.frame
+        for (x, y) in [(f.minX, f.minY), (f.maxX - 1, f.minY), (f.minX, f.maxY - 1), (f.maxX - 1, f.maxY - 1)] {
+            let p = plain.px(x, y)
+            XCTAssertTrue(p.r > 200 && p.g < 60 && p.b < 60, "square corner at \(x),\(y) shows the recording: \(p)")
+        }
+        for (x, y) in [(f.minX - 2, 540.0), (f.maxX + 1, 540), (f.maxX + 1, f.maxY - 2), (40, 1060)] {
+            let p = plain.px(x, y)
+            XCTAssertTrue(p.r < 3 && p.g < 3 && p.b < 3, "black, no shadow at \(x),\(y): \(p)")
+        }
+        let pastel = render(.pastel)
+        XCTAssertLessThan(pastel.frame.height, 1000, "the default keeps its padding")
+        let corner = pastel.px(pastel.frame.minX, pastel.frame.minY)
+        XCTAssertFalse(corner.r > 200 && corner.g < 60, "rounded corner shows the background: \(corner)")
+        let below = pastel.px(pastel.frame.midX, pastel.frame.maxY + 8), far = pastel.px(pastel.frame.midX, 1076)
+        XCTAssertLessThan(below.r + below.g + below.b, far.r + far.g + far.b - 30, "shadow under the frame: \(below) vs \(far)")
+    }
+
+    /// sRGB 8-bit color at (x, y), top-left origin.
+    static func pixel(_ cg: CGImage, _ x: Double, _ y: Double) -> (r: Int, g: Int, b: Int) {
+        var px = [UInt8](repeating: 0, count: 4)
+        let ctx = CGContext(data: &px, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+                            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        ctx.draw(cg, in: CGRect(x: -x, y: y - Double(cg.height) + 1, width: Double(cg.width), height: Double(cg.height)))
+        return (Int(px[0]), Int(px[1]), Int(px[2]))
+    }
+
+    static func exportMatchesTrim(_ aspect: AspectRatio = .landscape, zoomScale: Double? = nil, style: StylePreset = .pastel) async throws {
         let mov = Self.outDir.appendingPathComponent("synthetic.mov")
         try await Self.writeSyntheticMovie(to: mov)
         var project = makeProject()
         project.aspect = aspect
         XCTAssertEqual(project.zooms.count, 1, "two nearby clicks → one zoom")
         if let zoomScale { project.setZoomScale(id: project.zooms[0].id, zoomScale) }
+        project.style = style
         try project.save(to: Self.outDir.appendingPathComponent("project.json"))
 
-        let out = Self.outDir.appendingPathComponent("export-\(aspect.pixels.width)x\(aspect.pixels.height)\(zoomScale.map { "-zoom\($0)" } ?? "").mp4")
+        let out = Self.outDir.appendingPathComponent("export-\(aspect.pixels.width)x\(aspect.pixels.height)\(zoomScale.map { "-zoom\($0)" } ?? "")-\(style.rawValue).mp4")
         let start = Date()
         try await Exporter.export(project: project, videoURL: mov, to: out)
         print("export took \(Date().timeIntervalSince(start)) s → \(out.path)")
@@ -143,6 +189,14 @@ final class ExportTests: XCTestCase {
         XCTAssertEqual(arange.duration.seconds, 5.5, accuracy: 1.0 / 60)
 
         try await assertClickInsideZoom(export: asset, project: project)
+
+        // the top-left background is the preset's top-left color; the BT.709 round trip (render, H.264, decode to
+        // sRGB) lifts dark tones by up to ~20 levels, while the presets differ by 100 or more
+        let gen = AVAssetImageGenerator(asset: asset)
+        let corner = pixel(try await gen.image(at: .zero).image, 4, 4), want = FrameStyle(style).topLeft
+        XCTAssertEqual(Double(corner.r), want.red * 255, accuracy: 24, "background \(corner) for \(style)")
+        XCTAssertEqual(Double(corner.g), want.green * 255, accuracy: 24)
+        XCTAssertEqual(Double(corner.b), want.blue * 255, accuracy: 24)
     }
 
     /// Export time 2.0 s = recording 4.0 s, inside the zoom from the clicks at 3.0/3.5 s. The blue

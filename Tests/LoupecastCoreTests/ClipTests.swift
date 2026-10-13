@@ -265,6 +265,20 @@ final class ClipTests: XCTestCase {
         XCTAssertEqual(AspectRatio.portrait.pixels.width, 1080); XCTAssertEqual(AspectRatio.portrait.pixels.height, 1920)
         XCTAssertEqual(AspectRatio.square.pixels.width, AspectRatio.square.pixels.height)
     }
+
+    func testStyleDefaultsAndRoundTrip() throws {
+        var p = project()
+        XCTAssertEqual(p.style, .pastel)
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("style-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        var json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(p)) as! [String: Any]
+        json["style"] = nil                                   // a file from before presets: the old gradient
+        try JSONSerialization.data(withJSONObject: json).write(to: url)
+        XCTAssertEqual(try Project.load(from: url).style, .pastel)
+        p.style = .plain
+        try p.save(to: url)
+        XCTAssertEqual(try Project.load(from: url).style, .plain)
+    }
 }
 
 private extension Project {
