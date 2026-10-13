@@ -1,34 +1,5 @@
 # Changelog
 
-## Unreleased
-
-
-### Features
-
-* English interface that follows the macOS language; Korean systems keep the same wording
-* export in 9:16 (Shorts, Reels) or 1:1 as well as 16:9, picked in the editor toolbar
-* cancel button for a running export
-* the Recent Recordings menu shows how much disk space the original recordings take
-* English landing page, linked to the Korean one with hreflang
-
-
-### Bug Fixes
-
-* quitting or a self-update no longer loses a recording or an export in progress: the recording is saved first, and quitting during an export asks before cancelling it
-* recordings survive a crash or force quit (all but the last few seconds), and folders left by failed recordings are cleaned up at launch
-* a failed or cancelled export leaves no half-written MP4, and two exports in the same second no longer overwrite each other
-* autosave and opening the menu no longer stall the app on hour-long recordings
-
-
-### Tests
-
-* the export tests no longer hang while writing their synthetic movie, and fail after 120 s instead of hanging
-
-
-### Documentation
-
-* CLAUDE.md with the layout, commands, verification hooks and invariants; CONTRIBUTING describes what CI really runs
-
 ## [0.7.0](https://github.com/dunzkoi/loupecast/compare/v0.6.0...v0.7.0) (2026-10-02)
 
 
