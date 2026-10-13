@@ -90,8 +90,7 @@ swift build --build-tests && swift test   # Core ~0.1 s; Render 10-40 s, each ex
 
 ## Open
 
-- Releases use a fixed self-signed identity and aren't notarized (README's `xattr` step). The README/site FAQ still
-  says permission must be granted again after every update, which predates the fixed identity; check and fix.
+- Releases use a fixed self-signed identity (since 0.3.1) and aren't notarized (README's `xattr` step).
 - Recording-path changes (start-failure cleanup, finishing a recording on quit) were verified only by reading the
   code here; they need a machine with the Screen Recording grant.
 - Hour-long projects: each edit rebuilds the whole camera path (~5 ms) and redraws the timeline.

@@ -55,7 +55,7 @@ Needs Xcode 16 or later. No third-party dependencies.
 
 ## FAQ
 
-**Why do I have to allow screen recording again after an update?** Release builds are signed ad hoc until the project gets an Apple Developer ID, and macOS ties the permission to the exact build. Remove the old Loupecast entry in System Settings and enable it again.
+**Do I have to allow screen recording again after an update?** No. Since 0.3.1 every release is signed with the same certificate, so macOS keeps the permission after an update. Coming from 0.3.0 or earlier, you may have to turn it on once more: when you start recording, Loupecast clears the old entry once by itself, so just turn it on when macOS asks.
 
 **The menu bar icon doesn't show up.** macOS may hide new menu bar items when the bar is full. Check System Settings → Menu Bar, or just press ⌘⇧2.
 
