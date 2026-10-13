@@ -123,10 +123,10 @@ public struct Project: Codable, Sendable, Equatable {
         clips.recordingTime(clips.playStart(from: clips.compositionTime(current)))
     }
 
-    public mutating func addZoom(at t: Double, length: Double = 2) -> ZoomSegment {
+    public mutating func addZoom(at t: Double, length: Double = 2, scale: Double = AutoZoom.defaultScale) -> ZoomSegment {
         let start = min(max(0, t), max(0, duration - length))
         let focus = cursorAt(cursor.sorted { $0.t < $1.t }, t) ?? .center
-        let seg = ZoomSegment(start: start, end: min(duration, start + length), focus: focus)
+        let seg = ZoomSegment(start: start, end: min(duration, start + length), scale: Self.zoomScales.clamp(scale), focus: focus)
         zooms.append(seg)
         zooms.sort { $0.start < $1.start }
         return seg
@@ -139,6 +139,12 @@ public struct Project: Codable, Sendable, Equatable {
     }
 
     public static let minZoomLength = 0.2
+    /// How far a zoom may magnify: below 1.25 it barely shows, past 4 the recording turns to mush.
+    public static let zoomScales = 1.25...4.0
+
+    public mutating func setZoomScale(id: UUID, _ scale: Double) {
+        if let i = zooms.firstIndex(where: { $0.id == id }) { zooms[i].scale = Self.zoomScales.clamp(scale) }
+    }
 
     public mutating func setZoomStart(id: UUID, _ t: Double) {
         guard let i = zooms.firstIndex(where: { $0.id == id }) else { return }
@@ -336,6 +342,10 @@ public struct InputLog: Sendable {
         }
         return (cursor, clicks)
     }
+}
+
+extension ClosedRange where Bound == Double {
+    func clamp(_ v: Double) -> Double { Swift.min(upperBound, Swift.max(lowerBound, v)) }
 }
 
 /// Looked up in the app bundle's Localizable.strings (English when there is no translation).

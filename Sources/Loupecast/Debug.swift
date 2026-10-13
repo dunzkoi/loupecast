@@ -23,6 +23,8 @@
 //   LOUPECAST_EXPORT_TO=<mp4>         export the snapshot's edit to that path first
 //   LOUPECAST_ASPECT=9:16|1:1|16:9    pick that output aspect through the editor (one undo step) before the snapshot;
 //                                 LOUPECAST_ASPECT_UNDO=1 undoes it again
+//   LOUPECAST_ZOOM_SCALE=<scale>      set the first zoom's level through the editor (one undo step) before the snapshot;
+//                                 LOUPECAST_ZOOM_SCALE_UNDO=1 undoes it again
 //   LOUPECAST_QUIT_TEST=<dir>         export from that recording's editor, close the editor, then quit;
 //                                 LOUPECAST_QUIT_ANSWER=cancel|quit answers the export alert,
 //                                 LOUPECAST_QUIT_EDIT=<dir> splits a second recording right before quitting
@@ -145,6 +147,11 @@ enum DebugHooks {
             m.edit("Aspect Ratio") { $0.aspect = a }
             print("LOUPECAST: aspect \(m.project.aspect.rawValue), undo \(m.undo.undoActionName)")
             if env["LOUPECAST_ASPECT_UNDO"] != nil { m.undoEdit(); print("LOUPECAST: aspect after undo \(m.project.aspect.rawValue)") }
+        }
+        if let s = env["LOUPECAST_ZOOM_SCALE"].flatMap(Double.init), let z = m.project.zooms.first {
+            m.setZoomScale(z.id, s)
+            print("LOUPECAST: zoom scale \(m.project.zooms[0].scale), undo \(m.undo.undoActionName)")
+            if env["LOUPECAST_ZOOM_SCALE_UNDO"] != nil { m.undoEdit(); print("LOUPECAST: zoom scale after undo \(m.project.zooms[0].scale)") }
         }
         switch env["LOUPECAST_SELECT"] ?? "zoom" {
         case "clip": m.selection = m.project.clips.first.map { .clip($0.id) } ?? .none
@@ -421,7 +428,8 @@ enum DebugHooks {
         }
 
         // 2. a button click: 줌 추가 (borderedProminent 내보내기 is the last button, 줌 추가 the one before it)
-        let zooms0 = m.project.zooms.count
+        let zooms0 = m.project.zooms.count, ids0 = Set(m.project.zooms.map(\.id))
+        UserDefaults.standard.set(2.5, forKey: EditorModel.zoomScaleKey)   // as if 250 % was the last level picked
         let buttons = views(content).filter { String(describing: type(of: $0)).contains("Button") }.sorted { $0.frame.minX < $1.frame.minX }
         if let add = buttons.dropLast().last {
             let r = add.convert(add.bounds, to: nil)
@@ -430,6 +438,7 @@ enum DebugHooks {
         }
         state("after clicking Add Zoom")
         check(m.project.zooms.count == zooms0 + 1, "button click landed (zoom added)")
+        check(m.project.zooms.first { !ids0.contains($0.id) }?.scale == 2.5, "the added zoom uses the last zoom level picked (250 %)")
         check(!(w.firstResponder is NSButton), "the clicked button did not keep keyboard focus")
 
         // 3. Space toggles playback after the drag and the click

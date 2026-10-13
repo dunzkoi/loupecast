@@ -203,6 +203,23 @@ final class ZoomTests: XCTestCase {
         XCTAssertTrue(p.zooms.isEmpty)
     }
 
+    func testZoomScaleIsClamped() {
+        var p = Project(name: "t", duration: 10, pixelWidth: 100, pixelHeight: 50, pointPixelScale: 2, cursor: [], clicks: [])
+        let z = p.addZoom(at: 2, scale: 3)
+        XCTAssertEqual(z.scale, 3)
+        p.setZoomScale(id: z.id, 2.5)
+        XCTAssertEqual(p.zooms[0].scale, 2.5)
+        p.setZoomScale(id: z.id, 10)
+        XCTAssertEqual(p.zooms[0].scale, 4, "at most 4")
+        p.setZoomScale(id: z.id, 1)
+        XCTAssertEqual(p.zooms[0].scale, 1.25, "at least 1.25: 1 would be no zoom at all")
+        XCTAssertEqual(p.addZoom(at: 5, scale: 0.5).scale, 1.25)
+        XCTAssertEqual(p.addZoom(at: 7).scale, AutoZoom.defaultScale)
+        // the camera magnifies by the segment's own scale
+        let path = CameraPath(segments: [p.zooms[0]], cursor: [], trimIn: 0, trimOut: 10)
+        XCTAssertEqual(path.camera(at: 3).scale, 1.25, accuracy: 1e-9)
+    }
+
     func testNormalizationAcrossDisplays() {
         // secondary display left of and above the main one (negative global origin)
         let d = DisplayBounds(x: -1728, y: -400, width: 1728, height: 1117)

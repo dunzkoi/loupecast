@@ -84,15 +84,22 @@ final class ExportTests: XCTestCase {
         try await withDeadline(Self.deadline) { try await Self.exportMatchesTrim(.portrait) }
     }
 
-    static func exportMatchesTrim(_ aspect: AspectRatio = .landscape) async throws {
+    /// A zoom set to 300 %: the export magnifies three times, with the square where camera(t) puts it.
+    func testZoomLevelExport() async throws {
+        try XCTSkipIf(ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] != nil, "no video hardware on CI VMs")
+        try await withDeadline(Self.deadline) { try await Self.exportMatchesTrim(zoomScale: 3) }
+    }
+
+    static func exportMatchesTrim(_ aspect: AspectRatio = .landscape, zoomScale: Double? = nil) async throws {
         let mov = Self.outDir.appendingPathComponent("synthetic.mov")
         try await Self.writeSyntheticMovie(to: mov)
         var project = makeProject()
         project.aspect = aspect
         XCTAssertEqual(project.zooms.count, 1, "two nearby clicks → one zoom")
+        if let zoomScale { project.setZoomScale(id: project.zooms[0].id, zoomScale) }
         try project.save(to: Self.outDir.appendingPathComponent("project.json"))
 
-        let out = Self.outDir.appendingPathComponent("export-\(aspect.pixels.width)x\(aspect.pixels.height).mp4")
+        let out = Self.outDir.appendingPathComponent("export-\(aspect.pixels.width)x\(aspect.pixels.height)\(zoomScale.map { "-zoom\($0)" } ?? "").mp4")
         let start = Date()
         try await Exporter.export(project: project, videoURL: mov, to: out)
         print("export took \(Date().timeIntervalSince(start)) s → \(out.path)")
@@ -157,7 +164,7 @@ final class ExportTests: XCTestCase {
         } }
         XCTAssertGreaterThan(n, 1000, "blue square not found in the zoomed export frame")
         let cam = CameraPath(project: project).camera(at: t)
-        XCTAssertEqual(cam.scale, 2, accuracy: 1e-6, "the click zoom is fully in at \(t) s")
+        XCTAssertEqual(cam.scale, project.zooms[0].scale, accuracy: 1e-6, "the click zoom is fully in at \(t) s")
         let canvas = Composer.renderSize(project.aspect)
         let frame = LoupecastCompositor.frameRect(source: Self.size, canvas: canvas, style: .standard)
         let p = Self.target(t), half = 0.5 / cam.scale

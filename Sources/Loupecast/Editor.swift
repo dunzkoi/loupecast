@@ -164,7 +164,19 @@ final class EditorModel {
     func markOut() { if let c = clipAtPlayhead { edit("Set End") { $0.setClipEnd(id: c.id, playhead) } } }
     func split() { edit("Split") { $0.split(at: playhead) } }
 
-    func addZoom() { edit("Add Zoom") { selection = .zoom($0.addZoom(at: playhead).id) } }
+    /// Zoom levels the editor offers; Add Zoom uses the one picked last.
+    static let zoomLevels = [1.5, 2, 2.5, 3]
+    static let zoomScaleKey = "zoomScale"
+
+    func addZoom() {
+        let scale = UserDefaults.standard.object(forKey: Self.zoomScaleKey) as? Double ?? AutoZoom.defaultScale
+        edit("Add Zoom") { selection = .zoom($0.addZoom(at: playhead, scale: scale).id) }
+    }
+
+    func setZoomScale(_ id: UUID, _ scale: Double) {
+        UserDefaults.standard.set(scale, forKey: Self.zoomScaleKey)
+        edit("Zoom Level") { $0.setZoomScale(id: id, scale) }
+    }
 
     func deleteSelected() {
         switch selection {
@@ -475,6 +487,18 @@ struct ControlBar: View {
                     .toggleStyle(.switch)
                     .controlSize(.small)
                     .focusable(false)
+                // a percentage and a magnifier, never "2×": that reads as playback speed
+                HStack(spacing: 4) {
+                    Image(systemName: "magnifyingglass").foregroundStyle(.secondary).accessibilityHidden(true)
+                    Picker("Zoom Level", selection: Binding(get: { seg.scale }, set: { model.setZoomScale(seg.id, $0) })) {
+                        ForEach(EditorModel.zoomLevels, id: \.self) { Text(verbatim: "\(Int($0 * 100))%").tag($0) }
+                    }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
+                    .fixedSize()
+                    .focusable(false)
+                }
+                .help("Zoom level of the selected zoom")
                 Button(role: .destructive, action: model.deleteSelected) { Image(systemName: "trash") }
                     .buttonStyle(.borderless)
                     .focusable(false)
