@@ -90,6 +90,13 @@ final class ExportTests: XCTestCase {
         try await withDeadline(Self.deadline) { try await Self.exportMatchesTrim(zoomScale: 3) }
     }
 
+    /// 9:16 with 화면 채우기: the recording fills the frame (no background inside it) and the square sits where the
+    /// fill window's camera(t) puts it.
+    func testPortraitFillExport() async throws {
+        try XCTSkipIf(ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] != nil, "no video hardware on CI VMs")
+        try await withDeadline(Self.deadline) { try await Self.exportMatchesTrim(.portrait, fill: true) }
+    }
+
     /// Dark gradient: the exported background is that preset's color, the rest of the export as usual.
     func testStyledExport() async throws {
         try XCTSkipIf(ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] != nil, "no video hardware on CI VMs")
@@ -135,7 +142,8 @@ final class ExportTests: XCTestCase {
         return (Int(px[0]), Int(px[1]), Int(px[2]))
     }
 
-    static func exportMatchesTrim(_ aspect: AspectRatio = .landscape, zoomScale: Double? = nil, style: StylePreset = .pastel) async throws {
+    static func exportMatchesTrim(_ aspect: AspectRatio = .landscape, zoomScale: Double? = nil, style: StylePreset = .pastel,
+                                  fill: Bool = false) async throws {
         let mov = Self.outDir.appendingPathComponent("synthetic.mov")
         try await Self.writeSyntheticMovie(to: mov)
         var project = makeProject()
@@ -143,9 +151,10 @@ final class ExportTests: XCTestCase {
         XCTAssertEqual(project.zooms.count, 1, "two nearby clicks → one zoom")
         if let zoomScale { project.setZoomScale(id: project.zooms[0].id, zoomScale) }
         project.style = style
+        project.fill = fill
         try project.save(to: Self.outDir.appendingPathComponent("project.json"))
 
-        let out = Self.outDir.appendingPathComponent("export-\(aspect.pixels.width)x\(aspect.pixels.height)\(zoomScale.map { "-zoom\($0)" } ?? "")-\(style.rawValue).mp4")
+        let out = Self.outDir.appendingPathComponent("export-\(aspect.pixels.width)x\(aspect.pixels.height)\(zoomScale.map { "-zoom\($0)" } ?? "")-\(style.rawValue)\(fill ? "-fill" : "").mp4")
         let start = Date()
         try await Exporter.export(project: project, videoURL: mov, to: out)
         print("export took \(Date().timeIntervalSince(start)) s → \(out.path)")
@@ -193,7 +202,14 @@ final class ExportTests: XCTestCase {
         // the top-left background is the preset's top-left color; the BT.709 round trip (render, H.264, decode to
         // sRGB) lifts dark tones by up to ~20 levels, while the presets differ by 100 or more
         let gen = AVAssetImageGenerator(asset: asset)
-        let corner = pixel(try await gen.image(at: .zero).image, 4, 4), want = FrameStyle(style).topLeft
+        let first = try await gen.image(at: .zero).image
+        let corner = pixel(first, 4, 4), want = FrameStyle(style).topLeft
+        if fill {   // inside the frame's top-left corner: recording, not the background around it
+            let frame = LoupecastCompositor.frameRect(source: size, canvas: Composer.renderSize(aspect), style: FrameStyle(style), fill: true)
+            XCTAssertEqual(frame.width, 952); XCTAssertEqual(frame.height, 1690)
+            let inside = pixel(first, frame.minX + 30, frame.minY + 30)
+            XCTAssertGreaterThan(abs(inside.r - corner.r) + abs(inside.g - corner.g) + abs(inside.b - corner.b), 60, "\(inside) vs \(corner)")
+        }
         XCTAssertEqual(Double(corner.r), want.red * 255, accuracy: 24, "background \(corner) for \(style)")
         XCTAssertEqual(Double(corner.g), want.green * 255, accuracy: 24)
         XCTAssertEqual(Double(corner.b), want.blue * 255, accuracy: 24)
@@ -217,12 +233,12 @@ final class ExportTests: XCTestCase {
             if r < 70, g > 90, g < 180, b > 210 { sx += Double(x); sy += Double(y); n += 1 }   // the blue square
         } }
         XCTAssertGreaterThan(n, 1000, "blue square not found in the zoomed export frame")
-        let cam = CameraPath(project: project).camera(at: t)
+        let path = Composer.cameraPath(project), cam = path.camera(at: t)
         XCTAssertEqual(cam.scale, project.zooms[0].scale, accuracy: 1e-6, "the click zoom is fully in at \(t) s")
         let canvas = Composer.renderSize(project.aspect)
-        let frame = LoupecastCompositor.frameRect(source: Self.size, canvas: canvas, style: .standard)
-        let p = Self.target(t), half = 0.5 / cam.scale
-        let u = (p.x - (cam.center.x - half)) * cam.scale, v = (p.y - (cam.center.y - half)) * cam.scale
+        let frame = LoupecastCompositor.frameRect(source: Self.size, canvas: canvas, style: FrameStyle(project.style), fill: project.fillsFrame)
+        let p = Self.target(t), hx = path.window.width / 2 / cam.scale, hy = path.window.height / 2 / cam.scale
+        let u = (p.x - (cam.center.x - hx)) / (2 * hx), v = (p.y - (cam.center.y - hy)) / (2 * hy)
         XCTAssertTrue((0...1).contains(u) && (0...1).contains(v), "click point outside the zoom rect: \(u), \(v)")
         let expected = (x: frame.minX + u * frame.width, y: (canvas.height - frame.maxY) + v * frame.height)
         print("zoom check: square at (\(sx / n), \(sy / n)) px, camera(t) predicts (\(expected.x), \(expected.y)), window uv (\(u), \(v))")

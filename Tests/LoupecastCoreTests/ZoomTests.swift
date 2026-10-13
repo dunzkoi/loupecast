@@ -203,6 +203,70 @@ final class ZoomTests: XCTestCase {
         XCTAssertTrue(p.zooms.isEmpty)
     }
 
+    // MARK: fill
+
+    func testFillWindowFromAspects() {
+        let tall = Window.filling(source: (1600, 1000), frame: (950, 1690))
+        XCTAssertEqual(tall.width, (950.0 / 1690) / 1.6, accuracy: 1e-12); XCTAssertEqual(tall.height, 1)
+        let wide = Window.filling(source: (1000, 1000), frame: (1920, 1080))
+        XCTAssertEqual(wide.width, 1); XCTAssertEqual(wide.height, 1080.0 / 1920, accuracy: 1e-12)
+        XCTAssertEqual(Window.filling(source: (1920, 1080), frame: (1920, 1080)), .full)
+    }
+
+    /// 9:16 fill of a 16:10 screen: a ~0.35-wide strip at scale 1 pans after the cursor and never leaves the
+    /// recording; a zoom still magnifies inside it.
+    func testFillFollowsCursorInsideRecording() {
+        let window = Window.filling(source: (1600, 1000), frame: (950, 1690))
+        let hx = window.width / 2
+        // left edge to right edge in 10 s, then resting at x = 0.7
+        let cursor = (0...900).map { i -> CursorSample in
+            let t = Double(i) / 60
+            return CursorSample(t: t, x: t < 10 ? t / 10 : 0.7, y: 0.2)
+        }
+        let path = CameraPath(segments: [ZoomSegment(start: 12, end: 14.5, focus: Point(x: 0.7, y: 0.2))], cursor: cursor,
+                              clips: [ClipRange(start: 0, end: 15)], window: window)
+        var prev = path.camera(at: 0), maxDC = 0.0
+        for i in 0..<(15 * 60) {
+            let c = path.camera(at: Double(i) / 60)
+            let h = (x: window.width / 2 / c.scale, y: window.height / 2 / c.scale)
+            XCTAssertGreaterThanOrEqual(c.center.x - h.x, -1e-9); XCTAssertLessThanOrEqual(c.center.x + h.x, 1 + 1e-9)
+            XCTAssertGreaterThanOrEqual(c.center.y - h.y, -1e-9); XCTAssertLessThanOrEqual(c.center.y + h.y, 1 + 1e-9)
+            maxDC = max(maxDC, abs(c.center.x - prev.center.x)); prev = c
+        }
+        XCTAssertLessThan(maxDC, 0.02, "pans smoothly, even when the cursor jumps back at 10 s")
+        XCTAssertEqual(path.camera(at: 0.5).center.x, hx, accuracy: 1e-9, "pinned to the left edge")
+        let mid = path.camera(at: 5)
+        XCTAssertEqual(mid.scale, 1, "no zoom: scale 1")
+        XCTAssertEqual(mid.center.x, 0.5, accuracy: 0.06, "follows the cursor across the screen")
+        XCTAssertLessThan(mid.center.x, 0.5, "a spring, so a little behind")
+        XCTAssertEqual(mid.center.y, 0.5, "full height: nothing to pan vertically")
+        XCTAssertEqual(path.camera(at: 9.9).center.x, 1 - hx, accuracy: 1e-9, "pinned to the right edge")
+        XCTAssertEqual(path.camera(at: 11.5).center.x, 0.7, accuracy: 2e-3, "settled on the resting cursor")
+        let zoomed = path.camera(at: 13)
+        XCTAssertEqual(zoomed.scale, 2, accuracy: 1e-9)
+        XCTAssertEqual(zoomed.center.x, 0.7, accuracy: 1e-3)
+        XCTAssertEqual(zoomed.center.y, 0.25, accuracy: 1e-9, "cursor at y 0.2, clamped to the half height 0.25")
+        // without fill the same path keeps the whole recording centered outside the zoom
+        let fit = CameraPath(segments: [], cursor: cursor, clips: [ClipRange(start: 0, end: 15)])
+        XCTAssertEqual(fit.camera(at: 5), .identity)
+    }
+
+    func testFillOnlyBesides16x9() throws {
+        var p = Project(name: "t", duration: 10, pixelWidth: 100, pixelHeight: 50, pointPixelScale: 2, cursor: [], clicks: [])
+        p.fill = true
+        XCTAssertFalse(p.fillsFrame, "16:9 never fills")
+        p.aspect = .portrait
+        XCTAssertTrue(p.fillsFrame)
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("fill-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try p.save(to: url)
+        XCTAssertTrue(try Project.load(from: url).fill)
+        var json = try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any]
+        json["fill"] = nil
+        try JSONSerialization.data(withJSONObject: json).write(to: url)
+        XCTAssertFalse(try Project.load(from: url).fill, "older files fit the recording as before")
+    }
+
     func testZoomScaleIsClamped() {
         var p = Project(name: "t", duration: 10, pixelWidth: 100, pixelHeight: 50, pointPixelScale: 2, cursor: [], clicks: [])
         let z = p.addZoom(at: 2, scale: 3)

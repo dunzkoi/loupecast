@@ -28,6 +28,10 @@ public struct Project: Codable, Sendable, Equatable {
     public var aspect = AspectRatio.landscape
     /// Background around the recording; files without it get the pastel gradient every version had.
     public var style = StylePreset.pastel
+    /// 9:16 and 1:1: crop the recording to fill the frame, following the cursor. Off in older files.
+    public var fill = false
+    /// 16:9 never fills (the switch is hidden there), so a fill set in 9:16 stays put when switching back.
+    public var fillsFrame: Bool { fill && aspect != .landscape }
 
     public init(name: String, videoFile: String = "recording.mov", duration: Double,
                 pixelWidth: Int, pixelHeight: Int, pointPixelScale: Double,
@@ -41,7 +45,7 @@ public struct Project: Codable, Sendable, Equatable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case version, name, videoFile, duration, pixelWidth, pixelHeight, pointPixelScale, cursor, clicks, keys, clips, zooms, aspect, style
+        case version, name, videoFile, duration, pixelWidth, pixelHeight, pointPixelScale, cursor, clicks, keys, clips, zooms, aspect, style, fill
     }
     private enum V1Keys: String, CodingKey { case trimIn, trimOut }
 
@@ -59,6 +63,7 @@ public struct Project: Codable, Sendable, Equatable {
         zooms = try c.decode([ZoomSegment].self, forKey: .zooms)
         aspect = try c.decodeIfPresent(AspectRatio.self, forKey: .aspect) ?? .landscape
         style = try c.decodeIfPresent(StylePreset.self, forKey: .style) ?? .pastel
+        fill = try c.decodeIfPresent(Bool.self, forKey: .fill) ?? false
         if let clips = try c.decodeIfPresent([ClipRange].self, forKey: .clips) {
             self.clips = clips
         } else {                                // version 1: one trim range

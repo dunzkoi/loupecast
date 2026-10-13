@@ -34,6 +34,7 @@
 "Couldn’t start reading." = "읽기를 시작하지 못했습니다.";
 "Couldn’t start recording" = "녹화를 시작하지 못했습니다";
 "Couldn’t start writing." = "쓰기를 시작하지 못했습니다.";
+"Crop the recording to fill the frame; it follows the cursor" = "녹화 화면을 잘라 프레임을 채우고 커서를 따라갑니다";
 "Cut %@" = "잘라냄 %@";
 "Dark Gradient" = "어두운 그라데이션";
 "Delete Clip" = "클립 삭제";
@@ -46,6 +47,7 @@
 "Export" = "내보내기";
 "Export frame" = "내보내기 비율";
 "Export frame (16:9 landscape, 9:16 portrait, 1:1 square)" = "내보내기 비율 (16:9 가로, 9:16 세로, 1:1 정사각)";
+"Fill Frame" = "화면 채우기";
 "Graphite" = "짙은 회색";
 "Hide Menu Bar in Video" = "영상 속 메뉴 막대 숨기기";
 "Hold ⌥ to delete one at a time" = "⌥를 누르면 하나씩 지울 수 있습니다";

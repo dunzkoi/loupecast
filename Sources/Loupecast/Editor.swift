@@ -534,6 +534,14 @@ struct ControlBar: View {
             .focusable(false)
             .help("Export frame (16:9 landscape, 9:16 portrait, 1:1 square)")
             .accessibilityLabel("Export frame")
+            if model.project.aspect != .landscape {
+                Toggle("Fill Frame", isOn: Binding(get: { model.project.fill }, set: { on in model.edit("Fill Frame") { $0.fill = on } }))
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .fixedSize()
+                    .focusable(false)
+                    .help("Crop the recording to fill the frame; it follows the cursor")
+            }
             Button(action: model.addZoom) { Label("Add Zoom", systemImage: "plus.magnifyingglass") }
                 .buttonStyle(.bordered)
                 .focusable(false)

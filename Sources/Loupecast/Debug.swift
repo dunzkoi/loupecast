@@ -23,6 +23,7 @@
 //   LOUPECAST_EXPORT_TO=<mp4>         export the snapshot's edit to that path first
 //   LOUPECAST_ASPECT=9:16|1:1|16:9    pick that output aspect through the editor (one undo step) before the snapshot;
 //                                 LOUPECAST_ASPECT_UNDO=1 undoes it again
+//   LOUPECAST_FILL=1                  turn on 화면 채우기 through the editor (one undo step) before the snapshot
 //   LOUPECAST_STYLE=<preset>          pick that background (pastel, dark, light, graphite, blue, plain) through the editor
 //                                 (one undo step) before the snapshot
 //   LOUPECAST_ZOOM_SCALE=<scale>      set the first zoom's level through the editor (one undo step) before the snapshot;
@@ -150,6 +151,10 @@ enum DebugHooks {
             print("LOUPECAST: aspect \(m.project.aspect.rawValue), undo \(m.undo.undoActionName)")
             if env["LOUPECAST_ASPECT_UNDO"] != nil { m.undoEdit(); print("LOUPECAST: aspect after undo \(m.project.aspect.rawValue)") }
         }
+        if env["LOUPECAST_FILL"] != nil {
+            m.edit("Fill Frame") { $0.fill = true }
+            print("LOUPECAST: fill \(m.project.fill) (fills frame \(m.project.fillsFrame)), undo \(m.undo.undoActionName)")
+        }
         if let s = env["LOUPECAST_STYLE"].flatMap(StylePreset.init(rawValue:)) {
             m.edit("Background") { $0.style = s }
             print("LOUPECAST: style \(m.project.style.rawValue), undo \(m.undo.undoActionName)")
@@ -226,7 +231,7 @@ enum DebugHooks {
             NSBezierPath(roundedRect: r, xRadius: 10, yRadius: 10).addClip()   // the preview's clipShape
             NSGraphicsContext.current?.cgContext.draw(cg, in: r)
             NSGraphicsContext.restoreGraphicsState()
-            print("LOUPECAST: preview frame \(CVPixelBufferGetWidth(pb))x\(CVPixelBufferGetHeight(pb)) at \(time.seconds), camera \(CameraPath(project: m.project).camera(at: m.playhead))")
+            print("LOUPECAST: preview frame \(CVPixelBufferGetWidth(pb))x\(CVPixelBufferGetHeight(pb)) at \(time.seconds), camera \(Composer.cameraPath(m.project).camera(at: m.playhead))")
         } else {
             print("LOUPECAST: no preview frame")
         }

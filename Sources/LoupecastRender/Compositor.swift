@@ -42,13 +42,15 @@ final class LoupecastInstruction: NSObject, AVVideoCompositionInstructionProtoco
     let trackID: CMPersistentTrackID
     let path: CameraPath
     let style: FrameStyle
+    let fill: Bool
 
-    init(timeRange: CMTimeRange, trackID: CMPersistentTrackID, path: CameraPath, style: FrameStyle) {
+    init(timeRange: CMTimeRange, trackID: CMPersistentTrackID, path: CameraPath, style: FrameStyle, fill: Bool) {
         self.timeRange = timeRange
         self.trackID = trackID
         self.requiredSourceTrackIDs = [NSNumber(value: trackID)]
         self.path = path
         self.style = style
+        self.fill = fill
     }
 }
 
@@ -81,18 +83,20 @@ public final class LoupecastCompositor: NSObject, AVVideoCompositing, @unchecked
             }
             lastSource = src
             let size = request.renderContext.size
-            let image = render(src, camera: ins.path.camera(composition: request.compositionTime.seconds), canvas: size, style: ins.style)
+            let image = render(src, camera: ins.path.camera(composition: request.compositionTime.seconds), canvas: size, style: ins.style,
+                               fill: ins.fill, window: ins.path.window)
             Self.context.render(image, to: out, bounds: CGRect(origin: .zero, size: size), colorSpace: Self.outputSpace)
             request.finish(withComposedVideoFrame: out)
         }
     }
 
-    /// Gradient + framed recording. `camera` crops the recording inside the fixed rounded frame.
-    func render(_ source: CIImage, camera: Camera, canvas: CGSize, style: FrameStyle) -> CIImage {
+    /// Gradient + framed recording. `camera` crops the recording inside the fixed rounded frame; `window` is the crop
+    /// at scale 1 (the whole recording, or the frame's aspect when filling).
+    func render(_ source: CIImage, camera: Camera, canvas: CGSize, style: FrameStyle, fill: Bool = false, window: Window = .full) -> CIImage {
         let src = source.extent
-        let frame = Self.frameRect(source: src.size, canvas: canvas, style: style)
+        let frame = Self.frameRect(source: src.size, canvas: canvas, style: style, fill: fill)
         // camera window in source pixels (CI is bottom-left origin, camera is top-left)
-        let cw = src.width / camera.scale, ch = src.height / camera.scale
+        let cw = src.width * window.width / camera.scale, ch = src.height * window.height / camera.scale
         let crop = CGRect(x: src.minX + camera.center.x * src.width - cw / 2,
                           y: src.minY + (1 - camera.center.y) * src.height - ch / 2, width: cw, height: ch)
         let sx = frame.width / crop.width, sy = frame.height / crop.height
@@ -119,9 +123,11 @@ public final class LoupecastCompositor: NSObject, AVVideoCompositing, @unchecked
         return shape.outputImage!
     }
 
-    public static func frameRect(source: CGSize, canvas: CGSize, style: FrameStyle) -> CGRect {
+    /// The recording's aspect fitted inside the padding, or (fill) everything inside the padding.
+    public static func frameRect(source: CGSize, canvas: CGSize, style: FrameStyle, fill: Bool = false) -> CGRect {
         let avail = CGRect(origin: .zero, size: canvas)
             .insetBy(dx: canvas.width * style.padding, dy: canvas.height * style.padding)
+        if fill { return avail.integral }
         let s = min(avail.width / source.width, avail.height / source.height)
         let w = (source.width * s).rounded(), h = (source.height * s).rounded()
         return CGRect(x: ((canvas.width - w) / 2).rounded(), y: ((canvas.height - h) / 2).rounded(), width: w, height: h)
@@ -224,6 +230,14 @@ public enum Composer {
         return mix
     }
 
+    /// The path preview and export render with: its window has the frame's aspect when the project fills the frame.
+    public static func cameraPath(_ project: Project) -> CameraPath {
+        guard project.fillsFrame else { return CameraPath(project: project) }
+        let source = CGSize(width: project.pixelWidth, height: project.pixelHeight)
+        let frame = LoupecastCompositor.frameRect(source: source, canvas: renderSize(project.aspect), style: FrameStyle(project.style), fill: true)
+        return CameraPath(project: project, window: .filling(source: (source.width, source.height), frame: (frame.width, frame.height)))
+    }
+
     /// Rebuilt on every zoom edit; cheap (the camera path is a few thousand spring steps).
     public static func videoComposition(project: Project, trackID: CMPersistentTrackID, duration: CMTime) -> AVMutableVideoComposition {
         let vc = AVMutableVideoComposition()
@@ -234,7 +248,7 @@ public enum Composer {
         vc.colorTransferFunction = AVVideoTransferFunction_ITU_R_709_2
         vc.colorYCbCrMatrix = AVVideoYCbCrMatrix_ITU_R_709_2
         vc.instructions = [LoupecastInstruction(timeRange: CMTimeRange(start: .zero, duration: duration), trackID: trackID,
-                                            path: CameraPath(project: project), style: FrameStyle(project.style))]
+                                            path: cameraPath(project), style: FrameStyle(project.style), fill: project.fillsFrame)]
         return vc
     }
 }
