@@ -3,7 +3,7 @@ import LoupecastCore
 import os
 
 /// H.264 at the project's aspect (1920×1080, 1080×1920 or 1080×1080), constant 60 fps, + one stereo AAC track
-/// (system and mic mixed).
+/// (system and mic mixed at the project's volumes).
 /// The composition is the kept clips back to back, so the file is exactly their total length.
 public enum Exporter {
     public static var moviesDir: URL { FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Movies") }
@@ -62,6 +62,7 @@ public enum Exporter {
                 AVLinearPCMIsBigEndianKey: false, AVLinearPCMIsNonInterleaved: false,
             ])
             o.alwaysCopiesSampleData = true      // the cut fades are written into these buffers
+            o.audioMix = Composer.audioMix(edit.asset, project: project, micTracks: edit.micTracks, fades: false)
             reader.add(o)
             var layout = AudioChannelLayout()
             layout.mChannelLayoutTag = kAudioChannelLayoutTag_Stereo

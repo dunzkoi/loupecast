@@ -21,6 +21,7 @@
 "Click the preview to hold this zoom on a spot." = "미리보기를 클릭하면 이 줌을 그 자리에 고정합니다.";
 "Click to hold the selected zoom on that spot" = "클릭한 곳에 선택한 줌을 고정";
 "Close" = "닫기";
+"Computer Audio" = "컴퓨터 소리";
 "Copied" = "복사됨";
 "Copy" = "복사";
 "Copy the video to paste it into Slack, an issue or an email" = "영상을 복사해 Slack, 이슈, 메일에 붙여 넣기";
@@ -70,6 +71,7 @@
 "Microphone" = "마이크";
 "Move All to Trash" = "모두 휴지통으로 보내기";
 "Move to Trash: %@" = "휴지통으로: %@";
+"Mute" = "음소거";
 "Needed" = "필요함";
 "No Padding" = "여백 없음";
 "No Recordings" = "녹화 없음";
@@ -122,11 +124,13 @@
 "Turn Zoom Off" = "줌 끄기";
 "Turn Zoom On" = "줌 켜기";
 "Turn on the items below in System Settings." = "아래 항목을 시스템 설정에서 켜 주세요.";
+"Unmute" = "음소거 해제";
 "Unsupported project version: %lld" = "지원하지 않는 프로젝트 버전입니다: %lld";
 "Update postponed" = "업데이트를 미뤘습니다";
 "Updated to %@" = "%@으로 업데이트되었습니다";
 "Use Zoom" = "줌 사용";
 "View Changes" = "변경 사항 보기";
+"Volume" = "음량";
 "Writing failed" = "쓰기 실패";
 "You can also start from the menu bar icon or %@." = "메뉴 막대 아이콘이나 %@로도 시작합니다.";
 "You can also start from the menu bar icon." = "메뉴 막대 아이콘에서도 시작합니다.";

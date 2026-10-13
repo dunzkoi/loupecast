@@ -23,6 +23,9 @@
 //   LOUPECAST_EXPORT_TO=<mp4>         export the snapshot's edit to that path first
 //   LOUPECAST_ASPECT=9:16|1:1|16:9    pick that output aspect through the editor (one undo step) before the snapshot;
 //                                 LOUPECAST_ASPECT_UNDO=1 undoes it again
+//   LOUPECAST_MIC_VOLUME=<0…2>       move the microphone slider there (three steps, one undo step), print the preview's
+//                                 audio mix; LOUPECAST_VOLUME_POPOVER=<png> clicks the speaker button (prints whether the
+//                                 popover opened) and saves its controls drawn in a plain window
 //   LOUPECAST_FILL=1                  turn on 화면 채우기 through the editor (one undo step) before the snapshot
 //   LOUPECAST_STYLE=<preset>          pick that background (pastel, dark, light, graphite, blue, plain) through the editor
 //                                 (one undo step) before the snapshot
@@ -150,6 +153,38 @@ enum DebugHooks {
             m.edit("Aspect Ratio") { $0.aspect = a }
             print("LOUPECAST: aspect \(m.project.aspect.rawValue), undo \(m.undo.undoActionName)")
             if env["LOUPECAST_ASPECT_UNDO"] != nil { m.undoEdit(); print("LOUPECAST: aspect after undo \(m.project.aspect.rawValue)") }
+        }
+        if let v = env["LOUPECAST_MIC_VOLUME"].flatMap(Double.init) {
+            for step in [0.3, 0.6, 1.0] { m.changeVolume(\.micVolume, to: 1 + (v - 1) * step) }
+            m.endVolumeChange()
+            try? await Task.sleep(for: .seconds(0.3))
+            let volumes = (m.player.currentItem?.audioMix?.inputParameters ?? []).map { p -> String in
+                var a: Float = -1, b: Float = -1, r = CMTimeRange.zero
+                _ = p.getVolumeRamp(for: CMTime(seconds: 1, preferredTimescale: 600), startVolume: &a, endVolume: &b, timeRange: &r)
+                return "track \(p.trackID)\(m.edit?.micTracks.contains(p.trackID) == true ? " (mic)" : ""): \(a)"
+            }
+            print("LOUPECAST: mic volume \(m.project.micVolume), undo \(m.undo.undoActionName), preview mix \(volumes)")
+            m.undoEdit()
+            print("LOUPECAST: mic volume after one undo \(m.project.micVolume)")
+        }
+        if let out = env["LOUPECAST_VOLUME_POPOVER"] {
+            func views(_ v: NSView) -> [NSView] { [v] + v.subviews.flatMap(views) }
+            // SwiftUI keeps the label off the NSView: the speaker button is the last button left of the background menu
+            let all = views(editor.window.contentView!), x = { (v: NSView) in v.convert(v.bounds, to: nil).minX }
+            let menuX = all.filter { String(describing: type(of: $0)).contains("PopupButton") }.map(x).min() ?? 0
+            let button = all.compactMap { $0 as? NSButton }.filter { !String(describing: type(of: $0)).contains("Popup") && x($0) < menuX }.max { x($0) < x($1) }
+            button?.performClick(nil)
+            try? await Task.sleep(for: .seconds(1))
+            print("LOUPECAST: volume popover open \(NSApp.windows.contains { String(describing: type(of: $0)).contains("Popover") && $0.isVisible })")
+            // cacheDisplay drops the popover's vibrant text, so the same controls are drawn in a plain window
+            let w = NSWindow(contentRect: NSRect(x: -20_000, y: -20_000, width: 320, height: 100), styleMask: [.borderless], backing: .buffered, defer: false)
+            w.isReleasedWhenClosed = false
+            w.contentView = NSHostingView(rootView: VolumeControls(model: m).background(Color(nsColor: .windowBackgroundColor)))
+            w.setContentSize(w.contentView!.fittingSize)
+            w.orderFront(nil)
+            try? await Task.sleep(for: .seconds(0.5))
+            save(w.contentView!, to: URL(fileURLWithPath: out))
+            w.close()
         }
         if env["LOUPECAST_FILL"] != nil {
             m.edit("Fill Frame") { $0.fill = true }

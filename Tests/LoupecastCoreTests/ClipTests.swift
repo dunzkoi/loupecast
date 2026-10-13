@@ -266,6 +266,25 @@ final class ClipTests: XCTestCase {
         XCTAssertEqual(AspectRatio.square.pixels.width, AspectRatio.square.pixels.height)
     }
 
+    func testVolumesDefaultAndClamp() throws {
+        var p = project()
+        XCTAssertEqual([p.systemVolume, p.micVolume], [1, 1])
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("volume-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        var json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(p)) as! [String: Any]
+        json["systemVolume"] = nil; json["micVolume"] = nil       // older file: both tracks as recorded
+        try JSONSerialization.data(withJSONObject: json).write(to: url)
+        let old = try Project.load(from: url)
+        XCTAssertEqual([old.systemVolume, old.micVolume], [1, 1])
+        json["systemVolume"] = 7; json["micVolume"] = -1          // hand-edited: kept inside 0…2
+        try JSONSerialization.data(withJSONObject: json).write(to: url)
+        let wild = try Project.load(from: url)
+        XCTAssertEqual([wild.systemVolume, wild.micVolume], [2, 0])
+        p.micVolume = 0.5
+        try p.save(to: url)
+        XCTAssertEqual(try Project.load(from: url).micVolume, 0.5)
+    }
+
     func testStyleDefaultsAndRoundTrip() throws {
         var p = project()
         XCTAssertEqual(p.style, .pastel)

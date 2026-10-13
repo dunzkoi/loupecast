@@ -28,6 +28,9 @@ final class EditorModel {
     var selection = Selection.none
     var thumbnails: [NSImage] = []
     var exportState = ExportState.idle
+    /// Audio tracks in the recording; the volume controls show only these.
+    private(set) var hasSystemAudio = false
+    private(set) var hasMicrophone = false
 
     @ObservationIgnored let player = AVPlayer()
     @ObservationIgnored private(set) var edit: EditComposition?
@@ -36,6 +39,8 @@ final class EditorModel {
     @ObservationIgnored private var built: [ClipRange] = []
     /// Project before the drag in progress; the drag becomes one undo step and one player update.
     @ObservationIgnored private var dragBase: Project?
+    /// Project before a volume slider moved: the player hears every value, the drag is one undo step.
+    @ObservationIgnored private var volumeBase: Project?
     @ObservationIgnored private var saveTask: Task<Void, Never>?
     @ObservationIgnored private var exportTask: Task<Void, Never>?
     @ObservationIgnored private var timeObserver: Any?
@@ -55,7 +60,10 @@ final class EditorModel {
 
     func load() async {
         do {
-            source = try await SourceTracks.load(videoURL)
+            let source = try await SourceTracks.load(videoURL)
+            self.source = source
+            hasSystemAudio = source.hasSystemAudio
+            hasMicrophone = source.hasMicrophone
             rebuild()
             timeObserver = player.addPeriodicTimeObserver(forInterval: Composer.frameDuration, queue: .main) { [weak self] t in
                 MainActor.assumeIsolated {
@@ -105,12 +113,18 @@ final class EditorModel {
         }
     }
 
-    /// Same kept material, new camera path: only the video composition changes.
+    /// Same kept material, new camera path and volumes: the video composition and the audio mix change.
     private func refreshComposition() {
         guard let item = player.currentItem, let edit else { return }
         built = project.clips
         if player.rate == 0 { seek(playhead) }   // off the item's last instant first, then re-render this frame
         item.videoComposition = Composer.videoComposition(project: project, trackID: edit.videoTrackID, duration: edit.asset.duration)
+        refreshAudio()
+    }
+
+    private func refreshAudio() {
+        guard let item = player.currentItem, let edit else { return }
+        item.audioMix = Composer.audioMix(edit.asset, project: project, micTracks: edit.micTracks)
     }
 
     func togglePlay() {
@@ -181,6 +195,18 @@ final class EditorModel {
         edit("Zoom Focus") { $0.setZoomFocus(id: id, p) }
     }
 
+    /// Slider moves: applied live, recorded as one undo step by `endVolumeChange`.
+    func changeVolume(_ track: WritableKeyPath<Project, Double>, to v: Double) {
+        if volumeBase == nil { volumeBase = project }
+        project[keyPath: track] = Project.volumes.clamp(v)
+    }
+
+    func endVolumeChange() {
+        guard let base = volumeBase else { return }
+        volumeBase = nil
+        if project != base { undo.registerChange(self, \.project, before: base, name: String(localized: "Volume")) }
+    }
+
     func setZoomScale(_ id: UUID, _ scale: Double) {
         UserDefaults.standard.set(scale, forKey: Self.zoomScaleKey)
         edit("Zoom Level") { $0.setZoomScale(id: id, scale) }
@@ -245,8 +271,12 @@ final class EditorModel {
 
     private func applyToPlayer(old: Project) {
         func material(_ c: [ClipRange]) -> [[Double]] { c.keptRanges.map { [$0.start, $0.end] } }
+        var volumesOnly = project
+        volumesOnly.systemVolume = old.systemVolume; volumesOnly.micVolume = old.micVolume
         // same material: every other edit (zooms, clip ids, aspect, style…) is a new video composition
-        if material(project.clips) != material(built) { rebuild() } else { refreshComposition() }
+        if material(project.clips) != material(built) { rebuild() }
+        else if volumesOnly == old { refreshAudio() }       // a volume slider moving: the picture stays put
+        else { refreshComposition() }
     }
 
     private func scheduleSave() {
@@ -512,6 +542,7 @@ struct ControlBar: View {
             Spacer(minLength: 12)
 
             ExportStatus(model: model)
+            if model.hasSystemAudio || model.hasMicrophone { VolumeButton(model: model) }
             Menu {
                 Picker("Background", selection: Binding(get: { model.project.style },
                                                         set: { s in model.edit("Background") { $0.style = s } })) {
@@ -614,6 +645,56 @@ struct SelectionBar: View {
             .help("Delete the selected zoom (Delete)")
             .accessibilityLabel("Delete the selected zoom")
         hint("Click the preview to hold this zoom on a spot.")
+    }
+}
+
+/// Speaker button with a popover: a slider and a mute button per audio track the recording has.
+struct VolumeButton: View {
+    @Bindable var model: EditorModel
+    @State private var shown = false
+
+    var body: some View {
+        let muted = (!model.hasSystemAudio || model.project.systemVolume == 0) && (!model.hasMicrophone || model.project.micVolume == 0)
+        Button { shown.toggle() } label: { Image(systemName: muted ? "speaker.slash" : "speaker.wave.2") }
+            .buttonStyle(.bordered)
+            .focusable(false)
+            .help("Volume")
+            .accessibilityLabel("Volume")
+            .popover(isPresented: $shown, arrowEdge: .bottom) { VolumeControls(model: model) }
+    }
+}
+
+/// A slider and a mute button per audio track the recording has.
+struct VolumeControls: View {
+    @Bindable var model: EditorModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if model.hasSystemAudio { row("Computer Audio", \.systemVolume) }
+            if model.hasMicrophone { row("Microphone", \.micVolume) }
+        }
+        .padding(14)
+        .frame(width: 320)
+    }
+
+    private func row(_ title: LocalizedStringKey, _ track: WritableKeyPath<Project, Double>) -> some View {
+        let v = model.project[keyPath: track]
+        return HStack(spacing: 8) {
+            Button {
+                model.edit(v == 0 ? "Unmute" : "Mute") { $0[keyPath: track] = v == 0 ? 1 : 0 }
+            } label: {
+                Image(systemName: v == 0 ? "speaker.slash.fill" : "speaker.wave.2.fill").frame(width: 20)
+            }
+            .buttonStyle(.borderless)
+            .help(v == 0 ? "Unmute" : "Mute")
+            .accessibilityLabel(v == 0 ? "Unmute" : "Mute")
+            Text(title).frame(width: 96, alignment: .leading)
+            Slider(value: Binding(get: { v }, set: { model.changeVolume(track, to: $0) }), in: Project.volumes) { editing in
+                if !editing { model.endVolumeChange() }
+            }
+            .accessibilityLabel(Text(title))
+            Text(verbatim: "\(Int((v * 100).rounded()))%").monospacedDigit().foregroundStyle(.secondary).frame(width: 44, alignment: .trailing)
+        }
     }
 }
 

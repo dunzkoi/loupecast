@@ -330,6 +330,33 @@ final class ExportTests: XCTestCase {
         XCTAssertEqual(cutGain(at: 2.02, cuts: [2]), 1)
     }
 
+    // MARK: volumes
+
+    /// Computer audio is a 0.4 tone in stereo, the microphone a 0.2 tone in mono (same phase): muting one leaves
+    /// exactly the other, and 2 doubles a track.
+    func testTrackVolumes() async throws {
+        try XCTSkipIf(ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] != nil, "no video hardware on CI VMs")
+        try await withDeadline(Self.deadline) { try await Self.trackVolumes() }
+    }
+
+    static func trackVolumes() async throws {
+        let mov = outDir.appendingPathComponent("synthetic-volume.mov")
+        try await writeSyntheticMovie(to: mov)
+        let mean = { (amplitude: Double) in amplitude * 2 / .pi }      // mean |x| of a sine
+        for (system, mic, expected) in [(1.0, 1.0, mean(0.6)), (0, 1, mean(0.2)), (1, 0, mean(0.4)), (2, 0, mean(0.8))] {
+            var project = makeProject()
+            project.clips = [ClipRange(start: 1, end: 3)]
+            project.systemVolume = system; project.micVolume = mic
+            let out = outDir.appendingPathComponent("export-volume-\(system)-\(mic).mp4")
+            try await Exporter.export(project: project, videoURL: mov, to: out)
+            let pcm = try await monoSamples(AVURLAsset(url: out))
+            let s = pcm[48_000 / 2..<48_000 * 3 / 2]                    // the middle second
+            let level = s.map { abs(Double($0)) }.reduce(0, +) / Double(s.count)
+            print("volumes system \(system) mic \(mic): level \(level), expected \(expected)")
+            XCTAssertEqual(level, expected, accuracy: expected * 0.05, "system \(system) mic \(mic)")
+        }
+    }
+
     // MARK: cancel and file names
 
     /// Cancelled at 20 %: the partial MP4 that existed then is gone and the export throws CancellationError.

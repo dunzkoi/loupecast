@@ -32,6 +32,10 @@ public struct Project: Codable, Sendable, Equatable {
     public var fill = false
     /// 16:9 never fills (the switch is hidden there), so a fill set in 9:16 stays put when switching back.
     public var fillsFrame: Bool { fill && aspect != .landscape }
+    /// Gain of the computer-audio and microphone tracks (0 mutes, 2 doubles); 1 in older files.
+    public var systemVolume = 1.0
+    public var micVolume = 1.0
+    public static let volumes = 0.0...2.0
 
     public init(name: String, videoFile: String = "recording.mov", duration: Double,
                 pixelWidth: Int, pixelHeight: Int, pointPixelScale: Double,
@@ -45,7 +49,7 @@ public struct Project: Codable, Sendable, Equatable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case version, name, videoFile, duration, pixelWidth, pixelHeight, pointPixelScale, cursor, clicks, keys, clips, zooms, aspect, style, fill
+        case version, name, videoFile, duration, pixelWidth, pixelHeight, pointPixelScale, cursor, clicks, keys, clips, zooms, aspect, style, fill, systemVolume, micVolume
     }
     private enum V1Keys: String, CodingKey { case trimIn, trimOut }
 
@@ -64,6 +68,8 @@ public struct Project: Codable, Sendable, Equatable {
         aspect = try c.decodeIfPresent(AspectRatio.self, forKey: .aspect) ?? .landscape
         style = try c.decodeIfPresent(StylePreset.self, forKey: .style) ?? .pastel
         fill = try c.decodeIfPresent(Bool.self, forKey: .fill) ?? false
+        systemVolume = Self.volumes.clamp(try c.decodeIfPresent(Double.self, forKey: .systemVolume) ?? 1)
+        micVolume = Self.volumes.clamp(try c.decodeIfPresent(Double.self, forKey: .micVolume) ?? 1)
         if let clips = try c.decodeIfPresent([ClipRange].self, forKey: .clips) {
             self.clips = clips
         } else {                                // version 1: one trim range
@@ -370,7 +376,7 @@ public struct InputLog: Sendable {
     }
 }
 
-extension ClosedRange where Bound == Double {
+public extension ClosedRange where Bound == Double {
     func clamp(_ v: Double) -> Double { Swift.min(upperBound, Swift.max(lowerBound, v)) }
 }
 

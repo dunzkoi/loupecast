@@ -162,19 +162,29 @@ public struct EditComposition: @unchecked Sendable {
     public let videoComposition: AVMutableVideoComposition
     public let audioMix: AVAudioMix?
     public let videoTrackID: CMPersistentTrackID
+    /// Composition audio tracks holding the microphone (the others are computer audio).
+    public let micTracks: Set<CMPersistentTrackID>
 }
 
 /// The recording's tracks, loaded once so the editor can rebuild compositions synchronously.
 public struct SourceTracks: @unchecked Sendable {
     let asset: AVURLAsset                     // tracks only weakly reference their asset
     let video: (track: AVAssetTrack, range: CMTimeRange)
-    let audio: [(track: AVAssetTrack, range: CMTimeRange)]
+    /// The recorder writes computer audio in stereo and the microphone in mono.
+    let audio: [(track: AVAssetTrack, range: CMTimeRange, mic: Bool)]
+
+    public var hasSystemAudio: Bool { audio.contains { !$0.mic } }
+    public var hasMicrophone: Bool { audio.contains { $0.mic } }
 
     public static func load(_ url: URL) async throws -> SourceTracks {
         let source = AVURLAsset(url: url)
         guard let v = try await source.loadTracks(withMediaType: .video).first else { throw LoupecastError("The recording has no video track.") }
-        var audio: [(AVAssetTrack, CMTimeRange)] = []
-        for a in try await source.loadTracks(withMediaType: .audio) { audio.append((a, try await a.load(.timeRange))) }
+        var audio: [(AVAssetTrack, CMTimeRange, Bool)] = []
+        for a in try await source.loadTracks(withMediaType: .audio) {
+            let (range, formats) = try await a.load(.timeRange, .formatDescriptions)
+            let channels = formats.first.flatMap { CMAudioFormatDescriptionGetStreamBasicDescription($0)?.pointee.mChannelsPerFrame } ?? 2
+            audio.append((a, range, channels == 1))
+        }
         return SourceTracks(asset: source, video: (v, try await v.load(.timeRange)), audio: audio)
     }
 }
@@ -194,8 +204,11 @@ public enum Composer {
             throw LoupecastError("The recording has no video track.")
         }
         var tracks = [(source.video.track, source.video.range, video)]
+        var micTracks = Set<CMPersistentTrackID>()
         for a in source.audio {
-            if let t = comp.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) { tracks.append((a.track, a.range, t)) }
+            guard let t = comp.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) else { continue }
+            tracks.append((a.track, a.range, t))
+            if a.mic { micTracks.insert(t.trackID) }
         }
         var at = CMTime.zero                     // exact running position: segments never overlap or gap
         for clip in project.clips.keptRanges {
@@ -209,21 +222,25 @@ public enum Composer {
         }
         for (_, _, track) in tracks.dropFirst() where track.segments.isEmpty { comp.removeTrack(track) }
         let vc = videoComposition(project: project, trackID: video.trackID, duration: comp.duration)
-        return EditComposition(asset: comp, videoComposition: vc, audioMix: audioMix(comp, cuts: project.clips.cutTimes),
-                               videoTrackID: video.trackID)
+        return EditComposition(asset: comp, videoComposition: vc, audioMix: audioMix(comp, project: project, micTracks: micTracks),
+                               videoTrackID: video.trackID, micTracks: micTracks)
     }
 
-    /// Preview's fade around every cut. AVAudioMix smooths ramps this short (measured: the level only
-    /// dips to ~60 %), so export applies the exact envelope to the samples itself (see Exporter).
-    static func audioMix(_ comp: AVComposition, cuts: [Double]) -> AVAudioMix? {
+    /// Each track at its volume, with the preview's fade around every cut on top (`fades`). AVAudioMix smooths ramps
+    /// this short (measured: the level only dips to ~60 %), so export applies the exact envelope to the samples
+    /// itself (see Exporter) and asks for the volumes only.
+    public static func audioMix(_ comp: AVComposition, project: Project, micTracks: Set<CMPersistentTrackID>, fades: Bool = true) -> AVAudioMix? {
         let tracks = comp.tracks(withMediaType: .audio)
-        guard !cuts.isEmpty, !tracks.isEmpty else { return nil }
+        guard !tracks.isEmpty else { return nil }
+        let cuts = fades ? project.clips.cutTimes : []
         let mix = AVMutableAudioMix()
         mix.inputParameters = tracks.map { track in
+            let v = Float(micTracks.contains(track.trackID) ? project.micVolume : project.systemVolume)
             let p = AVMutableAudioMixInputParameters(track: track)
+            p.setVolume(v, at: .zero)
             for c in cuts {
-                p.setVolumeRamp(fromStartVolume: 1, toEndVolume: 0, timeRange: CMTimeRange(start: time(c - Project.cutFade), end: time(c)))
-                p.setVolumeRamp(fromStartVolume: 0, toEndVolume: 1, timeRange: CMTimeRange(start: time(c), end: time(c + Project.cutFade)))
+                p.setVolumeRamp(fromStartVolume: v, toEndVolume: 0, timeRange: CMTimeRange(start: time(c - Project.cutFade), end: time(c)))
+                p.setVolumeRamp(fromStartVolume: 0, toEndVolume: v, timeRange: CMTimeRange(start: time(c), end: time(c + Project.cutFade)))
             }
             return p
         }
