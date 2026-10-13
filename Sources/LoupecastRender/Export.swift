@@ -8,13 +8,13 @@ import os
 public enum Exporter {
     public static var moviesDir: URL { FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Movies") }
 
-    /// `Loupecast <yyyy-MM-dd HH.mm.ss>.mp4` in `dir`, numbered " 2", " 3"… when that name is on disk or in `taken`
-    /// (exports still running), so an export never replaces an earlier one from the same second.
-    public static func defaultURL(now: Date = Date(), in dir: URL = moviesDir, taken: Set<URL> = []) -> URL {
+    /// `Loupecast <yyyy-MM-dd HH.mm.ss>.mp4` (or .gif) in `dir`, numbered " 2", " 3"… when that name is on disk or in
+    /// `taken` (exports still running), so an export never replaces an earlier one from the same second.
+    public static func defaultURL(now: Date = Date(), in dir: URL = moviesDir, taken: Set<URL> = [], fileExtension: String = "mp4") -> URL {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
         f.dateFormat = "yyyy-MM-dd HH.mm.ss"
-        return (1...).lazy.map { n in dir.appendingPathComponent("Loupecast \(f.string(from: now))\(n == 1 ? "" : " \(n)").mp4") }
+        return (1...).lazy.map { n in dir.appendingPathComponent("Loupecast \(f.string(from: now))\(n == 1 ? "" : " \(n)").\(fileExtension)") }
             .first { !taken.contains($0) && !FileManager.default.fileExists(atPath: $0.path) }!
     }
 

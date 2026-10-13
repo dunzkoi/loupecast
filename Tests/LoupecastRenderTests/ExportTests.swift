@@ -1,5 +1,6 @@
 import AVFoundation
 import CoreText
+import UniformTypeIdentifiers
 import Vision
 import XCTest
 import LoupecastCore
@@ -398,6 +399,38 @@ final class ExportTests: XCTestCase {
         let crossings = zip(s, s.dropFirst()).filter { ($0 < 0) != ($1 < 0) }.count
         print("speed export: \(crossings) zero crossings in one second of the 2× clip")
         XCTAssertEqual(Double(crossings), 2000, accuracy: 200)
+    }
+
+    // MARK: GIF
+
+    /// The 5.5 s edit as a GIF: 960×540, looping forever, 15 frames a second, as long as the MP4 (delays 7, 7, 6…).
+    func testGIFExport() async throws {
+        try XCTSkipIf(ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] != nil, "no video hardware on CI VMs")
+        try await withDeadline(Self.deadline) { try await Self.gifExport() }
+    }
+
+    static func gifExport() async throws {
+        let mov = outDir.appendingPathComponent("synthetic-gif.mov")
+        try await writeSyntheticMovie(to: mov)
+        let out = outDir.appendingPathComponent("export.gif")
+        try await GIFExporter.export(project: makeProject(), videoURL: mov, to: out)
+        let src = try XCTUnwrap(CGImageSourceCreateWithURL(out as CFURL, nil))
+        XCTAssertEqual(CGImageSourceGetType(src) as String?, UTType.gif.identifier)
+        let n = CGImageSourceGetCount(src)
+        XCTAssertEqual(Double(n), 5.5 * 15, accuracy: 1, "15 fps")
+        let gif = try XCTUnwrap((CGImageSourceCopyProperties(src, nil) as? [CFString: Any])?[kCGImagePropertyGIFDictionary] as? [CFString: Any])
+        XCTAssertEqual(gif[kCGImagePropertyGIFLoopCount] as? Int, 0, "loops forever")
+        var total = 0.0
+        for i in 0..<n {
+            let p = CGImageSourceCopyPropertiesAtIndex(src, i, nil) as? [CFString: Any]
+            total += ((p?[kCGImagePropertyGIFDictionary] as? [CFString: Any])?[kCGImagePropertyGIFUnclampedDelayTime] as? Double) ?? 0
+        }
+        XCTAssertEqual(total, 5.5, accuracy: 0.08, "as long as the edit")
+        let first = try XCTUnwrap(CGImageSourceCreateImageAtIndex(src, 0, nil))
+        XCTAssertEqual([first.width, first.height], [960, 540])
+        XCTAssertEqual(GIFExporter.size(.portrait), CGSize(width: 540, height: 960))
+        let size = try FileManager.default.attributesOfItem(atPath: out.path)[.size] as? Int ?? 0
+        print("gif: \(n) frames, \(total) s, \(size / 1024) KB → \(out.path)")
     }
 
     // MARK: cancel and file names

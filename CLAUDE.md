@@ -11,7 +11,8 @@ only in the maintainer's checkout); the rules that matter are below.
 - `Sources/LoupecastCore`: pure logic, Foundation only (no AppKit/AVFoundation). `Project` (project.json, cut list,
   aspect), `AutoZoom` and `CameraPath` (camera(t)), `InputLog`, `Version`.
 - `Sources/LoupecastRender`: `Composer` (composition from the kept clips), `LoupecastCompositor` (custom
-  `AVVideoCompositing` with Core Image), `Exporter` (reader/writer pumps, H.264 + one stereo AAC track).
+  `AVVideoCompositing` with Core Image), `Exporter` (reader/writer pumps, H.264 + one stereo AAC track), `GIFExporter` (the same composition at
+  15 fps, long side 960 px, silent and looping).
 - `Sources/Loupecast`: the app. `main.swift` (AppDelegate, menu, quit handling, `Library`: recent recordings,
   crash recovery, disk usage, `HotKey`), `Recorder` (SCStream → AVAssetWriter), `Editor` (EditorModel and views),
   `Updater` (self-update), `Debug.swift` (verification hooks, DEBUG builds only).

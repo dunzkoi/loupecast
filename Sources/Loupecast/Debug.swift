@@ -6,7 +6,7 @@
 //   LOUPECAST_APPEARANCE=dark|light   force appearance
 //   LOUPECAST_SNAPSHOT=<png>          save the editor window (with the live preview frame) and quit
 //   LOUPECAST_SEEK=<seconds>          playhead time for the snapshot
-//   LOUPECAST_EXPORT=1|fake           run the editor's own export first (fake: just the done state, then the 복사
+//   LOUPECAST_EXPORT=1|gif|fake       run the editor's own export first (gif: the GIF export) (fake: just the done state, then the 복사
 //                                 button's copy: prints what NSPasteboard.general holds, then restores the clipboard)
 //                    cancel|twice     cancel it at 20 %, or export from two editors of the recording at once
 //   LOUPECAST_EXPORT_DIR=<dir>        where the editor exports (default ~/Movies)
@@ -235,8 +235,8 @@ enum DebugHooks {
             pb.clearContents()
             pb.writeObjects(saved)
         }
-        if env["LOUPECAST_EXPORT"] == "1" {
-            m.export()
+        if let format = ["1": EditorModel.ExportFormat.mp4, "gif": .gif][env["LOUPECAST_EXPORT"] ?? ""] {
+            m.export(format)
             while m.exportState.isRunning { try? await Task.sleep(for: .milliseconds(100)) }
             print("LOUPECAST: export state \(m.exportState)")
         }
@@ -500,11 +500,11 @@ enum DebugHooks {
             }
         }
 
-        // 2. a button click: 줌 추가 (borderedProminent 내보내기 is the last button, 줌 추가 the one before it)
+        // 2. a button click: 줌 추가, the rightmost plain SwiftUI button (내보내기 is a split menu, not one of these)
         let zooms0 = m.project.zooms.count, ids0 = Set(m.project.zooms.map(\.id))
         UserDefaults.standard.set(2.5, forKey: EditorModel.zoomScaleKey)   // as if 250 % was the last level picked
-        let buttons = views(content).filter { String(describing: type(of: $0)).contains("Button") }.sorted { $0.frame.minX < $1.frame.minX }
-        if let add = buttons.dropLast().last {
+        let buttons = views(content).filter { String(describing: type(of: $0)) == "SwiftUIAppKitButton" }
+        if let add = buttons.max(by: { $0.convert($0.bounds, to: nil).minX < $1.convert($1.bounds, to: nil).minX }) {
             let r = add.convert(add.bounds, to: nil)
             click(NSPoint(x: r.midX, y: r.midY))
             try? await Task.sleep(for: .seconds(1.2))
@@ -610,7 +610,7 @@ enum DebugHooks {
     }
 
     static func exported() -> [String] {
-        ((try? FileManager.default.contentsOfDirectory(atPath: EditorModel.exportDir.path)) ?? []).filter { $0.hasSuffix(".mp4") }.sorted()
+        ((try? FileManager.default.contentsOfDirectory(atPath: EditorModel.exportDir.path)) ?? []).filter { $0.hasSuffix(".mp4") || $0.hasSuffix(".gif") }.sorted()
     }
 
     static func state(_ label: String, _ w: NSWindow?) {

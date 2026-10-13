@@ -308,17 +308,23 @@ final class EditorModel {
     static private(set) var exports: [URL: Task<Void, Never>] = [:]
     static var exportDir = Exporter.moviesDir
 
-    func export() {
+    enum ExportFormat { case mp4, gif }
+
+    func export(_ format: ExportFormat = .mp4) {
         if exportState.isRunning { return }
         exportState = .running(0)
         let project = project, video = videoURL
-        let url = Exporter.defaultURL(in: Self.exportDir, taken: Set(Self.exports.keys))
+        let url = Exporter.defaultURL(in: Self.exportDir, taken: Set(Self.exports.keys), fileExtension: format == .gif ? "gif" : "mp4")
         let task = Task {
             do {
-                try await Exporter.export(project: project, videoURL: video, to: url) { p in
+                let progress: @Sendable (Double) -> Void = { p in
                     Task { @MainActor in
                         if self.exportState.isRunning { self.exportState = .running(p) }
                     }
+                }
+                switch format {
+                case .mp4: try await Exporter.export(project: project, videoURL: video, to: url, progress: progress)
+                case .gif: try await GIFExporter.export(project: project, videoURL: video, to: url, progress: progress)
                 }
                 exportState = .done(url)
             } catch {
@@ -583,10 +589,20 @@ struct ControlBar: View {
                 .buttonStyle(.bordered)
                 .focusable(false)
                 .help("Add a 2-second zoom at the playhead")
-            Button(action: model.export) { Label("Export", systemImage: "square.and.arrow.up") }
-                .buttonStyle(.borderedProminent)
-                .focusable(false)
-                .disabled(model.exportState.isRunning || model.edit == nil)
+            Menu {
+                Button("MP4 Video") { model.export(.mp4) }
+                Button("GIF (no sound, loops)") { model.export(.gif) }
+            } label: {
+                Label("Export", systemImage: "square.and.arrow.up")
+            } primaryAction: {
+                model.export(.mp4)
+            }
+            .menuStyle(.button)
+            .buttonStyle(.borderedProminent)
+            .fixedSize()
+            .focusable(false)
+            .disabled(model.exportState.isRunning || model.edit == nil)
+            .help("Export an MP4, or pick GIF from the arrow")
         }
     }
 }

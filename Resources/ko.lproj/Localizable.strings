@@ -49,10 +49,12 @@
 "Drag the video into another app" = "다른 앱으로 끌어 영상 첨부";
 "Edit: %@" = "편집: %@";
 "Export" = "내보내기";
+"Export an MP4, or pick GIF from the arrow" = "MP4로 내보냅니다. 화살표에서 GIF를 고를 수 있습니다";
 "Export frame" = "내보내기 비율";
 "Export frame (16:9 landscape, 9:16 portrait, 1:1 square)" = "내보내기 비율 (16:9 가로, 9:16 세로, 1:1 정사각)";
 "Fill Frame" = "화면 채우기";
 "Follow Cursor" = "커서 따라가기";
+"GIF (no sound, loops)" = "GIF (소리 없음, 반복)";
 "Graphite" = "짙은 회색";
 "Hide Menu Bar in Video" = "영상 속 메뉴 막대 숨기기";
 "Hold ⌥ to delete one at a time" = "⌥를 누르면 하나씩 지울 수 있습니다";
@@ -68,6 +70,7 @@
 "Loupecast Update" = "Loupecast 업데이트";
 "Loupecast restarted with the new version." = "Loupecast가 새 버전으로 다시 시작했습니다.";
 "MMM d HH.mm.ss" = "M월 d일 HH.mm.ss";
+"MP4 Video" = "MP4 영상";
 "Microphone" = "마이크";
 "Move All to Trash" = "모두 휴지통으로 보내기";
 "Move to Trash: %@" = "휴지통으로: %@";
