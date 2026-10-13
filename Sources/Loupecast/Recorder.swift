@@ -43,18 +43,21 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
     deinit { NSLog("Loupecast: recorder released") }
     #endif
 
-    /// `hideMenuBar` crops the menu-bar strip (or notch) off the top of the display.
+    /// `hideMenuBar` crops the menu-bar strip (or notch) off the top of the display; an `area` records only that rect
+    /// of its display instead.
     @MainActor
-    static func start(microphone: Bool, systemAudio: Bool, hideMenuBar: Bool) async throws -> Recorder {
+    static func start(microphone: Bool, systemAudio: Bool, hideMenuBar: Bool, area: RecordingArea? = nil) async throws -> Recorder {
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
         let mouse = CGEvent(source: nil)?.location ?? .zero
-        guard let scDisplay = content.displays.first(where: { $0.frame.contains(mouse) }) ?? content.displays.first else {
-            throw LoupecastError("Couldn’t find a display to record.")
+        let display = area.map { a in content.displays.first { $0.displayID == a.displayID } }
+            ?? content.displays.first(where: { $0.frame.contains(mouse) }) ?? content.displays.first
+        guard let scDisplay = display else {
+            throw area == nil ? LoupecastError("Couldn’t find a display to record.") : LoupecastError("The display with the chosen area isn’t connected.")
         }
         let me = content.applications.filter { $0.processID == ProcessInfo.processInfo.processIdentifier }
         let filter = SCContentFilter(display: scDisplay, excludingApplications: me, exceptingWindows: [])
         var inset = 0.0
-        if hideMenuBar, let screen = NSScreen.screens.first(where: {
+        if hideMenuBar, area == nil, let screen = NSScreen.screens.first(where: {
             ($0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value == scDisplay.displayID
         }) {
             inset = DisplayBounds.menuBarInset(frameMaxY: screen.frame.maxY, visibleMaxY: screen.visibleFrame.maxY,
@@ -62,7 +65,8 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
         }
         let dir = recordingsDir.appendingPathComponent(UUID().uuidString, isDirectory: true)
         do {   // no empty .mov or folder left behind
-            let r = try Recorder(dir: dir, filter: filter, displayID: scDisplay.displayID, topInset: inset, microphone: microphone, systemAudio: systemAudio)
+            let r = try Recorder(dir: dir, filter: filter, displayID: scDisplay.displayID, topInset: inset, area: area?.rect,
+                                 microphone: microphone, systemAudio: systemAudio)
             do { try await r.stream.startCapture() } catch { r.writer.cancelWriting(); throw error }
             r.startInputMonitors()
             return r
@@ -72,10 +76,11 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
         }
     }
 
-    private init(dir: URL, filter: SCContentFilter, displayID: CGDirectDisplayID, topInset: Double, microphone: Bool, systemAudio: Bool) throws {
+    private init(dir: URL, filter: SCContentFilter, displayID: CGDirectDisplayID, topInset: Double, area: Rect?,
+                 microphone: Bool, systemAudio: Bool) throws {
         scale = Double(SCShareableContent.info(for: filter).pointPixelScale)
         let b = CGDisplayBounds(displayID)
-        display = DisplayBounds(x: b.minX, y: b.minY, width: b.width, height: b.height, topInset: topInset)
+        display = DisplayBounds(x: b.minX, y: b.minY, width: b.width, height: b.height, topInset: topInset, area: area)
         pixelSize = display.pixelSize(scale: scale)
         let (w, h) = pixelSize
 

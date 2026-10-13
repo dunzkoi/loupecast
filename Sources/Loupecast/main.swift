@@ -73,6 +73,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         rec.keyEquivalentModifierMask = [.command, .shift]
         rec.isEnabled = !busy
         menu.addItem(rec)
+        if !recording {
+            let area = item(String(localized: "Record Area…"), #selector(recordArea))
+            area.isEnabled = !busy
+            menu.addItem(area)
+        }
         if recording {
             let pause = item(pausedAt == nil ? String(localized: "Pause Recording") : String(localized: "Resume Recording"), #selector(togglePause))
             pause.isEnabled = !busy
@@ -169,6 +174,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         let i = NSMenuItem(title: title, action: action, keyEquivalent: "")
         i.target = self
         return i
+    }
+
+    /// Picks a rect on the display under the mouse, then records only that. Without the permission it asks first.
+    @objc private func recordArea() {
+        guard !busy, recorder == nil else { return }
+        guard CGPreflightScreenCaptureAccess() else { return toggleRecording() }
+        busy = true
+        Task {
+            if let area = await AreaPicker.pick() {
+                RecordingArea.last = area
+                await start(area: area)
+            }
+            busy = false
+        }
     }
 
     /// The paused stretch is cut from the recording when it stops (Recorder.setPaused, Project's `paused`).
@@ -304,7 +323,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         }
     }
 
-    private func start() async {
+    private func start(area: RecordingArea? = nil) async {
         let defaults = UserDefaults.standard
         let mic = defaults.bool(forKey: Self.micKey)
         var prompted = false   // macOS showed its own prompt; our window on top of it would be a duplicate
@@ -326,7 +345,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         }
         await Self.chime("loupecast-start", wait: true)   // Resources/loupecast-start.wav (NSSound(named:) checks the bundle first)
         do {
-            let r = try await Recorder.start(microphone: mic, systemAudio: defaults.bool(forKey: Self.systemAudioKey), hideMenuBar: defaults.bool(forKey: Self.hideMenuBarKey))
+            let r = try await Recorder.start(microphone: mic, systemAudio: defaults.bool(forKey: Self.systemAudioKey),
+                                             hideMenuBar: defaults.bool(forKey: Self.hideMenuBarKey), area: area)
             r.onStreamError = { [weak self] error in self?.streamFailed(error) }
             recorder = r
             startedAt = ProcessInfo.processInfo.systemUptime

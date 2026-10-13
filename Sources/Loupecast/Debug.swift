@@ -41,6 +41,8 @@
 //                                 stall after each (debounced autosave included), the close time and two menu builds
 //   LOUPECAST_OPEN_TEST=<dir>         open that recording the way 녹화 열기… does after the panel, twice (with and
 //                                 without a trailing slash: one editor), print the menu and the editors, quit
+//   LOUPECAST_AREA_PICKER=<png>       draw the area picker off screen (1512 × 982 pt, a 1280 × 720 area picked), save it,
+//                                 then drag a new area and press Enter / Esc on it; prints what each returns
 //   LOUPECAST_EDITOR_TEST=<dir>       trim drag + button click + Space/D/Delete/⌘Z through the window's key
 //                                 handler, off screen and without activating; logs each state change
 import AVFoundation
@@ -70,6 +72,7 @@ enum DebugHooks {
             }
         }
         if let path = env["LOUPECAST_EDITOR_TEST"] { Task { await editorTest(URL(fileURLWithPath: path)) } }
+        if let out = env["LOUPECAST_AREA_PICKER"] { Task { await areaPickerTest(to: URL(fileURLWithPath: out)) } }
         if let path = env["LOUPECAST_OPEN_TEST"] {
             Task {
                 try? await Task.sleep(for: .seconds(1))
@@ -606,6 +609,45 @@ enum DebugHooks {
         check((jumps.max() ?? 1) < 0.2, "composition position kept running across the cut (largest step \(String(format: "%.3f", jumps.max() ?? -1)) s)")
 
         print("LOUPECAST: editor test \(failures.isEmpty ? "PASSED" : "FAILED: \(failures)")"); fflush(stdout)
+        w.close()
+        NSApp.terminate(nil)
+    }
+
+    static func areaPickerTest(to url: URL) async {
+        let w = NSWindow(contentRect: NSRect(x: -20_000, y: -20_000, width: 1512, height: 982), styleMask: .borderless, backing: .buffered, defer: false)
+        w.isReleasedWhenClosed = false
+        w.backgroundColor = .darkGray                       // stands in for the desktop under the dimming
+        let v = AreaPickerView(frame: NSRect(x: 0, y: 0, width: 1512, height: 982))
+        w.contentView = v
+        w.orderFront(nil)
+        v.selection = v.viewRect(Rect(x: 116, y: 131, width: 1280, height: 720))
+        try? await Task.sleep(for: .seconds(0.3))
+        save(v, to: url)
+        var results: [String] = []
+        v.done = { results.append($0.map { "\($0)" } ?? "cancelled") }
+        func key(_ code: Int) {
+            v.keyDown(with: NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: w.windowNumber,
+                                             context: nil, characters: "", charactersIgnoringModifiers: "", isARepeat: false, keyCode: UInt16(code))!)
+        }
+        func mouse(_ type: NSEvent.EventType, _ p: NSPoint) -> NSEvent {
+            NSEvent.mouseEvent(with: type, location: p, modifierFlags: [], timestamp: 0, windowNumber: w.windowNumber, context: nil,
+                               eventNumber: 0, clickCount: 1, pressure: 1)!
+        }
+        key(kVK_Return)                                     // the preselected (last) area
+        v.done = { results.append($0.map { "\($0)" } ?? "cancelled") }
+        v.mouseDown(with: mouse(.leftMouseDown, NSPoint(x: 100, y: 900)))
+        v.mouseDragged(with: mouse(.leftMouseDragged, NSPoint(x: 740.4, y: 540.2)))   // 640 × 360 pt, top-left (100, 82)
+        key(kVK_Return)
+        v.done = { results.append($0.map { "\($0)" } ?? "cancelled") }
+        v.mouseDown(with: mouse(.leftMouseDown, NSPoint(x: 10, y: 10)))
+        v.mouseDragged(with: mouse(.leftMouseDragged, NSPoint(x: 40, y: 40)))          // too small: Enter only beeps
+        key(kVK_Return)
+        key(kVK_Escape)
+        print("LOUPECAST: area picker results \(results)")
+        let area = RecordingArea(displayID: 7, rect: Rect(x: 1, y: 2, width: 3, height: 4)), before = RecordingArea.last
+        RecordingArea.last = area
+        print("LOUPECAST: remembered area round trip \(RecordingArea.last == area)")
+        RecordingArea.last = before
         w.close()
         NSApp.terminate(nil)
     }

@@ -339,14 +339,27 @@ public extension UndoManager {
 
 // MARK: - Input log (host clock → recording-relative, normalized)
 
+/// A rect in points, top-left origin.
+public struct Rect: Codable, Equatable, Sendable {
+    public var x, y, width, height: Double
+    public init(x: Double, y: Double, width: Double, height: Double) { self.x = x; self.y = y; self.width = width; self.height = height }
+}
+
 public struct DisplayBounds: Sendable, Equatable {
     /// Global display coordinates in points (CG space: top-left origin of the main display).
     public var x, y, width, height: Double
     /// Strip at the top of the display left out of the capture (menu bar / notch), in points.
     public var topInset: Double
-    public init(x: Double, y: Double, width: Double, height: Double, topInset: Double = 0) {
+    /// Area recording: the recorded rect in display-local points (top-left origin), inside the display. Clicks
+    /// outside it make no zoom; `topInset` is ignored.
+    public var area: Rect?
+    public init(x: Double, y: Double, width: Double, height: Double, topInset: Double = 0, area: Rect? = nil) {
         self.x = x; self.y = y; self.width = width; self.height = height
         self.topInset = min(max(0, topInset), height / 2)
+        self.area = area.flatMap { a in
+            let x0 = max(0, a.x), y0 = max(0, a.y), x1 = min(width, a.x + a.width), y1 = min(height, a.y + a.height)
+            return x1 > x0 && y1 > y0 ? Rect(x: x0, y: y0, width: x1 - x0, height: y1 - y0) : nil
+        }
     }
 
     /// Menu-bar height from NSScreen (frame.maxY − visibleFrame.maxY, bottom-left space) or the
@@ -357,23 +370,28 @@ public struct DisplayBounds: Sendable, Equatable {
 
     /// The recorded rect in display-local points, top-left origin (SCStreamConfiguration.sourceRect).
     public var captureRect: (x: Double, y: Double, width: Double, height: Double) {
-        (0, topInset, width, height - topInset)
+        if let area { return (area.x, area.y, area.width, area.height) }
+        return (0, topInset, width, height - topInset)
     }
 
     /// Output size: the capture rect at `scale`, rounded to even pixels for the encoder.
     public func pixelSize(scale: Double) -> (width: Int, height: Int) {
-        (Int((width * scale).rounded()) & ~1, Int(((height - topInset) * scale).rounded()) & ~1)
+        let r = captureRect
+        return (Int((r.width * scale).rounded()) & ~1, Int((r.height * scale).rounded()) & ~1)
     }
 
     /// Normalized 0–1 against the captured rect, top-left origin. Points are scale-independent,
     /// so Retina needs no extra factor.
     public func normalize(_ gx: Double, _ gy: Double) -> Point {
-        Point(x: (gx - x) / width, y: (gy - y - topInset) / (height - topInset))
+        let r = captureRect
+        return Point(x: (gx - x - r.x) / r.width, y: (gy - y - r.y) / r.height)
     }
 
-    /// On this display at all, the excluded strip included.
+    /// Where a click can make a zoom: the recorded area, or anywhere on the display (the excluded menu-bar strip
+    /// included: those clicks are clamped to the top edge).
     public func contains(_ gx: Double, _ gy: Double) -> Bool {
-        (x...(x + width)).contains(gx) && (y...(y + height)).contains(gy)
+        let r = area ?? Rect(x: 0, y: 0, width: width, height: height)
+        return ((x + r.x)...(x + r.x + r.width)).contains(gx) && ((y + r.y)...(y + r.y + r.height)).contains(gy)
     }
 }
 
@@ -395,8 +413,8 @@ public struct InputLog: Sendable {
 
     public mutating func append(_ e: Raw) { events.append(e) }
 
-    /// Keeps only events inside [0, duration] of the session. Clicks off the display are dropped;
-    /// clicks in its excluded menu-bar strip are clamped to the top edge of the recording.
+    /// Keeps only events inside [0, duration] of the session. Clicks off the display (or outside a recorded area) are
+    /// dropped; clicks in its excluded menu-bar strip are clamped to the top edge of the recording.
     public func relativized(sessionStartHost: Double, duration: Double, display: DisplayBounds)
         -> (cursor: [CursorSample], clicks: [ClickEvent]) {
         var cursor: [CursorSample] = [], clicks: [ClickEvent] = []

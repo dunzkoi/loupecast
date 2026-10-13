@@ -11,11 +11,12 @@ only in the maintainer's checkout); the rules that matter are below.
 - `Sources/LoupecastCore`: pure logic, Foundation only (no AppKit/AVFoundation). `Project` (project.json, cut list,
   aspect), `AutoZoom` and `CameraPath` (camera(t)), `InputLog`, `Version`.
 - `Sources/LoupecastRender`: `Composer` (composition from the kept clips), `LoupecastCompositor` (custom
-  `AVVideoCompositing` with Core Image), `Exporter` (reader/writer pumps, H.264 + one stereo AAC track), `GIFExporter` (the same composition at
-  15 fps, long side 960 px, silent and looping).
+  `AVVideoCompositing` with Core Image), `Exporter` (reader/writer pumps, H.264 + one stereo AAC track),
+  `GIFExporter` (the same composition at 15 fps, long side 960 px, silent and looping).
 - `Sources/Loupecast`: the app. `main.swift` (AppDelegate, menu, quit handling, `Library`: recent recordings,
-  crash recovery, disk usage, `HotKey`), `Recorder` (SCStream → AVAssetWriter), `Editor` (EditorModel and views),
-  `Updater` (self-update), `Debug.swift` (verification hooks, DEBUG builds only).
+  crash recovery, disk usage, `HotKey`), `Recorder` (SCStream → AVAssetWriter), `AreaPicker` (the 영역 지정 녹화
+  overlay), `Editor` (EditorModel and views), `Updater` (self-update), `Debug.swift` (verification hooks, DEBUG
+  builds only).
 - `Resources`: app icon, chimes, `en.lproj`/`ko.lproj`. `build.sh` copies them into `Contents/Resources`.
 - `site/`: landing pages, Korean at `/loupecast/`, English at `/loupecast/en/`, shared `site.css`/`site.js`;
   deployed by `pages.yml` on pushes to `main` that touch `site/`.
@@ -100,7 +101,8 @@ swift build --build-tests && swift test   # Core ~0.1 s; Render 10-40 s, each ex
 - `release-please-config.json` has `"release-as": "0.8.0"` to force the release the `fsd:` commits stalled; delete it
   once v0.8.0 is out, or every later release PR proposes 0.8.0 again.
 - Releases use a fixed self-signed identity (since 0.3.1) and aren't notarized (README's `xattr` step).
-- Recording-path changes (start-failure cleanup, finishing a recording on quit, pause/resume dropping samples) were
+- Recording-path changes (start-failure cleanup, finishing a recording on quit, pause/resume dropping samples, area
+  recording's `sourceRect`) were
   verified only by reading the code and with synthetic movies here; they need a machine with the Screen Recording
   grant. A crash while paused recovers without the pause cut (recovery.json has no pauses).
 - Hour-long projects: each edit rebuilds the whole camera path (~5 ms) and redraws the timeline.

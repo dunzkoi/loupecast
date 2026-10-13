@@ -350,6 +350,38 @@ final class ZoomTests: XCTestCase {
         XCTAssertEqual(DisplayBounds(x: 0, y: 0, width: 1728, height: 1117).pixelSize(scale: 2).height, 2234)
     }
 
+    // MARK: area recording
+
+    /// A 1280 × 720 pt area on a 2× display left of the main one: the capture is that rect, events normalize against it,
+    /// clicks outside it make no zoom, and a click inside lands where the zoom looks.
+    func testAreaRecording() {
+        let d = DisplayBounds(x: -1728, y: 0, width: 1728, height: 1117, topInset: 32, area: Rect(x: 200, y: 150, width: 1280, height: 720))
+        let r = d.captureRect
+        XCTAssertEqual([r.x, r.y, r.width, r.height], [200, 150, 1280, 720], "the area, not the menu-bar crop")
+        XCTAssertEqual(d.pixelSize(scale: 2).width, 2560); XCTAssertEqual(d.pixelSize(scale: 2).height, 1440)
+        let odd = DisplayBounds(x: 0, y: 0, width: 1728, height: 1117, area: Rect(x: 0, y: 0, width: 640.5, height: 360.5)).pixelSize(scale: 2)
+        XCTAssertEqual([odd.width, odd.height], [1280, 720], "1281 → even")
+        let clipped = DisplayBounds(x: 0, y: 0, width: 1000, height: 800, area: Rect(x: 900, y: -50, width: 300, height: 200))
+        XCTAssertEqual(clipped.area, Rect(x: 900, y: 0, width: 100, height: 150), "kept inside the display")
+        XCTAssertNil(DisplayBounds(x: 0, y: 0, width: 100, height: 100, area: Rect(x: 200, y: 0, width: 10, height: 10)).area)
+
+        let inside = (x: -1728 + 200 + 1280 * 0.75, y: 150 + 720 * 0.25)      // a known point in the area
+        var log = InputLog()
+        for i in 0...600 { log.append(.init(host: 100 + Double(i) / 60, gx: inside.x, gy: inside.y, kind: .move)) }
+        log.append(.init(host: 103, gx: inside.x, gy: inside.y, kind: .click(.left)))
+        log.append(.init(host: 104, gx: -1728 + 100, gy: 100, kind: .click(.left)))      // on the display, left of the area
+        log.append(.init(host: 105, gx: -1728 + 300, gy: 10, kind: .click(.left)))       // in the menu bar, above the area
+        log.append(.init(host: 106.005, gx: -1728 + 300, gy: 900, kind: .move))          // cursor below the area: clamped
+        let e = log.relativized(sessionStartHost: 100, duration: 10, display: d)
+        XCTAssertEqual(e.clicks.count, 1, "clicks outside the area make no zoom")
+        XCTAssertEqual(e.clicks[0].x, 0.75, accuracy: 1e-12); XCTAssertEqual(e.clicks[0].y, 0.25, accuracy: 1e-12)
+        XCTAssertEqual(e.cursor.first { abs($0.t - 6.005) < 1e-6 }?.y, 1)
+        let seg = AutoZoom.segments(clicks: e.clicks, duration: 10)[0]
+        let cam = CameraPath(segments: [seg], cursor: e.cursor, trimIn: 0, trimOut: 10).camera(at: 3.3)
+        XCTAssertEqual(cam.scale, 2, accuracy: 1e-9)
+        XCTAssertLessThanOrEqual(abs(cam.center.x - 0.75), 0.5 / cam.scale); XCTAssertLessThanOrEqual(abs(cam.center.y - 0.25), 0.5 / cam.scale)
+    }
+
     func testNormalizationAgainstCroppedRect() {
         // built-in display below-right of the main one, 32 pt strip excluded
         let d = DisplayBounds(x: 629, y: -1117, width: 1728, height: 1117, topInset: 32)

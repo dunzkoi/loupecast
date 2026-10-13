@@ -27,12 +27,16 @@ final class ExportTests: XCTestCase {
 
     // MARK: synthetic project
 
-    static func makeProject() -> Project {
+    /// An 800 × 500 pt area of a 2× display (area recording): the movie is that rect.
+    static let areaDisplay = DisplayBounds(x: 300, y: -900, width: 1200, height: 900, area: Rect(x: 150, y: 220, width: 800, height: 500))
+
+    static func makeProject(display d: DisplayBounds = display) -> Project {
         let host0 = CMClockGetTime(CMClockGetHostTimeClock()).seconds   // same clock SCStream stamps with
         var log = InputLog()
         // a secondary 2× display whose 20 pt menu bar is left out: the movie is the 800×500 pt below it
-        let d = Self.display
-        func g(_ p: Point) -> (Double, Double) { (d.x + p.x * d.width, d.y + d.topInset + p.y * (d.height - d.topInset)) }
+        let cap = d.captureRect
+        func g(_ p: Point) -> (Double, Double) { (d.x + cap.x + p.x * cap.width, d.y + cap.y + p.y * cap.height) }
+        if d.area != nil { log.append(.init(host: host0 + 5, gx: d.x + 20, gy: d.y + 20, kind: .click(.left))) }   // outside the area
         for i in stride(from: -30, through: 630, by: 1) {                 // 60 Hz, starts before the session
             let t = Double(i) / 60, (x, y) = g(Self.target(max(0, t)))
             log.append(.init(host: host0 + t, gx: x, gy: y, kind: .move))
@@ -83,6 +87,12 @@ final class ExportTests: XCTestCase {
     func testPortraitExport() async throws {
         try XCTSkipIf(ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] != nil, "no video hardware on CI VMs")
         try await withDeadline(Self.deadline) { try await Self.exportMatchesTrim(.portrait) }
+    }
+
+    /// Area recording: the click inside the area zooms where camera(t) says, the click outside makes no zoom.
+    func testAreaRecordingExport() async throws {
+        try XCTSkipIf(ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] != nil, "no video hardware on CI VMs")
+        try await withDeadline(Self.deadline) { try await Self.exportMatchesTrim(display: Self.areaDisplay) }
     }
 
     /// A zoom set to 300 %: the export magnifies three times, with the square where camera(t) puts it.
@@ -171,10 +181,11 @@ final class ExportTests: XCTestCase {
     }
 
     static func exportMatchesTrim(_ aspect: AspectRatio = .landscape, zoomScale: Double? = nil, style: StylePreset = .pastel,
-                                  fill: Bool = false) async throws {
+                                  fill: Bool = false, display: DisplayBounds = display) async throws {
         let mov = Self.outDir.appendingPathComponent("synthetic.mov")
         try await Self.writeSyntheticMovie(to: mov)
-        var project = makeProject()
+        var project = makeProject(display: display)
+        XCTAssertEqual(display.pixelSize(scale: 2).width, Int(size.width)); XCTAssertEqual(display.pixelSize(scale: 2).height, Int(size.height))
         project.aspect = aspect
         XCTAssertEqual(project.zooms.count, 1, "two nearby clicks → one zoom")
         if let zoomScale { project.setZoomScale(id: project.zooms[0].id, zoomScale) }
@@ -182,7 +193,7 @@ final class ExportTests: XCTestCase {
         project.fill = fill
         try project.save(to: Self.outDir.appendingPathComponent("project.json"))
 
-        let out = Self.outDir.appendingPathComponent("export-\(aspect.pixels.width)x\(aspect.pixels.height)\(zoomScale.map { "-zoom\($0)" } ?? "")-\(style.rawValue)\(fill ? "-fill" : "").mp4")
+        let out = Self.outDir.appendingPathComponent("export-\(aspect.pixels.width)x\(aspect.pixels.height)\(zoomScale.map { "-zoom\($0)" } ?? "")-\(style.rawValue)\(fill ? "-fill" : "")\(display.area == nil ? "" : "-area").mp4")
         let start = Date()
         try await Exporter.export(project: project, videoURL: mov, to: out)
         print("export took \(Date().timeIntervalSince(start)) s → \(out.path)")
