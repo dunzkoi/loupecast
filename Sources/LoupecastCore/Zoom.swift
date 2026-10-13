@@ -173,7 +173,7 @@ public struct CameraPath: Sendable {
             for (clip, c0) in zip(clips, starts) {
                 let a = Swift.max(seg.start, clip.start), b = Swift.min(seg.end, clip.end)
                 guard b > a else { continue }
-                let piece = (start: c0 + a - clip.start, end: c0 + b - clip.start)
+                let piece = (start: c0 + (a - clip.start) / clip.speed, end: c0 + (b - clip.start) / clip.speed)
                 if let last = pieces.last, abs(last.end - piece.start) < 1e-9 { pieces[pieces.count - 1].end = piece.end }
                 else { pieces.append(piece) }
             }
@@ -184,8 +184,8 @@ public struct CameraPath: Sendable {
         // ponytail: a point per 1/240 s of the whole edit (~14 MB, tens of ms for an hour), built only while filling
         var runs: [(start: Double, end: Double)] = []
         for (i, (clip, c0)) in zip(clips, starts).enumerated() {
-            if i > 0, abs(clips[i - 1].end - clip.start) < 1e-9 { runs[runs.count - 1].end = c0 + clip.length }
-            else { runs.append((c0, c0 + clip.length)) }
+            if i > 0, abs(clips[i - 1].end - clip.start) < 1e-9 { runs[runs.count - 1].end = c0 + clip.playLength }
+            else { runs.append((c0, c0 + clip.playLength)) }
         }
         base = runs.map { Track(start: $0.start, end: $0.end, scale: 1, points: Self.follow($0, from: nil, cursor: cursor, clips: clips)) }
     }

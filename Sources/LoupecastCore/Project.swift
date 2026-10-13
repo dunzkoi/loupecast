@@ -120,10 +120,18 @@ public struct Project: Codable, Sendable, Equatable {
     public mutating func split(at t: Double) -> UUID? {
         guard let i = clips.firstIndex(where: { t - $0.start > 2 * Self.frameDuration - 1e-9 && $0.end - t > 2 * Self.frameDuration - 1e-9 })
         else { return nil }
-        let right = ClipRange(start: t, end: clips[i].end)
+        let right = ClipRange(start: t, end: clips[i].end, speed: clips[i].speed)
         clips[i].end = t
         clips.insert(right, at: i + 1)
         return right.id
+    }
+
+    /// The speeds the editor offers.
+    public static let clipSpeeds = [1.0, 2, 4]
+
+    /// Plays the clip 2 or 4 times as fast (1 is normal speed).
+    public mutating func setClipSpeed(id: UUID, _ speed: Double) {
+        if let i = clips.firstIndex(where: { $0.id == id }) { clips[i].speed = ClipRange.speeds.clamp(speed) }
     }
 
     /// The last clip stays: an empty cut list has nothing to export.
@@ -203,24 +211,40 @@ public enum StylePreset: String, Codable, CaseIterable, Sendable {
 
 // MARK: - Cut list: composition time ↔ recording time
 
-/// Kept material in recording time. The composition plays the clips back to back.
+/// Kept material in recording time. The composition plays the clips back to back, each at its speed.
 public struct ClipRange: Codable, Hashable, Identifiable, Sendable {
     public var id: UUID
     public var start: Double
     public var end: Double
-    public init(id: UUID = UUID(), start: Double, end: Double) { self.id = id; self.start = start; self.end = end }
+    /// 1, 2 or 4: how many seconds of recording one second of the composition plays. 1 in older files.
+    public var speed: Double
+    public static let speeds = 1.0...4.0
+    public init(id: UUID = UUID(), start: Double, end: Double, speed: Double = 1) {
+        self.id = id; self.start = start; self.end = end; self.speed = speed
+    }
+    /// Recording time the clip covers.
     public var length: Double { end - start }
+    /// Composition time it plays for.
+    public var playLength: Double { length / speed }
+
+    private enum CodingKeys: String, CodingKey { case id, start, end, speed }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(id: try c.decode(UUID.self, forKey: .id), start: try c.decode(Double.self, forKey: .start),
+                  end: try c.decode(Double.self, forKey: .end), speed: Self.speeds.clamp(try c.decodeIfPresent(Double.self, forKey: .speed) ?? 1))
+    }
 }
 
 /// The one mapping used by preview, timeline and export. Clips are half-open [start, end), so a cut
 /// point in composition time shows the next clip's first frame.
 public extension Array where Element == ClipRange {
-    var totalLength: Double { reduce(0) { $0 + $1.length } }
+    var totalLength: Double { reduce(0) { $0 + $1.playLength } }
 
     /// Composition time at which each clip begins.
     var compositionStarts: [Double] {
         var t = 0.0
-        return map { c in defer { t += c.length }; return t }
+        return map { c in defer { t += c.playLength }; return t }
     }
 
     /// Recording time shown at composition time `c` (clamped to the kept material). Called per camera-path
@@ -229,8 +253,8 @@ public extension Array where Element == ClipRange {
         guard let last else { return c }
         var s = 0.0
         for clip in self {
-            if c < s + clip.length { return clip.start + Swift.max(0, c - s) }
-            s += clip.length
+            if c < s + clip.playLength { return clip.start + Swift.max(0, c - s) * clip.speed }
+            s += clip.playLength
         }
         return last.end
     }
@@ -239,8 +263,8 @@ public extension Array where Element == ClipRange {
     func compositionTime(_ r: Double) -> Double {
         var s = 0.0
         for clip in self {
-            if r < clip.end { return s + Swift.max(0, r - clip.start) }
-            s += clip.length
+            if r < clip.end { return s + Swift.max(0, r - clip.start) / clip.speed }
+            s += clip.playLength
         }
         return totalLength
     }
@@ -259,10 +283,10 @@ public extension Array where Element == ClipRange {
         zip(zip(self, dropFirst()), compositionStarts.dropFirst()).compactMap { pair, s in pair.0.end < pair.1.start - 1e-9 ? s : nil }
     }
 
-    /// Material actually kept: split points (adjacent clips) joined.
+    /// Material actually kept: split points (adjacent clips at the same speed) joined.
     var keptRanges: [ClipRange] {
         reduce(into: []) { out, c in
-            if let l = out.last, abs(l.end - c.start) < 1e-9 { out[out.count - 1].end = c.end } else { out.append(c) }
+            if let l = out.last, abs(l.end - c.start) < 1e-9, l.speed == c.speed { out[out.count - 1].end = c.end } else { out.append(c) }
         }
     }
 

@@ -114,6 +114,43 @@ final class ClipTests: XCTestCase {
         XCTAssertEqual(clips.playStart(from: 3), 3)
     }
 
+    // MARK: speed
+
+    /// [1,3] at 1×, [3,7] at 2×, [8,9] at 4×: 2 + 2 + 0.25 s of composition.
+    func testSpeedMappingRoundTrip() throws {
+        let clips = [ClipRange(start: 1, end: 3), ClipRange(start: 3, end: 7, speed: 2), ClipRange(start: 8, end: 9, speed: 4)]
+        XCTAssertEqual(clips.totalLength, 4.25, accuracy: 1e-12)
+        XCTAssertEqual(clips.compositionStarts, [0, 2, 4], accuracy: 1e-12)
+        XCTAssertEqual(clips.recordingTime(3), 5, accuracy: 1e-12, "one second into the 2× clip is two seconds of recording")
+        XCTAssertEqual(clips.recordingTime(4.125), 8.5, accuracy: 1e-12)
+        XCTAssertEqual(clips.compositionTime(6), 3.5, accuracy: 1e-12)
+        XCTAssertEqual(clips.compositionTime(7.5), 4, accuracy: 1e-12, "removed material: where the next clip begins")
+        XCTAssertEqual(clips.cutTimes, [4], accuracy: 1e-12)              // a speed change between adjacent clips is no cut
+        XCTAssertEqual(clips.keptRanges.count, 3, "adjacent clips at different speeds stay apart")
+        XCTAssertEqual([ClipRange(start: 0, end: 2, speed: 2), ClipRange(start: 2, end: 4, speed: 2)].keptRanges.count, 1)
+        for i in 0..<Int(clips.totalLength * 600) {
+            let c = Double(i) / 600
+            XCTAssertEqual(clips.compositionTime(clips.recordingTime(c)), c, accuracy: 1e-9, "round trip at composition \(c)")
+        }
+        for r in stride(from: 1.0, to: 9, by: 0.01) where clips.index(containing: r) != nil {
+            XCTAssertEqual(clips.recordingTime(clips.compositionTime(r)), r, accuracy: 1e-9, "round trip at recording \(r)")
+        }
+        // a split keeps the speed on both sides; older files play at 1×; speeds stay within 1…4
+        var p = project()
+        p.setClipSpeed(id: p.clips[0].id, 4)
+        let right = p.split(at: 5)
+        XCTAssertEqual(p.clips.map(\.speed), [4, 4]); XCTAssertEqual(p.clips[1].id, right)
+        XCTAssertEqual(p.clips.totalLength, 9.7 / 4, accuracy: 1e-12)
+        p.setClipSpeed(id: p.clips[0].id, 9)
+        XCTAssertEqual(p.clips[0].speed, 4)
+        let old = #"{"id":"824B7703-A817-44F2-B7B0-4CD84494E318","start":1,"end":2}"#
+        XCTAssertEqual(try JSONDecoder().decode(ClipRange.self, from: Data(old.utf8)).speed, 1)
+        // zoom ramps are composition time: inside a 2× clip, 0.6 s of composition is 1.2 s of recording
+        let path = CameraPath(segments: [ZoomSegment(start: 3.5, end: 6.5, focus: .center)], cursor: [], clips: [ClipRange(start: 0, end: 10, speed: 2)])
+        XCTAssertEqual(path.camera(at: 4.1).scale, 1.5, accuracy: 1e-9, "halfway in, 0.3 s of composition after the start")
+        XCTAssertEqual(path.camera(at: 4.7).scale, 2, accuracy: 1e-9)
+    }
+
     // MARK: migration
 
     func testMigrationFromV1Trim() throws {

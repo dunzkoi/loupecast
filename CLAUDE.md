@@ -57,7 +57,8 @@ swift build --build-tests && swift test   # Core ~0.1 s; Render 10-40 s, each ex
   through `Bundle.main` (`NSSound(named:)`, `Localizable.strings`).
 - Preview and export use the same `Composer` video composition and `CameraPath`; `camera(t)` is a pure function.
   Never bake zoom into an intermediate render. `[ClipRange].recordingTime/compositionTime` is the one mapping
-  between composition and recording time (preview, timeline, export).
+  between composition and recording time (preview, timeline, export); a clip's `speed` (1, 2, 4) divides its
+  composition length (`playLength`), and `Composer.make` squeezes it with `scaleTimeRange` (pitch kept).
 - project.json stores recording-relative seconds only, no host time or wall clock. New fields decode with
   `decodeIfPresent` and a default, so older files load and older apps ignore them; bump
   `Project.currentVersion` only for incompatible changes (2 = cut list).

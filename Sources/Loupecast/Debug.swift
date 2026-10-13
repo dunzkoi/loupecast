@@ -26,6 +26,8 @@
 //   LOUPECAST_MIC_VOLUME=<0…2>       move the microphone slider there (three steps, one undo step), print the preview's
 //                                 audio mix; LOUPECAST_VOLUME_POPOVER=<png> clicks the speaker button (prints whether the
 //                                 popover opened) and saves its controls drawn in a plain window
+//   LOUPECAST_SPEED=2|4               play the first clip that fast through the editor (one undo step), print the preview's
+//                                 length; LOUPECAST_SPEED_UNDO=1 undoes it again
 //   LOUPECAST_FILL=1                  turn on 화면 채우기 through the editor (one undo step) before the snapshot
 //   LOUPECAST_STYLE=<preset>          pick that background (pastel, dark, light, graphite, blue, plain) through the editor
 //                                 (one undo step) before the snapshot
@@ -185,6 +187,16 @@ enum DebugHooks {
             try? await Task.sleep(for: .seconds(0.5))
             save(w.contentView!, to: URL(fileURLWithPath: out))
             w.close()
+        }
+        if let speed = env["LOUPECAST_SPEED"].flatMap(Double.init), let clip = m.project.clips.first {
+            m.edit("Speed") { $0.setClipSpeed(id: clip.id, speed) }
+            try? await Task.sleep(for: .seconds(0.5))
+            print("LOUPECAST: speed \(m.project.clips[0].speed), total \(timecode(m.total)), preview item \(timecode(m.player.currentItem?.duration.seconds ?? -1)), undo \(m.undo.undoActionName)")
+            if env["LOUPECAST_SPEED_UNDO"] != nil {
+                m.undoEdit()
+                try? await Task.sleep(for: .seconds(0.5))
+                print("LOUPECAST: speed after undo \(m.project.clips[0].speed), preview item \(timecode(m.player.currentItem?.duration.seconds ?? -1))")
+            }
         }
         if env["LOUPECAST_FILL"] != nil {
             m.edit("Fill Frame") { $0.fill = true }

@@ -91,6 +91,8 @@
 "Pause (Space)" = "일시정지 (스페이스)";
 "Play" = "재생";
 "Play (Space)" = "재생 (스페이스)";
+"Play the selected clip faster" = "선택한 클립을 빠르게 재생";
+"Plays at %lld× speed" = "%lld배속 재생";
 "Quit" = "종료";
 "Quit Loupecast" = "Loupecast 종료";
 "Reading failed" = "읽기 실패";
@@ -108,6 +110,7 @@
 "Set Start" = "시작 지점";
 "Shortcut unavailable: %@" = "단축키 사용 불가: %@";
 "Show in Finder" = "Finder에서 보기";
+"Speed" = "속도";
 "Split" = "자르기";
 "Sponsor…" = "후원하기…";
 "Start Recording" = "녹화 시작";

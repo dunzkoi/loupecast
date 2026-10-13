@@ -63,6 +63,7 @@ public enum Exporter {
             ])
             o.alwaysCopiesSampleData = true      // the cut fades are written into these buffers
             o.audioMix = Composer.audioMix(edit.asset, project: project, micTracks: edit.micTracks, fades: false)
+            o.audioTimePitchAlgorithm = Composer.pitchAlgorithm
             reader.add(o)
             var layout = AudioChannelLayout()
             layout.mChannelLayoutTag = kAudioChannelLayoutTag_Stereo

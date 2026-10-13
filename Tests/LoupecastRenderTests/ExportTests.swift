@@ -357,6 +357,49 @@ final class ExportTests: XCTestCase {
         }
     }
 
+    // MARK: speed
+
+    /// [1,3] at 1×, [3,7] at 2×, [8,9] at 4×: 4.25 s, and the burned-in timecode runs at each clip's speed.
+    func testSpeedExport() async throws {
+        try XCTSkipIf(ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] != nil, "no video hardware on CI VMs")
+        try await withDeadline(Self.deadline) { try await Self.speedExport() }
+    }
+
+    static func speedExport() async throws {
+        let mov = outDir.appendingPathComponent("synthetic-speed.mov")
+        try await writeSyntheticMovie(to: mov, staticScreen: false)
+        var project = makeProject()
+        project.clips = [ClipRange(start: 1, end: 3), ClipRange(start: 3, end: 7, speed: 2), ClipRange(start: 8, end: 9, speed: 4)]
+        let out = outDir.appendingPathComponent("export-speed.mp4")
+        try await Exporter.export(project: project, videoURL: mov, to: out)
+        let asset = AVURLAsset(url: out)
+        let duration = try await asset.load(.duration).seconds
+        XCTAssertEqual(duration, project.clips.totalLength, accuracy: 1.0 / 60, "computed \(project.clips.totalLength), got \(duration)")
+        let videoTracks = try await asset.loadTracks(withMediaType: .video)
+        let v = try XCTUnwrap(videoTracks.first)
+        let reader = try AVAssetReader(asset: asset)
+        let o = AVAssetReaderTrackOutput(track: v, outputSettings: nil)
+        reader.add(o)
+        XCTAssertTrue(reader.startReading())
+        var frames = 0
+        while let b = o.copyNextSampleBuffer() { frames += CMSampleBufferGetNumSamples(b) }
+        XCTAssertEqual(Double(frames), project.clips.totalLength * 60, accuracy: 1, "4.25 s × 60 fps")
+        for (c, expected) in [(1.0, "2.00"), (3.0, "5.00"), (4.15, "8.60")] {   // on frame times: 4.15 s is frame 249
+            let text = try await timecode(in: asset, at: c)
+            print("speed export: composition \(c) s reads \(text ?? "nothing")")
+            XCTAssertEqual(text, expected, "composition \(c) s should show recording \(expected) s")
+        }
+        let audio = try await asset.loadTracks(withMediaType: .audio)
+        let arange = try await XCTUnwrap(audio.first).load(.timeRange)
+        XCTAssertEqual(arange.duration.seconds, duration, accuracy: 0.05, "sound sped up with the picture")
+        // the 1 kHz tone stays 1 kHz inside the 2× clip (pitch kept): ~2000 sign changes a second, not ~4000
+        let pcm = try await monoSamples(asset)
+        let s = pcm[48_000 * 5 / 2..<48_000 * 7 / 2]
+        let crossings = zip(s, s.dropFirst()).filter { ($0 < 0) != ($1 < 0) }.count
+        print("speed export: \(crossings) zero crossings in one second of the 2× clip")
+        XCTAssertEqual(Double(crossings), 2000, accuracy: 200)
+    }
+
     // MARK: cancel and file names
 
     /// Cancelled at 20 %: the partial MP4 that existed then is gone and the export throws CancellationError.

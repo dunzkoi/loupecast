@@ -194,6 +194,8 @@ public enum Composer {
         CGSize(width: aspect.pixels.width, height: aspect.pixels.height)
     }
     public static let frameDuration = CMTime(value: 1, timescale: 60)
+    /// Sped-up clips keep the voice's pitch; preview and export use the same algorithm.
+    public static let pitchAlgorithm = AVAudioTimePitchAlgorithm.spectral
 
     public static func time(_ s: Double) -> CMTime { CMTime(seconds: s, preferredTimescale: 60_000) }
 
@@ -218,7 +220,10 @@ public enum Composer {
                 guard r.duration > .zero else { continue }
                 try dst.insertTimeRange(r, of: src, at: at + (r.start - range.start))
             }
-            at = at + range.duration
+            // a faster clip: every track's piece squeezed, sound kept at its pitch (pitchAlgorithm)
+            let played = clip.speed == 1 ? range.duration : CMTimeMultiplyByFloat64(range.duration, multiplier: 1 / clip.speed)
+            if clip.speed != 1 { comp.scaleTimeRange(CMTimeRange(start: at, duration: range.duration), toDuration: played) }
+            at = at + played
         }
         for (_, _, track) in tracks.dropFirst() where track.segments.isEmpty { comp.removeTrack(track) }
         let vc = videoComposition(project: project, trackID: video.trackID, duration: comp.duration)

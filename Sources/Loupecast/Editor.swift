@@ -102,6 +102,7 @@ final class EditorModel {
             let item = AVPlayerItem(asset: e.asset)
             item.videoComposition = e.videoComposition
             item.audioMix = e.audioMix
+            item.audioTimePitchAlgorithm = Composer.pitchAlgorithm
             let resume = player.rate != 0
             edit = e
             built = project.clips
@@ -270,7 +271,7 @@ final class EditorModel {
     }
 
     private func applyToPlayer(old: Project) {
-        func material(_ c: [ClipRange]) -> [[Double]] { c.keptRanges.map { [$0.start, $0.end] } }
+        func material(_ c: [ClipRange]) -> [[Double]] { c.keptRanges.map { [$0.start, $0.end, $0.speed] } }
         var volumesOnly = project
         volumesOnly.systemVolume = old.systemVolume; volumesOnly.micVolume = old.micVolume
         // same material: every other edit (zooms, clip ids, aspect, style…) is a new video composition
@@ -526,7 +527,7 @@ struct ControlBar: View {
             Text("\(Text(timecode(model.position)))\(Text(" / \(timecode(model.total))").foregroundStyle(.secondary))")
                 .font(.callout.monospacedDigit())
                 .fixedSize()
-            let removed = model.project.duration - model.total
+            let removed = model.project.duration - model.project.clips.reduce(0) { $0 + $1.length }   // recording time: a faster clip cuts nothing
             if removed > 0.005 {
                 Label {
                     Text("Cut \(timecode(removed))")
@@ -599,7 +600,17 @@ struct SelectionBar: View {
             switch model.selection {
             case .zoom:
                 if let seg = model.selectedZoom { zoomControls(seg) }
-            case .clip:
+            case .clip(let id):
+                if let clip = model.project.clips.first(where: { $0.id == id }) {
+                    // here "2×" is meant: it is playback speed
+                    Picker("Speed", selection: Binding(get: { clip.speed }, set: { s in model.edit("Speed") { $0.setClipSpeed(id: id, s) } })) {
+                        ForEach(Project.clipSpeeds, id: \.self) { Text(verbatim: "\(Int($0))×").tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .fixedSize()
+                    .focusable(false)
+                    .help("Play the selected clip faster")
+                }
                 hint("D splits at the playhead, Delete removes the selected clip.")
             case .none:
                 hint("Select a zoom or a clip to change it.")
@@ -819,7 +830,7 @@ struct TimelineView: View {
                 .accessibilityLabel("Timeline")
 
                 ForEach(clips) { clip in
-                    ClipHandles(selected: model.selection == .clip(clip.id), width: x(clip.end) - x(clip.start), height: H,
+                    ClipHandles(selected: model.selection == .clip(clip.id), speed: clip.speed, width: x(clip.end) - x(clip.start), height: H,
                                 drag: { edge, px in model.dragClip(clip.id, edge: edge, to: t(px)) },
                                 ended: { model.endDrag("Trim") })
                         .offset(x: x(clip.start))
@@ -874,6 +885,7 @@ struct ClipHandles: View {
     /// Resets on end and on cancel alike, so a drag can never stay open.
     @GestureState private var dragging = false
     let selected: Bool
+    let speed: Double
     let width: CGFloat
     let height: CGFloat
     let drag: (HorizontalEdge, CGFloat) -> Void
@@ -887,6 +899,17 @@ struct ClipHandles: View {
                 .allowsHitTesting(false)
             grip(.leading, width: g)
             grip(.trailing, width: g).offset(x: width - g)
+            if speed != 1, width > 2 * g + 24 {
+                Text(verbatim: "\(Int(speed))×")
+                    .font(.caption2.weight(.bold).monospacedDigit())
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 5)
+                    .background(Color.accentColor, in: Capsule())
+                    .frame(width: width, height: height, alignment: .top)
+                    .padding(.top, 3)
+                    .allowsHitTesting(false)
+                    .accessibilityLabel(String(localized: "Plays at \(Int(speed))× speed"))
+            }
         }
         .frame(width: max(0, width), height: height, alignment: .leading)
         .onChange(of: dragging) { _, now in if !now { ended() } }
