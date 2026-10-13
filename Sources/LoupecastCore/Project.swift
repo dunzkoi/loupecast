@@ -18,7 +18,9 @@ public struct Project: Codable, Sendable, Equatable {
     public var pointPixelScale: Double
     public var cursor: [CursorSample]
     public var clicks: [ClickEvent]
-    public var keys: [KeyEvent]
+    /// Always empty: key presses are not recorded. Written only because apps up to 0.7 fail to open a file without it;
+    /// the values in older files are never read.
+    private let keys: [Int] = []
     /// Kept material in recording time: sorted, non-overlapping, never empty.
     public var clips: [ClipRange]
     public var zooms: [ZoomSegment]
@@ -27,11 +29,11 @@ public struct Project: Codable, Sendable, Equatable {
 
     public init(name: String, videoFile: String = "recording.mov", duration: Double,
                 pixelWidth: Int, pixelHeight: Int, pointPixelScale: Double,
-                cursor: [CursorSample], clicks: [ClickEvent], keys: [KeyEvent]) {
+                cursor: [CursorSample], clicks: [ClickEvent]) {
         version = Self.currentVersion
         self.name = name; self.videoFile = videoFile; self.duration = duration
         self.pixelWidth = pixelWidth; self.pixelHeight = pixelHeight; self.pointPixelScale = pointPixelScale
-        self.cursor = cursor; self.clicks = clicks; self.keys = keys
+        self.cursor = cursor; self.clicks = clicks
         clips = [ClipRange(start: 0, end: max(0, duration - Self.stopTrim))]
         zooms = AutoZoom.segments(clicks: clicks, duration: duration)
     }
@@ -52,7 +54,6 @@ public struct Project: Codable, Sendable, Equatable {
         pointPixelScale = try c.decode(Double.self, forKey: .pointPixelScale)
         cursor = try c.decode([CursorSample].self, forKey: .cursor)
         clicks = try c.decode([ClickEvent].self, forKey: .clicks)
-        keys = try c.decode([KeyEvent].self, forKey: .keys)
         zooms = try c.decode([ZoomSegment].self, forKey: .zooms)
         aspect = try c.decodeIfPresent(AspectRatio.self, forKey: .aspect) ?? .landscape
         if let clips = try c.decodeIfPresent([ClipRange].self, forKey: .clips) {
@@ -303,7 +304,7 @@ public struct DisplayBounds: Sendable, Equatable {
 /// global CG coordinates. Converted once, at stop, into project events.
 public struct InputLog: Sendable {
     public struct Raw: Sendable {
-        public enum Kind: Sendable { case move, click(ClickEvent.Button), key(UInt16) }
+        public enum Kind: Sendable { case move, click(ClickEvent.Button) }
         public var host: Double
         public var gx: Double
         public var gy: Double
@@ -320,8 +321,8 @@ public struct InputLog: Sendable {
     /// Keeps only events inside [0, duration] of the session. Clicks off the display are dropped;
     /// clicks in its excluded menu-bar strip are clamped to the top edge of the recording.
     public func relativized(sessionStartHost: Double, duration: Double, display: DisplayBounds)
-        -> (cursor: [CursorSample], clicks: [ClickEvent], keys: [KeyEvent]) {
-        var cursor: [CursorSample] = [], clicks: [ClickEvent] = [], keys: [KeyEvent] = []
+        -> (cursor: [CursorSample], clicks: [ClickEvent]) {
+        var cursor: [CursorSample] = [], clicks: [ClickEvent] = []
         for e in events.sorted(by: { $0.host < $1.host }) {
             let t = e.host - sessionStartHost
             guard t >= 0, t <= duration else { continue }
@@ -331,11 +332,9 @@ public struct InputLog: Sendable {
                 cursor.append(CursorSample(t: t, x: clamp01(p.x), y: clamp01(p.y)))
             case .click(let b):
                 if display.contains(e.gx, e.gy) { clicks.append(ClickEvent(t: t, x: clamp01(p.x), y: clamp01(p.y), button: b)) }
-            case .key(let code):
-                keys.append(KeyEvent(t: t, keyCode: code))
             }
         }
-        return (cursor, clicks, keys)
+        return (cursor, clicks)
     }
 }
 

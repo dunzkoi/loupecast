@@ -119,7 +119,7 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
             writer.add(i)
         }
         guard writer.startWriting() else { throw writer.error ?? LoupecastError("Couldn’t create the recording file.") }
-        try Project(name: Self.name(Date()), duration: 0, pixelWidth: w, pixelHeight: h, pointPixelScale: scale, cursor: [], clicks: [], keys: [])
+        try Project(name: Self.name(Date()), duration: 0, pixelWidth: w, pixelHeight: h, pointPixelScale: scale, cursor: [], clicks: [])
             .save(to: dir.appendingPathComponent(Self.recoveryFile))
 
         super.init()
@@ -170,11 +170,9 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
             let kind: InputLog.Raw.Kind = .click(e.type == .rightMouseDown ? .right : .left)
             MainActor.assumeIsolated { self?.log.append(.init(host: Self.hostTime(e.timestamp), gx: p.x, gy: p.y, kind: kind)) }
         }
-        let keys = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] e in
-            let code = e.keyCode, host = Self.hostTime(e.timestamp)
-            MainActor.assumeIsolated { self?.log.append(.init(host: host, gx: 0, gy: 0, kind: .key(code))) }
-        }
-        monitors = [clicks, keys].compactMap { $0 }
+        // No key monitor: typed keys (passwords included) never go into project.json. A future shortcut overlay
+        // should record only combinations with ⌘, ⌃ or ⌥ held, never plain typing.
+        monitors = [clicks].compactMap { $0 }
         let timer = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] _ in
             guard let p = CGEvent(source: nil)?.location else { return }
             let host = ProcessInfo.processInfo.systemUptime
@@ -231,7 +229,7 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
         let events = log.relativized(sessionStartHost: start.seconds, duration: duration, display: display)
         let project = Project(name: Self.name(Date()), duration: duration,
                               pixelWidth: pixelSize.0, pixelHeight: pixelSize.1, pointPixelScale: scale,
-                              cursor: events.cursor, clicks: events.clicks, keys: events.keys)
+                              cursor: events.cursor, clicks: events.clicks)
         try project.save(to: dir.appendingPathComponent(Project.fileName))
         return project
     }

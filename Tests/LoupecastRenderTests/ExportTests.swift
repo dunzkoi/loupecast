@@ -42,11 +42,10 @@ final class ExportTests: XCTestCase {
         }
         log.append(.init(host: host0 - 0.5, gx: -1500, gy: 10, kind: .click(.left)))   // before session start
         log.append(.init(host: host0 + 12, gx: -1500, gy: 10, kind: .click(.left)))    // after stop
-        log.append(.init(host: host0 + 1, gx: 0, gy: 0, kind: .key(0)))
         let r = log.relativized(sessionStartHost: host0, duration: Self.duration, display: d)
         var p = Project(name: "Synthetic", duration: Self.duration, pixelWidth: Int(Self.size.width),
                         pixelHeight: Int(Self.size.height), pointPixelScale: 2,
-                        cursor: r.cursor, clicks: r.clicks, keys: r.keys)
+                        cursor: r.cursor, clicks: r.clicks)
         p.setTrimIn(2.0)
         p.setTrimOut(7.5)
         return p
@@ -61,7 +60,7 @@ final class ExportTests: XCTestCase {
         XCTAssertEqual(p.clicks.map(\.y), [3.0, 3.5].map { Self.target($0).y }, accuracy: 1e-9)
         XCTAssertEqual(Self.display.pixelSize(scale: 2).width, Int(Self.size.width))
         XCTAssertEqual(Self.display.pixelSize(scale: 2).height, Int(Self.size.height))
-        for t in p.clicks.map(\.t) + p.cursor.map(\.t) + p.keys.map(\.t) {
+        for t in p.clicks.map(\.t) + p.cursor.map(\.t) {
             XCTAssertGreaterThanOrEqual(t, 0); XCTAssertLessThanOrEqual(t, p.duration)
         }
         // stored project file has only relative seconds: no value anywhere near host uptime

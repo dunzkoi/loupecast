@@ -28,12 +28,6 @@ public struct ClickEvent: Codable, Hashable, Sendable {
     }
 }
 
-public struct KeyEvent: Codable, Hashable, Sendable {
-    public var t: Double
-    public var keyCode: UInt16
-    public init(t: Double, keyCode: UInt16) { self.t = t; self.keyCode = keyCode }
-}
-
 public struct ZoomSegment: Codable, Hashable, Identifiable, Sendable {
     public var id: UUID
     public var start: Double

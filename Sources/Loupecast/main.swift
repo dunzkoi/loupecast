@@ -647,7 +647,7 @@ enum Library {
         let base = try? Project.load(from: dir.appendingPathComponent(Recorder.recoveryFile))
         return Project(name: String(localized: "\(base?.name ?? Recorder.name(Date())) (Recovered)"), duration: range.end.seconds,
                        pixelWidth: base?.pixelWidth ?? Int(size.width), pixelHeight: base?.pixelHeight ?? Int(size.height),
-                       pointPixelScale: base?.pointPixelScale ?? 1, cursor: [], clicks: [], keys: [])
+                       pointPixelScale: base?.pointPixelScale ?? 1, cursor: [], clicks: [])
     }
 
     /// A debug run on LOUPECAST_RECORDINGS_DIR moves to "<that dir>-trash" instead, so tests never fill the user's Trash.

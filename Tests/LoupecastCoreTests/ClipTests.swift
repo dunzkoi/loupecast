@@ -5,7 +5,7 @@ import XCTest
 final class ClipTests: XCTestCase {
     func project(_ duration: Double = 10) -> Project {
         Project(name: "t", duration: duration, pixelWidth: 100, pixelHeight: 50, pointPixelScale: 2,
-                cursor: [], clicks: [], keys: [])
+                cursor: [], clicks: [])
     }
 
     func assertWellFormed(_ p: Project, file: StaticString = #filePath, line: UInt = #line) {
@@ -224,6 +224,27 @@ final class ClipTests: XCTestCase {
         }
         XCTAssertEqual(doc.project.zooms.count, 1)
         XCTAssertFalse(undo.canRedo)
+    }
+
+    // MARK: key presses (never stored)
+
+    /// A file that still lists key presses opens, a file without the field opens, and saving writes an empty list:
+    /// apps up to 0.7 refuse a file without "keys".
+    func testKeyPressesAreNeitherReadNorWritten() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("keys-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        var json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(project())) as! [String: Any]
+        XCTAssertEqual((json["keys"] as? [Any])?.count, 0, "saved as an empty list")
+        json["keys"] = [["t": 1.5, "keyCode": 12], ["t": 1.6, "keyCode": 13]]
+        try JSONSerialization.data(withJSONObject: json).write(to: url)
+        let withKeys = try Project.load(from: url)
+        try withKeys.save(to: url)
+        let saved = try String(contentsOf: url, encoding: .utf8)
+        XCTAssertTrue(saved.contains("\"keys\":[]"), "the old key codes are dropped on save: \(saved.prefix(200))")
+        XCTAssertFalse(saved.contains("keyCode"))
+        json["keys"] = nil
+        try JSONSerialization.data(withJSONObject: json).write(to: url)
+        XCTAssertEqual(try Project.load(from: url), withKeys, "a file without keys opens the same")
     }
 
     // MARK: aspect

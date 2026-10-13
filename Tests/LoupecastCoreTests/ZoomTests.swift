@@ -169,7 +169,7 @@ final class ZoomTests: XCTestCase {
 
     func testProjectDefaultsAndRoundTrip() throws {
         let p = Project(name: "t", duration: 10, pixelWidth: 100, pixelHeight: 50, pointPixelScale: 2,
-                        cursor: [], clicks: [click(3)], keys: [])
+                        cursor: [], clicks: [click(3)])
         XCTAssertEqual(p.trimOut, 9.7, accuracy: 1e-9)
         XCTAssertEqual(p.zooms.count, 1)
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".json")
@@ -183,7 +183,7 @@ final class ZoomTests: XCTestCase {
     func testEditOps() {
         var p = Project(name: "t", duration: 10, pixelWidth: 100, pixelHeight: 50, pointPixelScale: 2,
                         cursor: [CursorSample(t: 0, x: 0.1, y: 0.2), CursorSample(t: 10, x: 0.9, y: 0.8)],
-                        clicks: [], keys: [])
+                        clicks: [])
         p.setTrimIn(2); p.setTrimOut(7.5)
         XCTAssertEqual(p.playStart(from: 7.5), 2)      // at trim-out → wraps to trim-in
         XCTAssertEqual(p.playStart(from: 9), 2)        // in the cut tail → trim-in
