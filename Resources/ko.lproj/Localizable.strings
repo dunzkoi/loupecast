@@ -92,6 +92,7 @@
 "Pastel Gradient" = "파스텔 그라데이션";
 "Pause" = "일시정지";
 "Pause (Space)" = "일시정지 (스페이스)";
+"Pause Recording" = "녹화 일시정지";
 "Play" = "재생";
 "Play (Space)" = "재생 (스페이스)";
 "Play the selected clip faster" = "선택한 클립을 빠르게 재생";
@@ -105,7 +106,9 @@
 "Recording %@" = "녹화 %@";
 "Recording in progress" = "녹화 중";
 "Recording needs permission" = "녹화하려면 권한이 필요합니다";
+"Recording paused" = "녹화 일시정지됨";
 "Restarting…" = "다시 시작하는 중…";
+"Resume Recording" = "이어서 녹화";
 "Screen & System Audio Recording" = "화면 및 시스템 오디오 녹음";
 "Screen recording takes effect after you quit and reopen Loupecast. If this window keeps appearing while it is on, select Loupecast in the list, remove it with −, and start recording again." = "화면 녹화 권한은 켠 다음 Loupecast를 종료했다가 다시 열어야 적용됩니다. 켜져 있는데도 이 창이 계속 뜨면, 목록에서 Loupecast를 선택해 −로 지운 뒤 녹화를 다시 시작하세요.";
 "Select a zoom or a clip to change it." = "줌이나 클립을 선택하면 여기서 바꿀 수 있습니다.";

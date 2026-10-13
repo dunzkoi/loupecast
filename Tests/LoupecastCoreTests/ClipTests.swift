@@ -114,6 +114,31 @@ final class ClipTests: XCTestCase {
         XCTAssertEqual(clips.playStart(from: 3), 3)
     }
 
+    // MARK: pauses
+
+    func testPausedRangesStartOutCut() {
+        let kept = [ClipRange].excluding([ClipRange(start: 2, end: 3), ClipRange(start: 5, end: 5.01), ClipRange(start: 8, end: 12)], from: 0, to: 9.7)
+        XCTAssertEqual(kept.map(\.start), [0, 3, 5.01], accuracy: 1e-12)
+        XCTAssertEqual(kept.map(\.end), [2, 5, 8], accuracy: 1e-12)
+        XCTAssertEqual([ClipRange].excluding([], from: 0, to: 5).map(\.end), [5])
+        XCTAssertEqual([ClipRange].excluding([ClipRange(start: 0.01, end: 1)], from: 0, to: 5).map(\.start), [1], "a sliver before the pause is dropped")
+        let all = [ClipRange].excluding([ClipRange(start: 0, end: 9)], from: 0, to: 5)
+        XCTAssertEqual([all[0].start, all[0].end], [0, 5], "paused throughout: the whole recording rather than nothing")
+
+        // paused from 2 to 4 s: the editor opens with that stretch cut, its click and cursor samples gone
+        let cursor = (0..<600).map { CursorSample(t: Double($0) / 60, x: 0.5, y: 0.5) }
+        let clicks = [ClickEvent(t: 1, x: 0.2, y: 0.2), ClickEvent(t: 2.5, x: 0.9, y: 0.9), ClickEvent(t: 6, x: 0.8, y: 0.2)]
+        let p = Project(name: "t", duration: 10, pixelWidth: 100, pixelHeight: 50, pointPixelScale: 2,
+                        cursor: cursor, clicks: clicks, paused: [ClipRange(start: 2, end: 4)])
+        XCTAssertEqual(p.clips.map(\.start), [0, 4]); XCTAssertEqual(p.clips.map(\.end), [2, 9.7], accuracy: 1e-12)
+        XCTAssertEqual(p.clips.cutTimes, [2], accuracy: 1e-12)
+        XCTAssertEqual(p.clicks.map(\.t), [1, 6])
+        XCTAssertEqual(p.zooms.count, 2)
+        XCTAssertFalse(p.zooms.contains { $0.focus == Point(x: 0.9, y: 0.9) }, "no zoom from the paused click")
+        XCTAssertFalse(p.cursor.contains { (2..<4).contains($0.t) })
+        XCTAssertEqual(project().clips.count, 1, "no pauses: one clip as before")
+    }
+
     // MARK: speed
 
     /// [1,3] at 1×, [3,7] at 2×, [8,9] at 4×: 2 + 2 + 0.25 s of composition.

@@ -37,15 +37,18 @@ public struct Project: Codable, Sendable, Equatable {
     public var micVolume = 1.0
     public static let volumes = 0.0...2.0
 
+    /// `paused`: recording-time ranges the recording was paused for. They start out cut, and the clicks and cursor
+    /// samples in them are dropped, so the editor opens with the pauses already gone.
     public init(name: String, videoFile: String = "recording.mov", duration: Double,
                 pixelWidth: Int, pixelHeight: Int, pointPixelScale: Double,
-                cursor: [CursorSample], clicks: [ClickEvent]) {
+                cursor: [CursorSample], clicks: [ClickEvent], paused: [ClipRange] = []) {
         version = Self.currentVersion
         self.name = name; self.videoFile = videoFile; self.duration = duration
         self.pixelWidth = pixelWidth; self.pixelHeight = pixelHeight; self.pointPixelScale = pointPixelScale
-        self.cursor = cursor; self.clicks = clicks
-        clips = [ClipRange(start: 0, end: max(0, duration - Self.stopTrim))]
-        zooms = AutoZoom.segments(clicks: clicks, duration: duration)
+        let live = { (t: Double) in !paused.contains { $0.start <= t && t < $0.end } }
+        self.cursor = cursor.filter { live($0.t) }; self.clicks = clicks.filter { live($0.t) }
+        clips = [ClipRange].excluding(paused, from: 0, to: max(0, duration - Self.stopTrim))
+        zooms = AutoZoom.segments(clicks: self.clicks, duration: duration)
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -288,6 +291,18 @@ public extension Array where Element == ClipRange {
         reduce(into: []) { out, c in
             if let l = out.last, abs(l.end - c.start) < 1e-9, l.speed == c.speed { out[out.count - 1].end = c.end } else { out.append(c) }
         }
+    }
+
+    /// [start, end] without `gaps`; pieces of a frame or less are dropped, and if nothing is left, the whole range.
+    static func excluding(_ gaps: [ClipRange], from start: Double, to end: Double) -> [ClipRange] {
+        var out: [ClipRange] = [], t = start
+        for g in gaps.sorted(by: { $0.start < $1.start }) where g.end > t {
+            if g.start > t { out.append(ClipRange(start: t, end: Swift.min(g.start, end))) }
+            t = Swift.max(t, g.end)
+        }
+        if t < end { out.append(ClipRange(start: t, end: end)) }
+        out.removeAll { $0.length <= Project.frameDuration }
+        return out.isEmpty ? [ClipRange(start: start, end: end)] : out
     }
 
     /// Sorted, inside [0, duration], no overlaps or empty clips; the full recording if nothing is left.

@@ -100,6 +100,7 @@ swift build --build-tests && swift test   # Core ~0.1 s; Render 10-40 s, each ex
 - `release-please-config.json` has `"release-as": "0.8.0"` to force the release the `fsd:` commits stalled; delete it
   once v0.8.0 is out, or every later release PR proposes 0.8.0 again.
 - Releases use a fixed self-signed identity (since 0.3.1) and aren't notarized (README's `xattr` step).
-- Recording-path changes (start-failure cleanup, finishing a recording on quit) were verified only by reading the
-  code here; they need a machine with the Screen Recording grant.
+- Recording-path changes (start-failure cleanup, finishing a recording on quit, pause/resume dropping samples) were
+  verified only by reading the code and with synthetic movies here; they need a machine with the Screen Recording
+  grant. A crash while paused recovers without the pause cut (recovery.json has no pauses).
 - Hour-long projects: each edit rebuilds the whole camera path (~5 ms) and redraws the timeline.

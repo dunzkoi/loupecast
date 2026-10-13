@@ -16,6 +16,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private var recorder: Recorder?
     private var startedAt: TimeInterval?
+    /// While paused: when the pause began. The elapsed time leaves out every pause.
+    private var pausedAt: TimeInterval?
+    private var pausedTotal: TimeInterval = 0
     private var ticker: Timer?
     private var busy = false
     private var editors: [URL: EditorController] = [:]
@@ -70,6 +73,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         rec.keyEquivalentModifierMask = [.command, .shift]
         rec.isEnabled = !busy
         menu.addItem(rec)
+        if recording {
+            let pause = item(pausedAt == nil ? String(localized: "Pause Recording") : String(localized: "Resume Recording"), #selector(togglePause))
+            pause.isEnabled = !busy
+            menu.addItem(pause)
+        }
         if let reason = HotKey.failure {
             let line = NSMenuItem(title: String(localized: "Shortcut unavailable: \(HotKey.label)"), action: nil, keyEquivalent: "")
             line.isEnabled = false
@@ -161,6 +169,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         let i = NSMenuItem(title: title, action: action, keyEquivalent: "")
         i.target = self
         return i
+    }
+
+    /// The paused stretch is cut from the recording when it stops (Recorder.setPaused, Project's `paused`).
+    @objc private func togglePause() {
+        guard let r = recorder, !busy else { return }
+        let now = ProcessInfo.processInfo.systemUptime
+        if let p = pausedAt { pausedTotal += now - p; pausedAt = nil } else { pausedAt = now }
+        r.setPaused(pausedAt != nil)
+        updateStatusItem()
     }
 
     @objc private func toggleSetting(_ sender: NSMenuItem) {
@@ -313,6 +330,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             r.onStreamError = { [weak self] error in self?.streamFailed(error) }
             recorder = r
             startedAt = ProcessInfo.processInfo.systemUptime
+            pausedAt = nil
+            pausedTotal = 0
             let t = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
                 MainActor.assumeIsolated { self?.updateStatusItem() }
             }
@@ -328,6 +347,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     private func stop(_ r: Recorder, quitting: Bool = false) async {
         recorder = nil
         startedAt = nil
+        pausedAt = nil
         ticker?.invalidate()
         ticker = nil
         updateStatusItem()
@@ -357,10 +377,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     private func updateStatusItem() {
         guard let button = statusItem.button else { return }
         if let startedAt {
-            let config = NSImage.SymbolConfiguration(paletteColors: [.systemRed])
-            button.image = NSImage(systemSymbolName: "record.circle", accessibilityDescription: String(localized: "Recording in progress"))?
+            let paused = pausedAt != nil
+            let config = NSImage.SymbolConfiguration(paletteColors: [paused ? .systemOrange : .systemRed])
+            button.image = NSImage(systemSymbolName: paused ? "pause.circle" : "record.circle",
+                                   accessibilityDescription: paused ? String(localized: "Recording paused") : String(localized: "Recording in progress"))?
                 .withSymbolConfiguration(config)
-            let s = Int(ProcessInfo.processInfo.systemUptime - startedAt)
+            let s = Int((pausedAt ?? ProcessInfo.processInfo.systemUptime) - startedAt - pausedTotal)
             button.attributedTitle = NSAttributedString(string: String(format: " %02d:%02d", s / 60, s % 60), attributes: [
                 .font: NSFont.monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular),
             ])
@@ -389,8 +411,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     }
 
     /// Renders the recording state without recording; returns the status button and the menu.
-    func debugRecordingState(elapsed: TimeInterval) -> (NSView?, NSMenu?) {
+    func debugRecordingState(elapsed: TimeInterval, paused: Bool = false) -> (NSView?, NSMenu?) {
         startedAt = ProcessInfo.processInfo.systemUptime - elapsed
+        pausedAt = paused ? ProcessInfo.processInfo.systemUptime : nil
         updateStatusItem()
         if let menu = statusItem.menu { menuNeedsUpdate(menu) }
         return (statusItem.button, statusItem.menu)

@@ -12,7 +12,8 @@
 //   LOUPECAST_EXPORT_DIR=<dir>        where the editor exports (default ~/Movies)
 //   LOUPECAST_PERMISSIONS=<png>       save the permission window and quit
 //   LOUPECAST_UPDATE_CHECK=1          fetch the latest GitHub release once, print current/available, quit
-//   LOUPECAST_STATUS=<png>            save the menu-bar button in its recording state, print the menu
+//   LOUPECAST_STATUS=<png>            save the menu-bar button in its recording state, print the menu;
+//                                 LOUPECAST_STATUS_PAUSED=1 shows the paused state instead
 //   LOUPECAST_USAGE_TEST=1            print the recordings' size in the menu, trash the newest recording, print it again
 //   LOUPECAST_SELFTEST=<cycles>       record per cycle (mic off, menu bar hidden on odd cycles) with two
 //                                 CGEvent clicks; prints size/audio/click/strip checks, deletes them, quits
@@ -105,7 +106,7 @@ enum DebugHooks {
                 try? await Task.sleep(for: .seconds(1))
                 if let reason = env["LOUPECAST_HOTKEY_FAIL"] { HotKey.debugFail(reason) }
                 let idle = app.debugMenuTitles()
-                let (button, menu) = app.debugRecordingState(elapsed: 83)
+                let (button, menu) = app.debugRecordingState(elapsed: 83, paused: env["LOUPECAST_STATUS_PAUSED"] != nil)
                 try? await Task.sleep(for: .seconds(0.5))
                 if let button { save(button, to: URL(fileURLWithPath: out)) }
                 print("LOUPECAST: idle menu \(idle)")

@@ -358,6 +358,34 @@ final class ExportTests: XCTestCase {
         }
     }
 
+    // MARK: pause
+
+    /// A recording paused from 4 to 6 s has no frames or sound there; its project starts with that stretch cut, so the
+    /// export is 7.7 s and jumps from recording 3.98 straight to 6.00.
+    func testPausedStretchIsCut() async throws {
+        try XCTSkipIf(ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] != nil, "no video hardware on CI VMs")
+        try await withDeadline(Self.deadline) { try await Self.pausedStretchIsCut() }
+    }
+
+    static func pausedStretchIsCut() async throws {
+        let mov = outDir.appendingPathComponent("synthetic-paused.mov")
+        try await writeSyntheticMovie(to: mov, staticScreen: false, gap: 4..<6)
+        let project = Project(name: "Paused", duration: duration, pixelWidth: Int(size.width), pixelHeight: Int(size.height),
+                              pointPixelScale: 2, cursor: [], clicks: [], paused: [ClipRange(start: 4, end: 6)])
+        let out = outDir.appendingPathComponent("export-paused.mp4")
+        try await Exporter.export(project: project, videoURL: mov, to: out)
+        let asset = AVURLAsset(url: out)
+        let duration = try await asset.load(.duration).seconds
+        XCTAssertEqual(duration, 4 + 3.7, accuracy: 1.0 / 60, "the pause is gone")
+        for (c, expected) in [(239.0 / 60, "3.98"), (4.0, "6.00")] {
+            let text = try await timecode(in: asset, at: c)
+            print("paused export: composition \(c) s reads \(text ?? "nothing")")
+            XCTAssertEqual(text, expected)
+        }
+        let audio = try await asset.loadTracks(withMediaType: .audio)
+        XCTAssertEqual(audio.count, 1)
+    }
+
     // MARK: speed
 
     /// [1,3] at 1×, [3,7] at 2×, [8,9] at 4×: 4.25 s, and the burned-in timecode runs at each clip's speed.
@@ -540,7 +568,8 @@ final class ExportTests: XCTestCase {
 
     // MARK: synthetic movie
 
-    static func writeSyntheticMovie(to url: URL, staticScreen: Bool = true) async throws {
+    /// `gap`: seconds with neither frames nor sound, as a paused recording writes them.
+    static func writeSyntheticMovie(to url: URL, staticScreen: Bool = true, gap: Range<Double>? = nil) async throws {
         try? FileManager.default.removeItem(at: url)
         let w = Int(size.width), h = Int(size.height)
         let writer = try AVAssetWriter(outputURL: url, fileType: .mov)
@@ -566,6 +595,7 @@ final class ExportTests: XCTestCase {
         // covered more of its interleave window, with every encoder thread idle (sampled at the video wait).
         let frames = (0..<Int(duration * 60)).filter { i in
             !(staticScreen && i >= 240 && i < 360 && i != 240)   // static screen: SCStream sends no complete frames
+                && gap?.contains(Double(i) / 60) != true
         }
         let rate = 48_000, total = Int(duration) * rate, chunk = 1024, chunks = (total + chunk - 1) / chunk
         async let video: Void = feed(vIn, count: frames.count) { k in
@@ -574,11 +604,12 @@ final class ExportTests: XCTestCase {
             draw(into: pb!, t: Double(frames[k]) / 60)
             adaptor.append(pb!, withPresentationTime: CMTime(value: CMTimeValue(frames[k]), timescale: 60))
         }
+        let silent: @Sendable (Int) -> Bool = { k in gap?.contains(Double(k * chunk) / Double(rate)) == true }
         async let system: Void = feed(sys, count: chunks) { k in
-            sys.append(tone(start: k * chunk, count: min(chunk, total - k * chunk), channels: 2, amplitude: 0.4))
+            if !silent(k) { sys.append(tone(start: k * chunk, count: min(chunk, total - k * chunk), channels: 2, amplitude: 0.4)) }
         }
         async let microphone: Void = feed(mic, count: chunks) { k in
-            mic.append(tone(start: k * chunk, count: min(chunk, total - k * chunk), channels: 1, amplitude: 0.2))
+            if !silent(k) { mic.append(tone(start: k * chunk, count: min(chunk, total - k * chunk), channels: 1, amplitude: 0.2)) }
         }
         _ = await (video, system, microphone)
         writer.endSession(atSourceTime: CMTime(seconds: duration, preferredTimescale: 600))

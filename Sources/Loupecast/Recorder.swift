@@ -32,6 +32,8 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
     private var sessionStart: CMTime?
     private var lastVideo = CMTime.invalid
     private var dropped = 0
+    /// Host-clock pauses; an open one ends at `.invalid`. Samples stamped inside one are never written.
+    private var pauses: [(start: CMTime, end: CMTime)] = []
     // main thread only
     private var log = InputLog()
     private var monitors: [Any] = []
@@ -132,7 +134,7 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
     // MARK: capture queue
 
     func stream(_ stream: SCStream, didOutputSampleBuffer sb: CMSampleBuffer, of type: SCStreamOutputType) {
-        guard sb.isValid else { return }
+        guard sb.isValid, !isPaused(at: sb.presentationTimeStamp) else { return }
         switch type {
         case .screen:
             guard let info = (CMSampleBufferGetSampleAttachmentsArray(sb, createIfNecessary: false) as? [[SCStreamFrameInfo: Any]])?.first,
@@ -149,6 +151,19 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
             if let micIn { appendAudio(sb, to: micIn) }
         @unknown default:
             break
+        }
+    }
+
+    private func isPaused(at pts: CMTime) -> Bool {
+        pauses.contains { pts >= $0.start && (!$0.end.isValid || pts < $0.end) }
+    }
+
+    /// Pausing keeps the stream running but writes nothing, so a paused screen never lands in the file.
+    func setPaused(_ on: Bool) {
+        let now = CMClockGetTime(CMClockGetHostTimeClock())
+        queue.async { [self] in
+            if on, pauses.last.map({ $0.end.isValid }) ?? true { pauses.append((now, .invalid)) }
+            if !on, let last = pauses.last, !last.end.isValid { pauses[pauses.count - 1].end = now }
         }
     }
 
@@ -203,8 +218,8 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
         stream = nil
 
         // drain the capture queue, then close the file
-        let (start, last, dropped): (CMTime?, CMTime, Int) = await withCheckedContinuation { cont in
-            queue.async { cont.resume(returning: (self.sessionStart, self.lastVideo, self.dropped)) }
+        let (start, last, dropped, pauses): (CMTime?, CMTime, Int, [(start: CMTime, end: CMTime)]) = await withCheckedContinuation { cont in
+            queue.async { cont.resume(returning: (self.sessionStart, self.lastVideo, self.dropped, self.pauses)) }
         }
         guard let start else {
             writer.cancelWriting()
@@ -227,9 +242,10 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
         Self.lastSessionStartHost = start.seconds
         #endif
         let events = log.relativized(sessionStartHost: start.seconds, duration: duration, display: display)
+        let paused = pauses.map { ClipRange(start: max(0, ($0.start - start).seconds), end: (($0.end.isValid ? $0.end : end) - start).seconds) }
         let project = Project(name: Self.name(Date()), duration: duration,
                               pixelWidth: pixelSize.0, pixelHeight: pixelSize.1, pointPixelScale: scale,
-                              cursor: events.cursor, clicks: events.clicks)
+                              cursor: events.cursor, clicks: events.clicks, paused: paused)
         try project.save(to: dir.appendingPathComponent(Project.fileName))
         return project
     }
