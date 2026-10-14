@@ -1,13 +1,14 @@
 # Loupecast
 
-> Loupecast는 클릭한 곳을 자동으로 확대하고, 필요 없는 구간을 잘라 1080p60 H.264 MP4로 내보내는 무료 오픈소스(MIT) macOS 메뉴바 화면 녹화 앱입니다. 텔레메트리가 없고, 네트워크 요청은 GitHub 릴리스 업데이트 확인뿐입니다. macOS 15 이상, Apple Silicon 전용입니다.
+> Loupecast는 클릭한 곳을 자동으로 확대하고, 필요 없는 구간을 잘라 16:9, 9:16, 1:1 MP4나 GIF로 내보내는 무료 오픈소스(MIT) macOS 메뉴바 화면 녹화 앱입니다. 텔레메트리가 없고, 네트워크 요청은 GitHub 릴리스 업데이트 확인뿐입니다. macOS 15 이상, Apple Silicon 전용입니다.
 
 - 설치: `brew install --cask dunzkoi/tap/loupecast` 또는 https://github.com/dunzkoi/loupecast/releases/latest/download/Loupecast.zip
 - 공증 전이라 처음 한 번 `xattr -dr com.apple.quarantine /Applications/Loupecast.app` 실행이 필요할 수 있습니다.
 - 녹화 단축키: ⌘⇧2. 편집: D 나누기, Delete 잘라내기, ⌘Z 되돌리기.
+- 기능: 클릭하면 자동 줌, 키보드로 컷 편집, 16:9·9:16·1:1 내보내기, 영역 지정 녹화, 일시정지와 이어서 녹화, 웹캠 오버레이, 줌 배율과 초점, 구간 가속, 배경 프리셋, 화면 채우기, 음량 조절, GIF 내보내기, 클립보드 복사.
 - 데모 영상: https://dunzkoi.github.io/loupecast/demo.mp4 (16초, Loupecast로 내보낸 결과). 할 일 앱 화면에서 클릭한 곳이 자동으로 확대되고, 확대한 채 커서를 따라가며, 기다리는 구간은 잘려 나갑니다.
 
-In English: Loupecast is a free, open-source (MIT) macOS menu bar screen recorder that zooms in where you click, cuts the parts you don't need and exports a 1080p60 H.264 MP4 (16:9, 9:16 or 1:1). The app follows the macOS language (English or Korean). It has no telemetry; its only network request is the update check against GitHub Releases. macOS 15 or later, Apple Silicon only. Install with `brew install --cask dunzkoi/tap/loupecast`. Demo video (16 s, a Loupecast export of a to-do app recording: click zooms that follow the cursor, the waiting cut out): https://dunzkoi.github.io/loupecast/demo.mp4
+In English: Loupecast is a free, open-source (MIT) macOS menu bar screen recorder that zooms in where you click, cuts the parts you don't need and exports an MP4 (16:9, 9:16 or 1:1) or a GIF. Features: automatic zoom on click, cut editing from the keyboard, 16:9, 9:16 and 1:1 export, record an area, pause and resume, webcam overlay, zoom level and focus, speed up clips, background presets, fill the frame, volume, GIF export, copy to clipboard. The app follows the macOS language (English or Korean). It has no telemetry; its only network request is the update check against GitHub Releases. macOS 15 or later, Apple Silicon only. Install with `brew install --cask dunzkoi/tap/loupecast`. Demo video (16 s, a Loupecast export of a to-do app recording: click zooms that follow the cursor, the waiting cut out): https://dunzkoi.github.io/loupecast/demo.mp4
 
 ## Pages
 

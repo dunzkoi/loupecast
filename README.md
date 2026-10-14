@@ -1,5 +1,5 @@
 <h1 align="center">Loupecast</h1>
-<p align="center">A free, open-source macOS screen recorder that zooms in where you click, lets you cut the boring parts, and exports a polished 1080p60 MP4.</p>
+<p align="center">A free, open-source macOS screen recorder that zooms in where you click, lets you cut the boring parts, and exports a polished MP4 or GIF in 16:9, 9:16 or 1:1.</p>
 <p align="center">
   <a href="https://dunzkoi.github.io/loupecast/en/">Website</a> ·
   <a href="https://github.com/dunzkoi/loupecast/releases/latest">Download</a> ·
@@ -36,6 +36,16 @@ Requires macOS 15 or later on Apple Silicon. The interface is in English or Kore
    - **D** splits at the playhead, click a clip and press **Delete** to cut it, **⌘Z** to undo.
    - **Space** plays, **← →** step one frame, **I / O** set the clip start and end.
 5. Pick the frame next to it (16:9, 9:16 for Shorts and Reels, or 1:1), then press **Export**. Files go to `~/Movies`.
+
+More:
+
+- **Record Area…** records only a rectangle you pick, and **Pause Recording** cuts the paused stretch out by itself.
+- **Record Camera** adds your webcam as a circle in the corner you pick.
+- Select a zoom to change its level, or click the preview to hold it on one spot.
+- Select a clip to speed it up 2× or 4× (voices keep their pitch).
+- Pick a background preset; in 9:16 or 1:1, **Fill Frame** fills the frame and the crop follows the cursor.
+- The speaker button sets the computer audio and microphone volumes separately.
+- Export a looping GIF from the arrow next to **Export**, and **Copy** the finished file to paste it into Slack, an issue or an email.
 
 Menu toggles: **Record Microphone** (off by default), **Record Computer Audio** (on), **Hide Menu Bar in Video** (crops the menu bar out of the video, on).
 

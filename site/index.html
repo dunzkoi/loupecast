@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Loupecast · 클릭하면 확대되는 무료 Mac 화면 녹화</title>
-<meta name="description" content="Loupecast는 클릭한 곳을 자동으로 확대하고 필요 없는 구간을 잘라 1080p60 MP4로 내보내는 무료 오픈소스 macOS 메뉴바 녹화 앱입니다.">
-<meta name="keywords" content="Loupecast, 맥 화면 녹화, macOS 화면 녹화, 자동 줌, 스크린 레코더, 무료 화면 녹화, 오픈소스, Screen Studio 대안, 메뉴바 앱, 1080p60">
+<meta name="description" content="Loupecast는 클릭한 곳을 자동으로 확대하고 필요 없는 구간을 잘라 16:9, 9:16, 1:1 MP4나 GIF로 내보내는 무료 오픈소스 macOS 메뉴바 녹화 앱입니다.">
+<meta name="keywords" content="Loupecast, 맥 화면 녹화, macOS 화면 녹화, 자동 줌, 스크린 레코더, 무료 화면 녹화, 오픈소스, Screen Studio 대안, 메뉴바 앱, 웹캠 오버레이, GIF 내보내기">
 <link rel="canonical" href="https://dunzkoi.github.io/loupecast/">
 <link rel="alternate" hreflang="ko" href="https://dunzkoi.github.io/loupecast/">
 <link rel="alternate" hreflang="en" href="https://dunzkoi.github.io/loupecast/en/">
@@ -19,7 +19,7 @@
 <meta property="og:locale" content="ko_KR">
 <meta property="og:locale:alternate" content="en_US">
 <meta property="og:title" content="Loupecast · 클릭하면 확대되는 무료 Mac 화면 녹화">
-<meta property="og:description" content="클릭한 곳을 자동으로 확대하고, 필요 없는 구간을 잘라 1080p60 MP4로 내보내는 무료 오픈소스 macOS 녹화 앱.">
+<meta property="og:description" content="클릭한 곳을 자동으로 확대하고, 필요 없는 구간을 잘라 MP4나 GIF로 내보내는 무료 오픈소스 macOS 녹화 앱.">
 <meta property="og:url" content="https://dunzkoi.github.io/loupecast/">
 <meta property="og:image" content="https://dunzkoi.github.io/loupecast/og.png">
 <meta property="og:image:width" content="1200">
@@ -27,7 +27,7 @@
 <meta property="og:image:alt" content="Loupecast 편집 화면 일러스트와 '클릭하면 확대되는 무료 Mac 화면 녹화' 문구">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Loupecast · 클릭하면 확대되는 무료 Mac 화면 녹화">
-<meta name="twitter:description" content="클릭한 곳을 자동으로 확대하고, 필요 없는 구간을 잘라 1080p60 MP4로 내보내는 무료 오픈소스 macOS 녹화 앱.">
+<meta name="twitter:description" content="클릭한 곳을 자동으로 확대하고, 필요 없는 구간을 잘라 MP4나 GIF로 내보내는 무료 오픈소스 macOS 녹화 앱.">
 <meta name="twitter:image" content="https://dunzkoi.github.io/loupecast/og.png">
 
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
@@ -43,7 +43,7 @@
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
   "name": "Loupecast",
-  "description": "클릭한 곳을 자동으로 확대하고, 필요 없는 구간을 잘라 1080p60 MP4로 내보내는 무료 오픈소스 macOS 메뉴바 화면 녹화 앱.",
+  "description": "클릭한 곳을 자동으로 확대하고, 필요 없는 구간을 잘라 16:9, 9:16, 1:1 MP4나 GIF로 내보내는 무료 오픈소스 macOS 메뉴바 화면 녹화 앱.",
   "url": "https://dunzkoi.github.io/loupecast/",
   "downloadUrl": "https://github.com/dunzkoi/loupecast/releases/latest/download/Loupecast.zip",
   "applicationCategory": "MultimediaApplication",
@@ -53,6 +53,7 @@
   "license": "https://opensource.org/licenses/MIT",
   "image": "https://dunzkoi.github.io/loupecast/og.png",
   "inLanguage": "ko",
+  "featureList": ["클릭하면 자동 줌", "키보드로 컷 편집", "16:9, 9:16, 1:1 내보내기", "영역 지정 녹화", "일시정지와 이어서 녹화", "웹캠 오버레이", "줌 배율과 초점", "구간 가속", "배경 프리셋", "화면 채우기", "음량 조절", "GIF 내보내기", "클립보드 복사"],
   "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
   "author": { "@type": "Person", "name": "Dunz Koi", "url": "https://github.com/dunzkoi" },
   "sameAs": ["https://github.com/dunzkoi/loupecast"]
@@ -109,7 +110,7 @@
   <div class="wrap">
     <div>
       <h1>클릭한 곳이 <em>알아서 커지는</em> Mac 화면 녹화</h1>
-      <p class="lead">Loupecast는 무료 오픈소스 macOS 메뉴바 녹화 앱입니다. 필요 없는 구간을 잘라 1080p60 MP4로 내보냅니다.</p>
+      <p class="lead">Loupecast는 무료 오픈소스 macOS 메뉴바 녹화 앱입니다. 필요 없는 구간을 잘라 16:9, 9:16, 1:1 MP4나 GIF로 내보냅니다.</p>
       <div class="actions">
         <a class="btn btn-primary" href="https://github.com/dunzkoi/loupecast/releases/latest/download/Loupecast.zip"><svg class="icon" aria-hidden="true"><use href="#i-download-simple"/></svg>다운로드</a>
         <div class="cmd">
@@ -221,7 +222,7 @@
       </article>
       <article class="tile tile-menu">
         <h3><svg class="icon" aria-hidden="true"><use href="#i-sliders-horizontal"/></svg>메뉴바에서 바로 설정</h3>
-        <p><kbd>⌘⇧2</kbd>로 녹화를 시작하고 멈춥니다. 내보낸 영상은 1080p60 H.264 MP4로 <code>~/Movies</code>에 저장됩니다.</p>
+        <p><kbd>⌘⇧2</kbd>로 녹화를 시작하고 멈춥니다. 내보낸 영상은 MP4(16:9, 9:16, 1:1)나 GIF로 <code>~/Movies</code>에 저장됩니다.</p>
         <div class="menu-mock" aria-label="Loupecast 메뉴 항목과 기본값">
           <div class="hot">녹화 시작 <kbd>⌘⇧2</kbd></div>
           <hr>
@@ -231,6 +232,18 @@
         </div>
       </article>
     </div>
+    <ul class="more" aria-label="그 밖의 기능">
+      <li><b>영역 지정 녹화</b><span>"영역 지정 녹화…"로 사각형을 고르면 화면의 그 부분만 녹화합니다.</span></li>
+      <li><b>일시정지와 이어서 녹화</b><span>메뉴에서 일시정지하면 멈춘 구간은 자동으로 잘려 나갑니다.</span></li>
+      <li><b>웹캠 오버레이</b><span>카메라도 함께 녹화해 고른 모서리에 원형으로 보여 줍니다.</span></li>
+      <li><b>줌 배율과 초점</b><span>줌마다 확대 정도를 정하고, 미리보기를 클릭해 한 지점에 고정합니다.</span></li>
+      <li><b>구간 가속</b><span>고른 클립을 2배나 4배로 재생합니다. 목소리 높이는 그대로입니다.</span></li>
+      <li><b>배경 프리셋</b><span>그라데이션, 단색, 또는 여백 없이 녹화 화면만 씁니다.</span></li>
+      <li><b>화면 채우기</b><span>9:16과 1:1에서 녹화 화면이 프레임을 채우고, 잘리는 위치가 커서를 따라갑니다.</span></li>
+      <li><b>음량 조절</b><span>컴퓨터 소리와 마이크 음량을 따로 정하거나 끕니다.</span></li>
+      <li><b>GIF 내보내기</b><span>README, 이슈, 문서에 넣을 소리 없는 반복 GIF를 만듭니다.</span></li>
+      <li><b>클립보드 복사</b><span>내보낸 영상을 복사해 Slack, 이슈, 메일에 바로 붙여 넣습니다.</span></li>
+    </ul>
   </div>
 </section>
 
@@ -248,7 +261,11 @@
           <tr><th scope="row">소스 코드</th><td class="us">공개 (MIT)</td><td>비공개</td></tr>
           <tr><th scope="row">클릭 자동 줌</th><td class="us">있음</td><td>있음</td></tr>
           <tr><th scope="row">컷 편집</th><td class="us">있음</td><td>있음</td></tr>
-          <tr><th scope="row">내보내기</th><td class="us">1080p60 H.264 MP4</td><td>제품마다 다름</td></tr>
+          <tr><th scope="row">내보내기</th><td class="us">MP4(16:9, 9:16, 1:1)와 GIF</td><td>제품마다 다름</td></tr>
+          <tr><th scope="row">웹캠 오버레이</th><td class="us">있음</td><td>있음</td></tr>
+          <tr><th scope="row">영역 지정 녹화</th><td class="us">있음</td><td>있음</td></tr>
+          <tr><th scope="row">GIF 내보내기</th><td class="us">있음</td><td>있음</td></tr>
+          <tr><th scope="row">구간 가속</th><td class="us">있음 (2배, 4배)</td><td>있음</td></tr>
           <tr><th scope="row">네트워크 요청</th><td class="us">업데이트 확인만, 텔레메트리 없음</td><td>제품마다 다름</td></tr>
           <tr><th scope="row">지원 환경</th><td class="us">macOS 15 이상, Apple Silicon</td><td>제품마다 다름</td></tr>
         </tbody>

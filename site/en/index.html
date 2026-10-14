@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Loupecast · Mac screen recorder that zooms where you click</title>
-<meta name="description" content="A free, open-source macOS menu bar screen recorder that zooms in where you click and exports a 1080p60 MP4.">
-<meta name="keywords" content="Loupecast, Mac screen recorder, macOS screen recording, auto zoom, click zoom, free screen recorder, open source, Screen Studio alternative, menu bar app, 1080p60">
+<meta name="description" content="A free, open-source macOS menu bar screen recorder that zooms in where you click and exports an MP4 or GIF in 16:9, 9:16 or 1:1.">
+<meta name="keywords" content="Loupecast, Mac screen recorder, macOS screen recording, auto zoom, click zoom, free screen recorder, open source, Screen Studio alternative, menu bar app, webcam overlay, GIF export">
 <link rel="canonical" href="https://dunzkoi.github.io/loupecast/en/">
 <link rel="alternate" hreflang="ko" href="https://dunzkoi.github.io/loupecast/">
 <link rel="alternate" hreflang="en" href="https://dunzkoi.github.io/loupecast/en/">
@@ -19,7 +19,7 @@
 <meta property="og:locale" content="en_US">
 <meta property="og:locale:alternate" content="ko_KR">
 <meta property="og:title" content="Loupecast · Mac screen recorder that zooms where you click">
-<meta property="og:description" content="Zooms in where you click, cuts the parts you don’t need and exports a 1080p60 MP4. Free and open source for macOS.">
+<meta property="og:description" content="Zooms in where you click, cuts the parts you don’t need and exports an MP4 or GIF. Free and open source for macOS.">
 <meta property="og:url" content="https://dunzkoi.github.io/loupecast/en/">
 <meta property="og:image" content="https://dunzkoi.github.io/loupecast/og-en.png">
 <meta property="og:image:width" content="1200">
@@ -27,7 +27,7 @@
 <meta property="og:image:alt" content="Illustration of the Loupecast editor next to the words “Mac screen recording that zooms where you click”">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Loupecast · Mac screen recorder that zooms where you click">
-<meta name="twitter:description" content="Zooms in where you click, cuts the parts you don’t need and exports a 1080p60 MP4. Free and open source for macOS.">
+<meta name="twitter:description" content="Zooms in where you click, cuts the parts you don’t need and exports an MP4 or GIF. Free and open source for macOS.">
 <meta name="twitter:image" content="https://dunzkoi.github.io/loupecast/og-en.png">
 
 <link rel="icon" href="../favicon.svg" type="image/svg+xml">
@@ -43,7 +43,7 @@
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
   "name": "Loupecast",
-  "description": "A free, open-source macOS menu bar screen recorder that zooms in where you click, cuts the parts you don’t need and exports a 1080p60 MP4.",
+  "description": "A free, open-source macOS menu bar screen recorder that zooms in where you click, cuts the parts you don’t need and exports an MP4 or GIF in 16:9, 9:16 or 1:1.",
   "url": "https://dunzkoi.github.io/loupecast/en/",
   "downloadUrl": "https://github.com/dunzkoi/loupecast/releases/latest/download/Loupecast.zip",
   "applicationCategory": "MultimediaApplication",
@@ -53,6 +53,7 @@
   "license": "https://opensource.org/licenses/MIT",
   "image": "https://dunzkoi.github.io/loupecast/og.png",
   "inLanguage": "en",
+  "featureList": ["Automatic zoom on click", "Cut editing from the keyboard", "16:9, 9:16 and 1:1 export", "Record an area", "Pause and resume", "Webcam overlay", "Zoom level and focus", "Speed up clips", "Background presets", "Fill the frame", "Volume", "GIF export", "Copy to clipboard"],
   "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
   "author": { "@type": "Person", "name": "Dunz Koi", "url": "https://github.com/dunzkoi" },
   "sameAs": ["https://github.com/dunzkoi/loupecast"]
@@ -109,7 +110,7 @@
   <div class="wrap">
     <div>
       <h1>Mac screen recording that <em>zooms where you click</em></h1>
-      <p class="lead">Loupecast is a free, open-source macOS menu bar recorder. Cut the parts you don’t need and export a 1080p60 MP4.</p>
+      <p class="lead">Loupecast is a free, open-source macOS menu bar recorder. Cut the parts you don’t need and export an MP4 or GIF in 16:9, 9:16 or 1:1.</p>
       <div class="actions">
         <a class="btn btn-primary" href="https://github.com/dunzkoi/loupecast/releases/latest/download/Loupecast.zip"><svg class="icon" aria-hidden="true"><use href="#i-download-simple"/></svg>Download</a>
         <div class="cmd">
@@ -221,7 +222,7 @@
       </article>
       <article class="tile tile-menu">
         <h3><svg class="icon" aria-hidden="true"><use href="#i-sliders-horizontal"/></svg>Settings right in the menu bar</h3>
-        <p><kbd>⌘⇧2</kbd> starts and stops recording. Exports are saved to <code>~/Movies</code> as 1080p60 H.264 MP4.</p>
+        <p><kbd>⌘⇧2</kbd> starts and stops recording. Exports go to <code>~/Movies</code> as an MP4 (16:9, 9:16 or 1:1) or a GIF.</p>
         <div class="menu-mock" aria-label="Loupecast menu items and their defaults">
           <div class="hot">Start Recording <kbd>⌘⇧2</kbd></div>
           <hr>
@@ -231,6 +232,18 @@
         </div>
       </article>
     </div>
+    <ul class="more" aria-label="More features">
+      <li><b>Record an area</b><span>Pick a rectangle with Record Area… and record only that part of the screen.</span></li>
+      <li><b>Pause and resume</b><span>Pause from the menu; the paused stretch is cut out automatically.</span></li>
+      <li><b>Webcam overlay</b><span>Record your camera too and show it as a circle in the corner you pick.</span></li>
+      <li><b>Zoom level and focus</b><span>Set how far each zoom magnifies, or click the preview to hold it on one spot.</span></li>
+      <li><b>Speed up clips</b><span>Play a selected clip at 2× or 4×; voices keep their pitch.</span></li>
+      <li><b>Background presets</b><span>Gradients, solid colors, or the recording edge to edge.</span></li>
+      <li><b>Fill the frame</b><span>In 9:16 and 1:1 the recording fills the frame, and the crop follows the cursor.</span></li>
+      <li><b>Volume</b><span>Set the computer audio and the microphone separately, or mute either.</span></li>
+      <li><b>GIF export</b><span>A silent, looping GIF for READMEs, issues and docs.</span></li>
+      <li><b>Copy to clipboard</b><span>Copy the exported video and paste it into Slack, an issue or an email.</span></li>
+    </ul>
   </div>
 </section>
 
@@ -248,7 +261,11 @@
           <tr><th scope="row">Source code</th><td class="us">Open (MIT)</td><td>Closed</td></tr>
           <tr><th scope="row">Auto zoom on click</th><td class="us">Yes</td><td>Yes</td></tr>
           <tr><th scope="row">Cut editing</th><td class="us">Yes</td><td>Yes</td></tr>
-          <tr><th scope="row">Export</th><td class="us">1080p60 H.264 MP4</td><td>Varies</td></tr>
+          <tr><th scope="row">Export</th><td class="us">MP4 (16:9, 9:16, 1:1) and GIF</td><td>Varies</td></tr>
+          <tr><th scope="row">Webcam overlay</th><td class="us">Yes</td><td>Yes</td></tr>
+          <tr><th scope="row">Area recording</th><td class="us">Yes</td><td>Yes</td></tr>
+          <tr><th scope="row">GIF export</th><td class="us">Yes</td><td>Yes</td></tr>
+          <tr><th scope="row">Speed up clips</th><td class="us">Yes (2×, 4×)</td><td>Yes</td></tr>
           <tr><th scope="row">Network requests</th><td class="us">Update checks only, no telemetry</td><td>Varies</td></tr>
           <tr><th scope="row">Requirements</th><td class="us">macOS 15 or later, Apple Silicon</td><td>Varies</td></tr>
         </tbody>
