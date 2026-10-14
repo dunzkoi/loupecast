@@ -82,8 +82,9 @@ swift build --build-tests && swift test   # Core ~0.1 s; Render 10-40 s, each ex
 - Commits that land on `main` directly need a Conventional title too, or release-please skips them and no release
   goes out. `fsd:` runner commits (title fixed by the runner) count through the `fsd` → "Changes" entry in
   `release-please-config.json`; an English `feat: …`/`fix: …` line after a blank line in the body adds a proper
-  Features/Bug Fixes entry. Never hand-write an Unreleased block in `CHANGELOG.md`: release-please inserts each
-  release below it, so it stays on top forever.
+  Features/Bug Fixes entry. Without that line the release notes carry the Korean `fsd:` title under "Changes"
+  (0.8.0 shipped 32 such lines, rewritten in English by hand afterwards). Never hand-write an Unreleased block in
+  `CHANGELOG.md`: release-please inserts each release below it, so it stays on top forever.
 
 ## Decisions
 
@@ -103,8 +104,6 @@ swift build --build-tests && swift test   # Core ~0.1 s; Render 10-40 s, each ex
 
 ## Open
 
-- `release-please-config.json` has `"release-as": "0.8.0"` to force the release the `fsd:` commits stalled; delete it
-  once v0.8.0 is out, or every later release PR proposes 0.8.0 again.
 - Releases use a fixed self-signed identity (since 0.3.1) and aren't notarized (README's `xattr` step).
 - Recording-path changes (start-failure cleanup, finishing a recording on quit, pause/resume dropping samples, area
   recording's `sourceRect`) were
