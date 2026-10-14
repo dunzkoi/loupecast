@@ -40,6 +40,8 @@ public struct Project: Codable, Sendable, Equatable {
     public static let volumes = 0.0...2.0
     /// The webcam recorded next to the screen; nil without one (and in older files).
     public var camera: CameraOverlay?
+    /// A ring spreads from every click for 0.4 s (on in older files too).
+    public var showClicks = true
 
     /// `paused`: recording-time ranges the recording was paused for. They start out cut, and the clicks and cursor
     /// samples in them are dropped, so the editor opens with the pauses already gone.
@@ -56,7 +58,7 @@ public struct Project: Codable, Sendable, Equatable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case version, name, renamed, videoFile, duration, pixelWidth, pixelHeight, pointPixelScale, cursor, clicks, keys, clips, zooms, aspect, style, fill, systemVolume, micVolume, camera
+        case version, name, renamed, videoFile, duration, pixelWidth, pixelHeight, pointPixelScale, cursor, clicks, keys, clips, zooms, aspect, style, fill, systemVolume, micVolume, camera, showClicks
     }
     private enum V1Keys: String, CodingKey { case trimIn, trimOut }
 
@@ -79,6 +81,7 @@ public struct Project: Codable, Sendable, Equatable {
         systemVolume = Self.volumes.clamp(try c.decodeIfPresent(Double.self, forKey: .systemVolume) ?? 1)
         micVolume = Self.volumes.clamp(try c.decodeIfPresent(Double.self, forKey: .micVolume) ?? 1)
         camera = try c.decodeIfPresent(CameraOverlay.self, forKey: .camera)
+        showClicks = try c.decodeIfPresent(Bool.self, forKey: .showClicks) ?? true
         if let clips = try c.decodeIfPresent([ClipRange].self, forKey: .clips) {
             self.clips = clips
         } else {                                // version 1: one trim range
@@ -241,16 +244,19 @@ public struct LookDefaults: Codable, Equatable, Sendable {
     /// From the last project with a webcam; applied only to recordings with one.
     public var cameraCorner: CameraOverlay.Corner?
     public var cameraSize: Double?
+    /// Optional: looks saved before the switch existed decode without it.
+    public var showClicks: Bool?
 
     /// `p`'s look; the camera's from `previous` when `p` has no webcam.
     public init(_ p: Project, previous: LookDefaults? = nil) {
-        aspect = p.aspect; style = p.style; fill = p.fill
+        aspect = p.aspect; style = p.style; fill = p.fill; showClicks = p.showClicks
         cameraCorner = p.camera?.corner ?? previous?.cameraCorner
         cameraSize = p.camera?.size ?? previous?.cameraSize
     }
 
     public func apply(to p: inout Project) {
         p.aspect = aspect; p.style = style; p.fill = fill
+        if let showClicks { p.showClicks = showClicks }
         if let cameraCorner { p.camera?.corner = cameraCorner }
         if let cameraSize { p.camera?.size = cameraSize }
     }

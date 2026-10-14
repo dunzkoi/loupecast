@@ -631,6 +631,7 @@ struct ControlBar: View {
             ExportStatus(model: model)
             if model.hasSystemAudio || model.hasMicrophone { VolumeButton(model: model) }
             if let cam = model.project.camera { CameraMenu(model: model, camera: cam) }
+            EffectsMenu(model: model)
             Menu {
                 Picker("Background", selection: Binding(get: { model.project.style },
                                                         set: { s in model.edit("Background") { $0.style = s } })) {
@@ -777,6 +778,25 @@ struct SelectionBar: View {
             .help("Delete the selected zoom (Delete)")
             .accessibilityLabel("Delete the selected zoom")
         hint("Click the preview to hold this zoom on a spot.")
+    }
+}
+
+/// What the video adds on top of the recording. Each change is one undo step.
+struct EffectsMenu: View {
+    @Bindable var model: EditorModel
+
+    var body: some View {
+        Menu {
+            Toggle("Show Clicks", isOn: Binding(get: { model.project.showClicks },
+                                                set: { on in model.edit(on ? "Show Clicks" : "Hide Clicks") { $0.showClicks = on } }))
+        } label: {
+            Image(systemName: "cursorarrow.click.2")
+        }
+        .menuIndicator(.visible)
+        .fixedSize()
+        .focusable(false)
+        .help("Effects: click rings")
+        .accessibilityLabel("Effects")
     }
 }
 

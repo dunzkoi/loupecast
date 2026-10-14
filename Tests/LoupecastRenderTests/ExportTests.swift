@@ -553,6 +553,48 @@ final class ExportTests: XCTestCase {
         print("gif: \(n) frames, \(total) s, \(size / 1024) KB → \(out.path)")
     }
 
+    // MARK: clicks
+
+    /// The clicks at recording 3.0 and 3.5 s are composition 1.0 and 1.5 s. 0.1 s after the first, the export shows a ring
+    /// where camera(t) puts the click; 0.5 s after the second the frame is the same as with 클릭 표시 off.
+    func testClickRingExport() async throws {
+        try XCTSkipIf(ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] != nil, "no video hardware on CI VMs")
+        try await withDeadline(Self.deadline) { try await Self.clickRingExport() }
+    }
+
+    static func clickRingExport() async throws {
+        let mov = outDir.appendingPathComponent("synthetic-clicks.mov")
+        try await writeSyntheticMovie(to: mov)
+        var project = makeProject()
+        func frames(_ show: Bool) async throws -> [CGImage] {
+            project.showClicks = show
+            let out = outDir.appendingPathComponent("export-clicks-\(show).mp4")
+            try await Exporter.export(project: project, videoURL: mov, to: out)
+            let gen = AVAssetImageGenerator(asset: AVURLAsset(url: out))
+            gen.requestedTimeToleranceBefore = .zero; gen.requestedTimeToleranceAfter = .zero
+            var out2: [CGImage] = []
+            for c in [1.1, 2.0] { out2.append(try await gen.image(at: CMTime(seconds: c, preferredTimescale: 600)).image) }
+            return out2
+        }
+        let on = try await frames(true), off = try await frames(false)
+        let canvas = Composer.renderSize(project.aspect), path = Composer.cameraPath(project)
+        let frame = LoupecastCompositor.frameRect(source: size, canvas: canvas, style: FrameStyle(project.style))
+        func spot(_ c: Double, _ click: ClickEvent) -> (Double, Double) {
+            let p = Placement(frame: frame, camera: path.camera(composition: c), window: path.window, source: size).point(Point(x: click.x, y: click.y))
+            return (p.x, canvas.height - p.y)
+        }
+        func diff(_ a: CGImage, _ b: CGImage, _ at: (Double, Double)) -> Int {
+            let p = pixel(a, at.0, at.1), q = pixel(b, at.0, at.1)
+            return abs(p.r - q.r) + abs(p.g - q.g) + abs(p.b - q.b)
+        }
+        let ring = diff(on[0], off[0], spot(1.1, project.clicks[0])), after = diff(on[1], off[1], spot(2.0, project.clicks[1]))
+        print("click ring: \(ring) levels at the click 0.1 s after it, \(after) levels 0.5 s after the second click")
+        XCTAssertGreaterThan(ring, 60, "the ring lightens the click spot")
+        XCTAssertLessThan(after, 12, "gone after 0.4 s")
+        let p = pixel(on[0], spot(1.1, project.clicks[0]).0, spot(1.1, project.clicks[0]).1)
+        XCTAssertTrue(p.r > 60 && p.b > 200, "white over the blue square: \(p)")
+    }
+
     // MARK: frame rate and file size
 
     func testExportPlan() {

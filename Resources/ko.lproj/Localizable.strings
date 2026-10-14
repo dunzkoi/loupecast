@@ -61,6 +61,8 @@
 "Drag the video into another app" = "다른 앱으로 끌어 영상 첨부";
 "Drag to choose the area to record. Enter or a double-click records, Esc or a right-click cancels." = "녹화할 영역을 드래그하세요. Enter나 더블클릭으로 녹화하고, Esc나 오른쪽 클릭으로 취소합니다.";
 "Edit: %@" = "편집: %@";
+"Effects" = "효과";
+"Effects: click rings" = "효과: 클릭 표시";
 "Enjoying Loupecast? Star it on GitHub" = "Loupecast가 마음에 드셨다면 GitHub에 별을 눌러 주세요";
 "Export" = "내보내기";
 "Export an MP4, or pick GIF from the arrow" = "MP4로 내보냅니다. 화살표에서 GIF를 고를 수 있습니다";
@@ -74,6 +76,7 @@
 "GIF (no sound, loops)" = "GIF (소리 없음, 반복)";
 "Graphite" = "짙은 회색";
 "Hide Camera" = "카메라 숨기기";
+"Hide Clicks" = "클릭 표시 끄기";
 "Hide Menu Bar in Video" = "영상 속 메뉴 막대 숨기기";
 "Hold ⌥ to delete one at a time" = "⌥를 누르면 하나씩 지울 수 있습니다";
 "In System Settings › Privacy & Security › Camera, turn on Loupecast." = "시스템 설정 › 개인정보 보호 및 보안 › 카메라에서 Loupecast를 켭니다.";
@@ -152,6 +155,7 @@
 "Set Start" = "시작 지점";
 "Shortcut unavailable: %@" = "단축키 사용 불가: %@";
 "Show Camera" = "카메라 보이기";
+"Show Clicks" = "클릭 표시";
 "Show in Finder" = "Finder에서 보기";
 "Show these shortcuts" = "이 단축키 목록 보기";
 "Size" = "크기";

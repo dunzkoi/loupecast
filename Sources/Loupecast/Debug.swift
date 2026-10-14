@@ -46,6 +46,7 @@
 //   LOUPECAST_LOOK=<dir>              after the edits above, print the saved look defaults, a new project with them
 //                                 applied, and the project in <dir> as it opens (its own look)
 //   LOUPECAST_MENUS=1                 print the toolbar's pop-up menus (title, check mark, enabled) before the snapshot
+//   LOUPECAST_SHOW_CLICKS=0|1         switch 클릭 표시 through the editor (one undo step) before the snapshot
 //   LOUPECAST_QUIT_TEST=<dir>         export from that recording's editor, close the editor, then quit;
 //                                 LOUPECAST_QUIT_ANSWER=cancel|quit answers the export alert,
 //                                 LOUPECAST_QUIT_EDIT=<dir> splits a second recording right before quitting
@@ -224,6 +225,10 @@ enum DebugHooks {
             m.edit("Fill Frame") { $0.fill = true }
             print("LOUPECAST: fill \(m.project.fill) (fills frame \(m.project.fillsFrame)), undo \(m.undo.undoActionName)")
         }
+        if let on = env["LOUPECAST_SHOW_CLICKS"].map({ $0 == "1" }) {
+            m.edit(on ? "Show Clicks" : "Hide Clicks") { $0.showClicks = on }
+            print("LOUPECAST: show clicks \(m.project.showClicks), undo \(m.undo.undoActionName)")
+        }
         if let s = env["LOUPECAST_STYLE"].flatMap(StylePreset.init(rawValue:)) {
             m.edit("Background") { $0.style = s }
             print("LOUPECAST: style \(m.project.style.rawValue), undo \(m.undo.undoActionName)")
@@ -289,7 +294,17 @@ enum DebugHooks {
                 for i in 0..<c.segmentCount { if let menu = c.menu(forSegment: i) { print("LOUPECAST: menu export \(lines(menu, ""))") } }
             }
             for b in views(editor.window.contentView!).compactMap({ $0 as? NSPopUpButton ?? ($0 as? NSButton).flatMap { $0.menu == nil ? nil : $0 } }) {
-                if let menu = (b as? NSPopUpButton)?.menu ?? b.menu { print("LOUPECAST: menu \(type(of: b)) \(lines(menu, ""))") }
+                guard let menu = (b as? NSPopUpButton)?.menu ?? b.menu else { continue }
+                if menu.items.isEmpty {   // SwiftUI fills a Menu only while it is open: open it, read it, close it
+                    nonisolated(unsafe) let menu = menu, read = { lines(menu, "") }
+                    nonisolated(unsafe) var seen: [String] = []
+                    let t = Timer(timeInterval: 0.2, repeats: false) { _ in MainActor.assumeIsolated { seen = read(); menu.cancelTracking() } }
+                    RunLoop.main.add(t, forMode: .common)
+                    b.performClick(nil)
+                    print("LOUPECAST: menu \(type(of: b)) \(seen)")
+                } else {
+                    print("LOUPECAST: menu \(type(of: b)) \(lines(menu, ""))")
+                }
             }
         }
         switch env["LOUPECAST_SELECT"] ?? "zoom" {

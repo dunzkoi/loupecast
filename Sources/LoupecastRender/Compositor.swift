@@ -45,9 +45,11 @@ final class LoupecastInstruction: NSObject, AVVideoCompositionInstructionProtoco
     let fill: Bool
     /// The webcam track and how to show it; nil when hidden (then it isn't decoded at all).
     let camera: (trackID: CMPersistentTrackID, overlay: CameraOverlay)?
+    /// Clicks on kept material at their composition time, oldest first; empty when 클릭 표시 is off.
+    let clicks: [(time: Double, at: Point, right: Bool)]
 
     init(timeRange: CMTimeRange, trackID: CMPersistentTrackID, path: CameraPath, style: FrameStyle, fill: Bool,
-         camera: (trackID: CMPersistentTrackID, overlay: CameraOverlay)?) {
+         camera: (trackID: CMPersistentTrackID, overlay: CameraOverlay)?, project: Project) {
         self.timeRange = timeRange
         self.trackID = trackID
         self.requiredSourceTrackIDs = ([trackID] + (camera.map { [$0.trackID] } ?? [])).map { NSNumber(value: $0) }
@@ -55,6 +57,24 @@ final class LoupecastInstruction: NSObject, AVVideoCompositionInstructionProtoco
         self.style = style
         self.fill = fill
         self.camera = camera
+        let clips = project.clips
+        clicks = !project.showClicks ? [] : project.clicks.filter { clips.index(containing: $0.t) != nil }.sorted { $0.t < $1.t }
+            .map { (clips.compositionTime($0.t), Point(x: $0.x, y: $0.y), $0.button == .right) }
+    }
+}
+
+/// Where the recording sits on the canvas for one frame: the fixed frame rect and the camera's crop inside it.
+struct Placement {
+    let frame: CGRect        // canvas, CI space (bottom-left origin)
+    let camera: Camera
+    let window: Window
+    let source: CGSize       // recording pixels
+
+    /// The canvas point (CI space) that shows recording point `p` (normalized, top-left origin).
+    func point(_ p: Point) -> CGPoint {
+        let hx = window.width / 2 / camera.scale, hy = window.height / 2 / camera.scale
+        return CGPoint(x: frame.minX + (p.x - camera.center.x + hx) / (2 * hx) * frame.width,
+                       y: frame.maxY - (p.y - camera.center.y + hy) / (2 * hy) * frame.height)
     }
 }
 
@@ -87,20 +107,54 @@ public final class LoupecastCompositor: NSObject, AVVideoCompositing, @unchecked
             }
             lastSource = src
             let size = request.renderContext.size
-            var image = render(src, camera: ins.path.camera(composition: request.compositionTime.seconds), canvas: size, style: ins.style,
-                               fill: ins.fill, window: ins.path.window)
             // no webcam frame where the camera started late or stopped early: no circle there
-            if let cam = ins.camera, let face = request.sourceFrame(byTrackID: cam.trackID) {
-                image = Self.overlay(CIImage(cvPixelBuffer: face), on: image, canvas: size, cam.overlay)
-            }
+            let face = ins.camera.flatMap { request.sourceFrame(byTrackID: $0.trackID) }.map { CIImage(cvPixelBuffer: $0) }
+            let image = compose(src, face: face, at: request.compositionTime.seconds, canvas: size, ins)
             Self.context.render(image, to: out, bounds: CGRect(origin: .zero, size: size), colorSpace: Self.outputSpace)
             request.finish(withComposedVideoFrame: out)
         }
     }
 
+    /// One output frame at composition time `t`, from its source frames (`face`: the webcam's, if any).
+    func compose(_ src: CIImage, face: CIImage?, at t: Double, canvas: CGSize, _ ins: LoupecastInstruction) -> CIImage {
+        let image = render(src, camera: ins.path.camera(composition: t), canvas: canvas, style: ins.style, fill: ins.fill, window: ins.path.window) {
+            content, place in Self.ripples(ins.clicks, at: t, place, canvas: canvas).reduce(content) { $1.composited(over: $0) }
+        }
+        guard let cam = ins.camera, let face else { return image }
+        return Self.overlay(face, on: image, canvas: canvas, cam.overlay)
+    }
+
+    static let rippleLength = 0.4
+
+    /// A translucent disc with a dark rim that grows from 1.2 % to 4.2 % of the canvas's short side and fades out over
+    /// 0.4 s after each click: white for the left button, orange for the right. The rim shows on light screens, the fill on
+    /// dark ones. Inside the frame, so it moves with the zoom like the click itself.
+    static func ripples(_ clicks: [(time: Double, at: Point, right: Bool)], at t: Double, _ place: Placement, canvas: CGSize) -> [CIImage] {
+        let short = min(canvas.width, canvas.height), k = short / 1080
+        func disc(_ c: CGPoint, _ r: Double, _ color: CIColor) -> CIImage {
+            let g = CIFilter.radialGradient()
+            g.center = c
+            g.radius0 = Float(max(0, r - max(1, 1.5 * k)))     // a pixel or two of soft edge
+            g.radius1 = Float(r)
+            g.color0 = color
+            g.color1 = CIColor(red: 0, green: 0, blue: 0, alpha: 0)
+            return g.outputImage!.cropped(to: CGRect(x: c.x - r, y: c.y - r, width: 2 * r, height: 2 * r))
+        }
+        return clicks.filter { $0.time <= t && t < $0.time + rippleLength }.map { c in
+            let f = (t - c.time) / rippleLength, r = short * (0.012 + 0.03 * f), a = 1 - f, rim = max(1.5, 3 * k)
+            let p = place.point(c.at)
+            let fill = disc(p, r - rim, c.right ? CIColor(red: 1, green: 0.6, blue: 0.15, alpha: 0.55 * a) : CIColor(red: 1, green: 1, blue: 1, alpha: 0.5 * a))
+            let edge = disc(p, r, CIColor(red: 0, green: 0, blue: 0, alpha: 0.35 * a))
+                .applyingFilter("CISourceOutCompositing", parameters: [kCIInputBackgroundImageKey: disc(p, r - rim, .white)])
+            return fill.composited(over: edge)
+        }
+    }
+
     /// Gradient + framed recording. `camera` crops the recording inside the fixed rounded frame; `window` is the crop
-    /// at scale 1 (the whole recording, or the frame's aspect when filling).
-    func render(_ source: CIImage, camera: Camera, canvas: CGSize, style: FrameStyle, fill: Bool = false, window: Window = .full) -> CIImage {
+    /// at scale 1 (the whole recording, or the frame's aspect when filling). `decorate` draws on the recording inside the
+    /// frame (what it draws is clipped to the rounded frame).
+    func render(_ source: CIImage, camera: Camera, canvas: CGSize, style: FrameStyle, fill: Bool = false, window: Window = .full,
+                decorate: (CIImage, Placement) -> CIImage = { image, _ in image }) -> CIImage {
         let src = source.extent
         let frame = Self.frameRect(source: src.size, canvas: canvas, style: style, fill: fill)
         // camera window in source pixels (CI is bottom-left origin, camera is top-left)
@@ -113,9 +167,8 @@ public final class LoupecastCompositor: NSObject, AVVideoCompositing, @unchecked
             .transformed(by: CGAffineTransform(translationX: -crop.minX, y: -crop.minY))
         lanczos.scale = Float(sy)
         lanczos.aspectRatio = Float(sx / sy)
-        let content = lanczos.outputImage!
-            .transformed(by: CGAffineTransform(translationX: frame.minX, y: frame.minY))
-            .cropped(to: frame)
+        let content = decorate(lanczos.outputImage!.transformed(by: CGAffineTransform(translationX: frame.minX, y: frame.minY)).cropped(to: frame),
+                               Placement(frame: frame, camera: camera, window: window, source: src.size)).cropped(to: frame)
         let bg = backgroundImage(frame: frame, canvas: canvas, style: style)
         return content.applyingFilter("CIBlendWithMask", parameters: [
             kCIInputBackgroundImageKey: bg,
@@ -346,7 +399,8 @@ public enum Composer {
         vc.colorYCbCrMatrix = AVVideoYCbCrMatrix_ITU_R_709_2
         vc.instructions = [LoupecastInstruction(timeRange: CMTimeRange(start: .zero, duration: duration), trackID: trackID,
                                             path: cameraPath(project), style: FrameStyle(project.style), fill: project.fillsFrame,
-                                            camera: cameraTrackID.flatMap { id in project.camera.flatMap { $0.isVisible ? (id, $0) : nil } })]
+                                            camera: cameraTrackID.flatMap { id in project.camera.flatMap { $0.isVisible ? (id, $0) : nil } },
+                                            project: project)]
         return vc
     }
 }

@@ -377,6 +377,29 @@ final class ClipTests: XCTestCase {
         XCTAssertEqual(try Project.load(from: url).style, .plain)
     }
 
+    // MARK: click rings
+
+    func testShowClicksDefaultsOnAndCarriesOver() throws {
+        var p = project()
+        XCTAssertTrue(p.showClicks)
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("clicks-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        var json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(p)) as! [String: Any]
+        json["showClicks"] = nil                              // older files: rings on
+        try JSONSerialization.data(withJSONObject: json).write(to: url)
+        XCTAssertTrue(try Project.load(from: url).showClicks)
+        p.showClicks = false
+        try p.save(to: url)
+        XCTAssertFalse(try Project.load(from: url).showClicks)
+        var next = project()
+        LookDefaults(p).apply(to: &next)
+        XCTAssertFalse(next.showClicks, "turned off once, new recordings start without rings")
+        let old = try JSONDecoder().decode(LookDefaults.self, from: Data(#"{"aspect":"9:16","style":"dark","fill":false}"#.utf8))
+        var other = project()
+        old.apply(to: &other)
+        XCTAssertTrue(other.showClicks, "a look saved before the switch leaves it on")
+    }
+
     // MARK: look defaults
 
     /// The look of the last edited project carries over to new recordings; the webcam's only to ones with a webcam.
