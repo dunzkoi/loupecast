@@ -377,6 +377,33 @@ final class ClipTests: XCTestCase {
         XCTAssertEqual(try Project.load(from: url).style, .plain)
     }
 
+    // MARK: look defaults
+
+    /// The look of the last edited project carries over to new recordings; the webcam's only to ones with a webcam.
+    func testLookDefaultsCarryOverToNewProjects() throws {
+        var edited = project()
+        edited.aspect = .portrait; edited.style = .dark; edited.fill = true
+        edited.camera = CameraOverlay(offset: 0); edited.camera?.corner = .topLeft; edited.camera?.size = 0.38
+        let look = try JSONDecoder().decode(LookDefaults.self, from: JSONEncoder().encode(LookDefaults(edited)))
+        XCTAssertEqual(look, LookDefaults(edited), "stored as JSON in UserDefaults")
+
+        var plain = project()
+        look.apply(to: &plain)
+        XCTAssertEqual([plain.aspect.rawValue, plain.style.rawValue], ["9:16", "dark"]); XCTAssertTrue(plain.fill)
+        XCTAssertNil(plain.camera, "no webcam recorded: none added")
+        var withCamera = project()
+        withCamera.camera = CameraOverlay(offset: 0.2)
+        look.apply(to: &withCamera)
+        XCTAssertEqual(withCamera.camera?.corner, .topLeft); XCTAssertEqual(withCamera.camera?.size, 0.38)
+        XCTAssertEqual(withCamera.camera?.offset, 0.2, "the recording's own timing stays")
+
+        // editing a project without a webcam keeps the webcam look picked before
+        var square = project()
+        square.aspect = .square
+        let next = LookDefaults(square, previous: look)
+        XCTAssertEqual(next.aspect, .square); XCTAssertEqual(next.cameraCorner, .topLeft); XCTAssertEqual(next.cameraSize, 0.38)
+    }
+
     // MARK: rename
 
     func testRenameKeepsBlankNamesAndOlderFilesAreUnnamed() throws {

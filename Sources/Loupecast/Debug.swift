@@ -40,6 +40,8 @@
 //                                 snapshot (and before LOUPECAST_EXPORT); LOUPECAST_RENAME_UNDO=1 undoes it again
 //   LOUPECAST_SHORTCUTS=<png>         press ? through the window's key handler (prints whether the shortcuts popover
 //                                 opened) and save the list drawn in a plain window
+//   LOUPECAST_LOOK=<dir>              after the edits above, print the saved look defaults, a new project with them
+//                                 applied, and the project in <dir> as it opens (its own look)
 //   LOUPECAST_QUIT_TEST=<dir>         export from that recording's editor, close the editor, then quit;
 //                                 LOUPECAST_QUIT_ANSWER=cancel|quit answers the export alert,
 //                                 LOUPECAST_QUIT_EDIT=<dir> splits a second recording right before quitting
@@ -260,6 +262,14 @@ enum DebugHooks {
             save(w.contentView!, to: URL(fileURLWithPath: out))
             w.close()
             m.showsShortcuts = false
+        }
+        if let path = env["LOUPECAST_LOOK"] {
+            var fresh = Project(name: "new", duration: 5, pixelWidth: 1600, pixelHeight: 1000, pointPixelScale: 2, cursor: [], clicks: [])
+            LookDefaults.saved?.apply(to: &fresh)                   // what Recorder.stop does
+            let other = try? Project.load(from: URL(fileURLWithPath: path).appendingPathComponent(Project.fileName))
+            print("LOUPECAST: look defaults \(LookDefaults.saved.map { "\($0.aspect.rawValue) \($0.style.rawValue) fill \($0.fill)" } ?? "none"), "
+                  + "new project \(fresh.aspect.rawValue) \(fresh.style.rawValue) fill \(fresh.fill), "
+                  + "reopened \(other.map { "\($0.aspect.rawValue) \($0.style.rawValue) fill \($0.fill)" } ?? "none")")
         }
         switch env["LOUPECAST_SELECT"] ?? "zoom" {
         case "clip": m.selection = m.project.clips.first.map { .clip($0.id) } ?? .none

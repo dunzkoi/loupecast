@@ -271,6 +271,8 @@ final class EditorModel {
 
     private func projectChanged(old: Project) {
         scheduleSave()
+        let previous = LookDefaults.saved
+        if LookDefaults(project, previous: previous) != LookDefaults(old, previous: previous) { LookDefaults.saved = LookDefaults(project, previous: previous) }
         if project.name != old.name { onNameChange?(project.name) }
         if case .clip(let id) = selection, !project.clips.contains(where: { $0.id == id }) { selection = .none }
         if case .zoom(let id) = selection, !project.zooms.contains(where: { $0.id == id }) { selection = .none }
@@ -360,6 +362,14 @@ final class EditorModel {
             if let cg = try? r.image { out.append(NSImage(cgImage: cg, size: .zero)) }
         }
         return out
+    }
+}
+
+extension LookDefaults {
+    /// What the last edited project looked like (aspect, background, fill, webcam corner and size).
+    static var saved: LookDefaults? {
+        get { UserDefaults.standard.data(forKey: "lookDefaults").flatMap { try? JSONDecoder().decode(LookDefaults.self, from: $0) } }
+        set { UserDefaults.standard.set(newValue.flatMap { try? JSONEncoder().encode($0) }, forKey: "lookDefaults") }
     }
 }
 

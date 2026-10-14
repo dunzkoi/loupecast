@@ -233,6 +233,29 @@ public struct CameraOverlay: Codable, Equatable, Sendable {
     public init(offset: Double) { self.offset = offset }
 }
 
+/// The look picked last in an editor: new recordings start with it, opened ones keep their own.
+public struct LookDefaults: Codable, Equatable, Sendable {
+    public var aspect: AspectRatio
+    public var style: StylePreset
+    public var fill: Bool
+    /// From the last project with a webcam; applied only to recordings with one.
+    public var cameraCorner: CameraOverlay.Corner?
+    public var cameraSize: Double?
+
+    /// `p`'s look; the camera's from `previous` when `p` has no webcam.
+    public init(_ p: Project, previous: LookDefaults? = nil) {
+        aspect = p.aspect; style = p.style; fill = p.fill
+        cameraCorner = p.camera?.corner ?? previous?.cameraCorner
+        cameraSize = p.camera?.size ?? previous?.cameraSize
+    }
+
+    public func apply(to p: inout Project) {
+        p.aspect = aspect; p.style = style; p.fill = fill
+        if let cameraCorner { p.camera?.corner = cameraCorner }
+        if let cameraSize { p.camera?.size = cameraSize }
+    }
+}
+
 /// Named looks for the frame around the recording (colors and sizes live in LoupecastRender's FrameStyle).
 public enum StylePreset: String, Codable, CaseIterable, Sendable {
     case pastel, dark, light, graphite, blue
