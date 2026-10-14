@@ -92,6 +92,8 @@
 "Loupecast Update" = "Loupecast 업데이트";
 "Loupecast restarted with the new version." = "Loupecast가 새 버전으로 다시 시작했습니다.";
 "MMM d HH.mm.ss" = "M월 d일 HH.mm.ss";
+"MP4 4K" = "MP4 4K";
+"MP4 4K (the recording has too few pixels)" = "MP4 4K (녹화 해상도가 낮아 쓸 수 없음)";
 "MP4 Video" = "MP4 영상";
 "Medium" = "보통";
 "Microphone" = "마이크";

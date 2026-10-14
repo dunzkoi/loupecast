@@ -6,7 +6,7 @@
 //   LOUPECAST_APPEARANCE=dark|light   force appearance
 //   LOUPECAST_SNAPSHOT=<png>          save the editor window (with the live preview frame) and quit
 //   LOUPECAST_SEEK=<seconds>          playhead time for the snapshot
-//   LOUPECAST_EXPORT=1|gif|fake       run the editor's own export first (gif: the GIF export) (fake: just the done state, then the 복사
+//   LOUPECAST_EXPORT=1|4k|gif|fake    run the editor's own export first (4k: the MP4 4K export, gif: the GIF export) (fake: just the done state, then the 복사
 //                                 button's copy: prints what NSPasteboard.general holds, then restores the clipboard)
 //                    cancel|twice     cancel it at 20 %, or export from two editors of the recording at once
 //   LOUPECAST_EXPORT_DIR=<dir>        where the editor exports (default ~/Movies)
@@ -329,7 +329,7 @@ enum DebugHooks {
             pb.clearContents()
             pb.writeObjects(saved)
         }
-        if let format = ["1": EditorModel.ExportFormat.mp4, "gif": .gif][env["LOUPECAST_EXPORT"] ?? ""] {
+        if let format = ["1": EditorModel.ExportFormat.mp4, "4k": .uhd, "gif": .gif][env["LOUPECAST_EXPORT"] ?? ""] {
             m.export(format)
             while m.exportState.isRunning { try? await Task.sleep(for: .milliseconds(100)) }
             print("LOUPECAST: export state \(m.exportState), size warning \(m.sizeWarning ?? "none")")

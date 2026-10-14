@@ -1,7 +1,8 @@
 # Loupecast
 
 Free, open-source macOS menu-bar screen recorder: clicks become automatic zooms, the editor cuts and trims, and
-export writes a 60 fps H.264 MP4 at 16:9 (1920×1080), 9:16 (1080×1920) or 1:1 (1080×1080). Swift 6, SwiftUI,
+export writes an H.264 MP4 at 16:9 (1920×1080), 9:16 (1080×1920) or 1:1 (1080×1080), or twice that (4K), at 60 or
+30 fps and optionally under a size limit (`ExportOptions`). Swift 6, SwiftUI,
 ScreenCaptureKit, AVFoundation; macOS 15+, Apple Silicon. Public repo `dunzkoi/loupecast`: release-please releases,
 self-update from GitHub Releases, Homebrew cask, GitHub Pages site. The original spec is `PROMPT.md` (gitignored,
 only in the maintainer's checkout); the rules that matter are below.

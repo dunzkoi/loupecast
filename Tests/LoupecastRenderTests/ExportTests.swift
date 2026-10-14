@@ -558,6 +558,7 @@ final class ExportTests: XCTestCase {
     func testExportPlan() {
         XCTAssertTrue(ExportOptions().plan(seconds: 60, hasAudio: true) == (16_000_000, 60), "no target: full bit rate")
         XCTAssertTrue(ExportOptions(fps: 30).plan(seconds: 60, hasAudio: true) == (16_000_000, 30))
+        XCTAssertTrue(ExportOptions(scale: 2).plan(seconds: 60, hasAudio: true) == (40_000_000, 60), "4K: 40 Mbps")
         let tenMB = ExportOptions(targetBytes: 10_000_000).plan(seconds: 60, hasAudio: true)
         XCTAssertEqual(tenMB.bitRate, 1_008_000, accuracy: 1); XCTAssertEqual(tenMB.fps, 60)
         let oneMB = ExportOptions(targetBytes: 1_000_000).plan(seconds: 10, hasAudio: true)
@@ -623,6 +624,48 @@ final class ExportTests: XCTestCase {
             let audio = try await asset.loadTracks(withMediaType: .audio)
             XCTAssertEqual(audio.count, 1)
         }
+    }
+
+    /// 4K: 3840×2160 with the same picture as 1080p at twice the size (zoomed in, so the square and the background both count).
+    func testFourKExport() async throws {
+        try XCTSkipIf(ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] != nil, "no video hardware on CI VMs")
+        try await withDeadline(Self.deadline) { try await Self.fourKExport() }
+    }
+
+    static func fourKExport() async throws {
+        let mov = outDir.appendingPathComponent("synthetic-4k.mov")
+        try await writeSyntheticMovie(to: mov)
+        let project = makeProject()
+        let hd = outDir.appendingPathComponent("export-1080.mp4"), uhd = outDir.appendingPathComponent("export-4k.mp4")
+        try await Exporter.export(project: project, videoURL: mov, to: hd)
+        try await Exporter.export(project: project, videoURL: mov, to: uhd, options: ExportOptions(scale: 2))
+        let tracks = try await AVURLAsset(url: uhd).loadTracks(withMediaType: .video)
+        let natural = try await XCTUnwrap(tracks.first).load(.naturalSize)
+        XCTAssertEqual(natural, CGSize(width: 3840, height: 2160))
+        func frame(_ url: URL) async throws -> CGImage {
+            let gen = AVAssetImageGenerator(asset: AVURLAsset(url: url))
+            gen.requestedTimeToleranceBefore = .zero; gen.requestedTimeToleranceAfter = .zero
+            return try await gen.image(at: CMTime(seconds: 2, preferredTimescale: 600)).image
+        }
+        let a = try await frame(hd), b = try await frame(uhd)
+        func pixels(_ cg: CGImage) -> [UInt8] {
+            var px = [UInt8](repeating: 0, count: 1920 * 1080 * 4)
+            let ctx = CGContext(data: &px, width: 1920, height: 1080, bitsPerComponent: 8, bytesPerRow: 1920 * 4,
+                                space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+            ctx.interpolationQuality = .high
+            ctx.draw(cg, in: CGRect(x: 0, y: 0, width: 1920, height: 1080))
+            return px
+        }
+        let pa = pixels(a), pb = pixels(b)
+        var sum = 0.0
+        for i in stride(from: 0, to: pa.count, by: 4) { for k in 0..<3 { sum += abs(Double(pa[i + k]) - Double(pb[i + k])) } }
+        let mean = sum / Double(pa.count / 4 * 3)
+        print("4K vs 1080p at 2 s: mean difference \(mean) levels")
+        XCTAssertLessThan(mean, 4, "the 4K frame scaled down is the 1080p frame")
+        XCTAssertFalse(Composer.hasDetailFor4K(project), "1600 px across is too few for 4K")
+        var retina = project
+        retina.pixelWidth = 3024; retina.pixelHeight = 1964
+        XCTAssertTrue(Composer.hasDetailFor4K(retina))
     }
 
     static func frameTimes(_ asset: AVURLAsset, _ track: AVAssetTrack) throws -> [Double] {

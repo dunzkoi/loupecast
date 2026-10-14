@@ -321,24 +321,26 @@ final class EditorModel {
     static private(set) var exports: [URL: Task<Void, Never>] = [:]
     static var exportDir = Exporter.moviesDir
 
-    enum ExportFormat { case mp4, gif }
+    /// uhd: MP4 at 4K.
+    enum ExportFormat { case mp4, uhd, gif }
     /// The Export menu's frame rate (60 or 30) and size limit in MB (0: none); they apply to MP4 exports.
     static let fpsKey = "exportFPS", sizeLimitKey = "exportSizeLimitMB"
     static let sizeLimits = [0, 10, 25]
 
-    static var exportOptions: ExportOptions {
+    static func exportOptions(_ format: ExportFormat) -> ExportOptions {
+        let scale = format == .uhd ? 2 : 1
         #if DEBUG
-        if let b = DebugHooks.env["LOUPECAST_SIZE_LIMIT_BYTES"].flatMap(Int.init) { return ExportOptions(targetBytes: b) }
+        if let b = DebugHooks.env["LOUPECAST_SIZE_LIMIT_BYTES"].flatMap(Int.init) { return ExportOptions(targetBytes: b, scale: scale) }
         #endif
         let mb = UserDefaults.standard.integer(forKey: sizeLimitKey)
-        return ExportOptions(fps: UserDefaults.standard.integer(forKey: fpsKey) == 30 ? 30 : 60, targetBytes: mb > 0 ? mb * 1_000_000 : nil)
+        return ExportOptions(fps: UserDefaults.standard.integer(forKey: fpsKey) == 30 ? 30 : 60, targetBytes: mb > 0 ? mb * 1_000_000 : nil, scale: scale)
     }
 
     func export(_ format: ExportFormat = .mp4) {
         if exportState.isRunning { return }
         exportState = .running(0)
         sizeWarning = nil
-        let project = project, video = videoURL, options = Self.exportOptions
+        let project = project, video = videoURL, options = Self.exportOptions(format)
         let url = Exporter.defaultURL(name: project.renamed ? project.name : nil, in: Self.exportDir, taken: Set(Self.exports.keys),
                                       fileExtension: format == .gif ? "gif" : "mp4")
         let task = Task {
@@ -349,10 +351,10 @@ final class EditorModel {
                     }
                 }
                 switch format {
-                case .mp4: try await Exporter.export(project: project, videoURL: video, to: url, options: options, progress: progress)
+                case .mp4, .uhd: try await Exporter.export(project: project, videoURL: video, to: url, options: options, progress: progress)
                 case .gif: try await GIFExporter.export(project: project, videoURL: video, to: url, progress: progress)
                 }
-                if format == .mp4, let limit = options.targetBytes,
+                if format != .gif, let limit = options.targetBytes,
                    let bytes = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize, bytes > limit {
                     let f = { (n: Int) in ByteCountFormatter.string(fromByteCount: Int64(n), countStyle: .file) }
                     sizeWarning = String(localized: "\(f(bytes)), over the \(f(limit)) limit")
@@ -670,6 +672,12 @@ struct ControlBar: View {
                 .help("Add a 2-second zoom at the playhead")
             Menu {
                 Button("MP4 Video") { model.export(.mp4) }
+                // a 1× recording has no more detail to give: say so instead of offering a blurry 4K
+                if Composer.hasDetailFor4K(model.project) {
+                    Button("MP4 4K") { model.export(.uhd) }
+                } else {
+                    Button("MP4 4K (the recording has too few pixels)") {}.disabled(true)
+                }
                 Button("GIF (no sound, loops)") { model.export(.gif) }
                 Picker("Frame Rate", selection: $fps) {
                     Text(verbatim: "60 fps").tag(60)

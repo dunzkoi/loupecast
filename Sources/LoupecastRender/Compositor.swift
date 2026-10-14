@@ -233,8 +233,18 @@ public struct SourceTracks: @unchecked Sendable {
 }
 
 public enum Composer {
-    public static func renderSize(_ aspect: AspectRatio) -> CGSize {
-        CGSize(width: aspect.pixels.width, height: aspect.pixels.height)
+    /// `scale` 2: 4K. The frame's look scales with the short side, so both sizes look the same.
+    public static func renderSize(_ aspect: AspectRatio, scale: Int = 1) -> CGSize {
+        CGSize(width: aspect.pixels.width * scale, height: aspect.pixels.height * scale)
+    }
+
+    /// 4K adds detail only when the recording has clearly more pixels across than the 1080p frame shows at scale 1
+    /// (a Retina screen does; a 1× display doesn't).
+    public static func hasDetailFor4K(_ project: Project) -> Bool {
+        let source = CGSize(width: project.pixelWidth, height: project.pixelHeight)
+        let frame = LoupecastCompositor.frameRect(source: source, canvas: renderSize(project.aspect), style: FrameStyle(project.style), fill: project.fillsFrame)
+        let shown = project.fillsFrame ? Window.filling(source: (source.width, source.height), frame: (frame.width, frame.height)).width : 1
+        return source.width * shown >= 1.5 * frame.width
     }
     public static let frameDuration = CMTime(value: 1, timescale: 60)
     /// Sped-up clips keep the voice's pitch; preview and export use the same algorithm.

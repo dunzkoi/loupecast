@@ -3,27 +3,30 @@ import LoupecastCore
 import os
 import VideoToolbox
 
-/// Frame rate and file size of an MP4 export. The preview always plays at 60 fps.
+/// Size, frame rate and file size of an MP4 export. The preview always plays at 1080p and 60 fps.
 public struct ExportOptions: Sendable, Equatable {
     /// 60 or 30.
     public var fps: Int
-    /// Upper bound for the file in bytes; nil: the full 16 Mbps.
+    /// Upper bound for the file in bytes; nil: the full bit rate.
     public var targetBytes: Int?
-    public init(fps: Int = 60, targetBytes: Int? = nil) { self.fps = fps; self.targetBytes = targetBytes }
+    /// 1: 1080p (1920×1080, 1080×1920, 1080×1080); 2: 4K (3840×2160, 2160×3840, 2160×2160).
+    public var scale: Int
+    public init(fps: Int = 60, targetBytes: Int? = nil, scale: Int = 1) { self.fps = fps; self.targetBytes = targetBytes; self.scale = scale }
 
     public static let audioBitRate = 192_000
-    static let fullBitRate = 16_000_000
+    /// 16 Mbps at 1080p, 40 at 4K (four times the pixels, but H.264 needs far less than four times the bits).
+    var fullBitRate: Int { scale == 2 ? 40_000_000 : 16_000_000 }
 
     /// Video bit rate and frame rate for `seconds` of composition. A target leaves 10 % of it for the container and
     /// the audio's 192 kbps; below 1 Mbps a 60 fps export drops to 30 fps, so each frame gets twice the bits.
     public func plan(seconds: Double, hasAudio: Bool) -> (bitRate: Int, fps: Int) {
-        guard let targetBytes else { return (Self.fullBitRate, fps) }
+        guard let targetBytes else { return (fullBitRate, fps) }
         let budget = Double(targetBytes) * 8 * 0.9 / max(0.1, seconds) - (hasAudio ? Double(Self.audioBitRate) : 0)
-        return (Int(min(Double(Self.fullBitRate), max(100_000, budget))), budget < 1_000_000 ? 30 : fps)
+        return (Int(min(Double(fullBitRate), max(100_000, budget))), budget < 1_000_000 ? 30 : fps)
     }
 }
 
-/// H.264 at the project's aspect (1920×1080, 1080×1920 or 1080×1080), constant 60 or 30 fps, + one stereo AAC track
+/// H.264 at the project's aspect (1920×1080, 1080×1920 or 1080×1080, or twice that), constant 60 or 30 fps, + one stereo AAC track
 /// (system and mic mixed at the project's volumes).
 /// The composition is the kept clips back to back, so the file is exactly their total length.
 public enum Exporter {
@@ -60,6 +63,8 @@ public enum Exporter {
             videoSettings: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA])
         let vc = edit.videoComposition.mutableCopy() as! AVMutableVideoComposition
         vc.frameDuration = CMTime(value: 1, timescale: CMTimeScale(plan.fps))
+        let size = Composer.renderSize(project.aspect, scale: options.scale)   // the compositor draws at this size
+        vc.renderSize = size
         vOut.videoComposition = vc
         vOut.alwaysCopiesSampleData = false
         reader.add(vOut)
@@ -67,7 +72,6 @@ public enum Exporter {
         try? FileManager.default.removeItem(at: output)
         try FileManager.default.createDirectory(at: output.deletingLastPathComponent(), withIntermediateDirectories: true)
         let writer = try AVAssetWriter(outputURL: output, fileType: .mp4)
-        let size = Composer.renderSize(project.aspect)
         writer.shouldOptimizeForNetworkUse = true
         var compression: [String: Any] = [
             AVVideoAverageBitRateKey: plan.bitRate,
