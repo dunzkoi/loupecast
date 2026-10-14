@@ -1,5 +1,6 @@
 import AVFoundation
 import AppKit
+import Carbon.HIToolbox
 import LoupecastCore
 @preconcurrency import ScreenCaptureKit
 
@@ -50,7 +51,8 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
     /// `hideMenuBar` crops the menu-bar strip (or notch) off the top of the display; an `area` records only that rect
     /// of its display instead. `camera` records the default camera next to it (started first: it takes a moment).
     @MainActor
-    static func start(microphone: Bool, systemAudio: Bool, hideMenuBar: Bool, area: RecordingArea? = nil, camera: Bool = false) async throws -> Recorder {
+    static func start(microphone: Bool, systemAudio: Bool, hideMenuBar: Bool, area: RecordingArea? = nil, camera: Bool = false,
+                      shortcuts: Bool = false) async throws -> Recorder {
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
         let mouse = CGEvent(source: nil)?.location ?? .zero
         let display = area.map { a in content.displays.first { $0.displayID == a.displayID } }
@@ -82,7 +84,7 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
                 _ = await r.camera?.stop()
                 throw error
             }
-            r.startInputMonitors()
+            r.startInputMonitors(shortcuts: shortcuts)
             return r
         } catch {
             try? FileManager.default.removeItem(at: dir)
@@ -199,15 +201,29 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
 
     // MARK: input log (main thread)
 
-    @MainActor private func startInputMonitors() {
+    @MainActor private func startInputMonitors(shortcuts: Bool) {
         let clicks = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] e in
             let p = e.cgEvent?.location ?? CGEvent(source: nil)?.location ?? .zero
             let kind: InputLog.Raw.Kind = .click(e.type == .rightMouseDown ? .right : .left)
             MainActor.assumeIsolated { self?.log.append(.init(host: Self.hostTime(e.timestamp), gx: p.x, gy: p.y, kind: kind)) }
         }
-        // No key monitor: typed keys (passwords included) never go into project.json. A future shortcut overlay
-        // should record only combinations with ⌘, ⌃ or ⌥ held, never plain typing.
-        monitors = [clicks].compactMap { $0 }
+        // Keys only for 단축키 표시, and InputLog.appendKey keeps nothing but combinations with ⌘, ⌃ or ⌥: typed text
+        // (passwords included) never goes into project.json. Needs Accessibility; without it macOS sends no key events.
+        let keys = !shortcuts ? nil : NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] e in
+            guard !e.isARepeat, !IsSecureEventInputEnabled() else { return }   // a password field: nothing at all
+            let f = e.modifierFlags
+            var m = KeyModifiers()
+            if f.contains(.control) { m.insert(.control) }
+            if f.contains(.option) { m.insert(.option) }
+            if f.contains(.shift) { m.insert(.shift) }
+            if f.contains(.command) { m.insert(.command) }
+            let host = Self.hostTime(e.timestamp), special = Self.specialKeys[Int(e.keyCode)]
+            // every key but the special ones may type text (dead keys like ⌥E included)
+            let name = special ?? (e.characters(byApplyingModifiers: []) ?? e.charactersIgnoringModifiers ?? "?").uppercased()
+            let types = special == nil || [kVK_Space, kVK_Tab].contains(Int(e.keyCode))   // ⌥Space types a no-break space
+            MainActor.assumeIsolated { self?.log.appendKey(host: host, modifiers: m, key: name, typesText: types) }
+        }
+        monitors = [clicks, keys].compactMap { $0 }
         let shapes = CursorShapes(dir: dir)
         shapes.note()
         cursorShapes = shapes
@@ -224,6 +240,15 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
         RunLoop.main.add(timer, forMode: .common)
         cursorTimer = timer
     }
+
+    /// Named keys, by key code, as the video shows them (all but Space and Tab type no text); any other key shows its
+    /// unshifted character.
+    nonisolated static let specialKeys: [Int: String] = [
+        kVK_Return: "↩", kVK_ANSI_KeypadEnter: "⌤", kVK_Tab: "⇥", kVK_Space: "Space", kVK_Delete: "⌫", kVK_ForwardDelete: "⌦",
+        kVK_Escape: "⎋", kVK_LeftArrow: "←", kVK_RightArrow: "→", kVK_UpArrow: "↑", kVK_DownArrow: "↓", kVK_Home: "↖",
+        kVK_End: "↘", kVK_PageUp: "⇞", kVK_PageDown: "⇟", kVK_F1: "F1", kVK_F2: "F2", kVK_F3: "F3", kVK_F4: "F4",
+        kVK_F5: "F5", kVK_F6: "F6", kVK_F7: "F7", kVK_F8: "F8", kVK_F9: "F9", kVK_F10: "F10", kVK_F11: "F11", kVK_F12: "F12",
+    ]
 
     /// NSEvent.timestamp and SCStream PTS share the mach host clock (CMClockGetHostTimeClock ==
     /// systemUptime). Synthetic events can carry no timestamp; fall back to "now" for those.
@@ -274,7 +299,7 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
         let paused = pauses.map { ClipRange(start: max(0, ($0.start - start).seconds), end: (($0.end.isValid ? $0.end : end) - start).seconds) }
         var project = Project(name: Self.name(Date()), duration: duration,
                               pixelWidth: pixelSize.0, pixelHeight: pixelSize.1, pointPixelScale: scale,
-                              cursor: events.cursor, clicks: events.clicks, paused: paused)
+                              cursor: events.cursor, clicks: events.clicks, shortcuts: events.shortcuts, paused: paused)
         project.camera = cameraStart.map { CameraOverlay(offset: $0 - start.seconds) }   // recording-relative, like everything stored
         project.cursorOverlay = cursorShapes?.overlay(sessionStartHost: start.seconds)
         project.motionBlur = true                        // new recordings blur their zooms (older files stay sharp)

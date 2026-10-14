@@ -449,4 +449,38 @@ final class ZoomTests: XCTestCase {
         XCTAssertEqual(CameraPath.smoothCursor(cursor, clips: clips, at: 0.5)?.x ?? 0, 0.1, accuracy: 1e-9, "still cursor: no drift")
         XCTAssertNil(CameraPath.smoothCursor([], clips: clips, at: 1))
     }
+
+    // MARK: shortcuts
+
+    /// Only combinations with ⌘, ⌃ or ⌥ are kept: typing, ⇧ included, never reaches the log.
+    func testOnlyModifiedKeysAreKept() throws {
+        let d = DisplayBounds(x: 0, y: 0, width: 100, height: 100)
+        var log = InputLog()
+        log.appendKey(host: 101, modifiers: [], key: "P", typesText: true)
+        log.appendKey(host: 101.1, modifiers: .shift, key: "A", typesText: true)
+        log.appendKey(host: 101.2, modifiers: .option, key: "L", typesText: true)          // @ on a German keyboard
+        log.appendKey(host: 101.3, modifiers: [.option, .shift], key: "2", typesText: true)
+        log.appendKey(host: 102, modifiers: [.command, .shift], key: "S", typesText: true)
+        log.appendKey(host: 103, modifiers: [.option, .control], key: "↩", typesText: false)
+        log.appendKey(host: 104, modifiers: .option, key: "↑", typesText: false)            // ⌥↑: moves a line, types nothing
+        log.appendKey(host: 98, modifiers: .command, key: "Z", typesText: true)             // before the session
+        XCTAssertEqual(log.events.count, 4, "typing (plain, ⇧ and ⌥ letters) was never stored")
+        let r = log.relativized(sessionStartHost: 100, duration: 5, display: d)
+        XCTAssertEqual(r.shortcuts, [Shortcut(t: 2, label: "⇧ ⌘ S"), Shortcut(t: 3, label: "⌃ ⌥ ↩"), Shortcut(t: 4, label: "⌥ ↑")])
+        XCTAssertEqual(Shortcut.label([.command, .control, .option, .shift], "K"), "⌃ ⌥ ⇧ ⌘ K", "macOS menu order")
+
+        // pauses drop theirs; older files have none and show them when there are
+        let p = Project(name: "t", duration: 5, pixelWidth: 100, pixelHeight: 100, pointPixelScale: 1, cursor: [], clicks: [],
+                        shortcuts: r.shortcuts, paused: [ClipRange(start: 2.5, end: 4.5)])
+        XCTAssertEqual(p.shortcuts.map(\.label), ["⇧ ⌘ S"])
+        var json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(p)) as! [String: Any]
+        json["shortcuts"] = nil; json["showShortcuts"] = nil
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("keys-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try JSONSerialization.data(withJSONObject: json).write(to: url)
+        let old = try Project.load(from: url)
+        XCTAssertEqual(old.shortcuts, []); XCTAssertTrue(old.showShortcuts)
+        try p.save(to: url)
+        XCTAssertEqual(try Project.load(from: url).shortcuts, p.shortcuts)
+    }
 }

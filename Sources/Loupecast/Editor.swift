@@ -823,6 +823,10 @@ struct EffectsMenu: View {
                                                 set: { on in model.edit(on ? "Show Clicks" : "Hide Clicks") { $0.showClicks = on } }))
             Toggle("Motion Blur", isOn: Binding(get: { model.project.motionBlur },
                                                 set: { on in model.edit(on ? "Turn Motion Blur On" : "Turn Motion Blur Off") { $0.motionBlur = on } }))
+            if !model.project.shortcuts.isEmpty {
+                Toggle("Show Shortcuts", isOn: Binding(get: { model.project.showShortcuts },
+                                                       set: { on in model.edit(on ? "Show Shortcuts" : "Hide Shortcuts") { $0.showShortcuts = on } }))
+            }
             // recordings from before 0.9 have the cursor in the video: nothing to change there
             if let cursor = model.project.cursorOverlay {
                 Picker("Cursor Size", selection: Binding(get: { cursor.scale }, set: { s in model.edit("Cursor Size") { $0.cursorOverlay?.scale = s } })) {

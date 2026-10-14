@@ -10,6 +10,7 @@
 "Add a 2-second zoom at the playhead" = "재생 위치에 2초 줌 추가";
 "Adjust Clip End" = "클립 끝 지점 조절";
 "Adjust Clip Start" = "클립 시작 지점 조절";
+"Allow Accessibility to Record Shortcuts…" = "단축키를 기록하려면 손쉬운 사용 허용…";
 "Allowed" = "허용됨";
 "An export is in progress" = "내보내기가 진행 중입니다";
 "Another Image…" = "다른 이미지…";
@@ -81,6 +82,7 @@
 "Hide Camera" = "카메라 숨기기";
 "Hide Clicks" = "클릭 표시 끄기";
 "Hide Menu Bar in Video" = "영상 속 메뉴 막대 숨기기";
+"Hide Shortcuts" = "단축키 표시 끄기";
 "Hold ⌥ to delete one at a time" = "⌥를 누르면 하나씩 지울 수 있습니다";
 "Image…" = "이미지…";
 "In System Settings › Privacy & Security › Camera, turn on Loupecast." = "시스템 설정 › 개인정보 보호 및 보안 › 카메라에서 Loupecast를 켭니다.";
@@ -161,6 +163,8 @@
 "Shortcut unavailable: %@" = "단축키 사용 불가: %@";
 "Show Camera" = "카메라 보이기";
 "Show Clicks" = "클릭 표시";
+"Show Shortcuts" = "단축키 표시";
+"Show Shortcuts in Video" = "영상에 단축키 표시";
 "Show in Finder" = "Finder에서 보기";
 "Show these shortcuts" = "이 단축키 목록 보기";
 "Size" = "크기";

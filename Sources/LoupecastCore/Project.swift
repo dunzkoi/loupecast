@@ -50,23 +50,27 @@ public struct Project: Codable, Sendable, Equatable {
     public var motionBlur = false
     /// The cursor the compositor draws (new recordings leave it out of the video); nil: it is in the video, as in older files.
     public var cursorOverlay: CursorOverlay?
+    /// Key combinations pressed with ⌘, ⌃ or ⌥ (only when 단축키 표시 was on while recording), shown as a badge.
+    public var shortcuts: [Shortcut] = []
+    public var showShortcuts = true
 
     /// `paused`: recording-time ranges the recording was paused for. They start out cut, and the clicks and cursor
     /// samples in them are dropped, so the editor opens with the pauses already gone.
     public init(name: String, videoFile: String = "recording.mov", duration: Double,
                 pixelWidth: Int, pixelHeight: Int, pointPixelScale: Double,
-                cursor: [CursorSample], clicks: [ClickEvent], paused: [ClipRange] = []) {
+                cursor: [CursorSample], clicks: [ClickEvent], shortcuts: [Shortcut] = [], paused: [ClipRange] = []) {
         version = Self.currentVersion
         self.name = name; self.videoFile = videoFile; self.duration = duration
         self.pixelWidth = pixelWidth; self.pixelHeight = pixelHeight; self.pointPixelScale = pointPixelScale
         let live = { (t: Double) in !paused.contains { $0.start <= t && t < $0.end } }
         self.cursor = cursor.filter { live($0.t) }; self.clicks = clicks.filter { live($0.t) }
+        self.shortcuts = shortcuts.filter { live($0.t) }
         clips = [ClipRange].excluding(paused, from: 0, to: max(0, duration - Self.stopTrim))
         zooms = AutoZoom.segments(clicks: self.clicks, duration: duration)
     }
 
     private enum CodingKeys: String, CodingKey {
-        case version, name, renamed, videoFile, duration, pixelWidth, pixelHeight, pointPixelScale, cursor, clicks, keys, clips, zooms, aspect, style, backgroundImage, fill, systemVolume, micVolume, camera, showClicks, motionBlur, cursorOverlay
+        case version, name, renamed, videoFile, duration, pixelWidth, pixelHeight, pointPixelScale, cursor, clicks, keys, clips, zooms, aspect, style, backgroundImage, fill, systemVolume, micVolume, camera, showClicks, motionBlur, cursorOverlay, shortcuts, showShortcuts
     }
     private enum V1Keys: String, CodingKey { case trimIn, trimOut }
 
@@ -93,6 +97,8 @@ public struct Project: Codable, Sendable, Equatable {
         showClicks = try c.decodeIfPresent(Bool.self, forKey: .showClicks) ?? true
         motionBlur = try c.decodeIfPresent(Bool.self, forKey: .motionBlur) ?? false
         cursorOverlay = try c.decodeIfPresent(CursorOverlay.self, forKey: .cursorOverlay)
+        shortcuts = try c.decodeIfPresent([Shortcut].self, forKey: .shortcuts) ?? []
+        showShortcuts = try c.decodeIfPresent(Bool.self, forKey: .showShortcuts) ?? true
         if let clips = try c.decodeIfPresent([ClipRange].self, forKey: .clips) {
             self.clips = clips
         } else {                                // version 1: one trim range
@@ -336,6 +342,26 @@ public struct CursorOverlay: Codable, Equatable, Sendable {
     }
 }
 
+/// A key combination as the video shows it ("⌘ ⇧ S"), at recording time `t`.
+public struct Shortcut: Codable, Equatable, Sendable {
+    public var t: Double
+    public var label: String
+    public init(t: Double, label: String) { self.t = t; self.label = label }
+
+    /// ⌃ ⌥ ⇧ ⌘ in the order macOS menus write them, then the key.
+    public static func label(_ m: KeyModifiers, _ key: String) -> String {
+        ([(KeyModifiers.control, "⌃"), (.option, "⌥"), (.shift, "⇧"), (.command, "⌘")].filter { m.contains($0.0) }.map(\.1) + [key])
+            .joined(separator: " ")
+    }
+}
+
+public struct KeyModifiers: OptionSet, Sendable {
+    public let rawValue: Int
+    public init(rawValue: Int) { self.rawValue = rawValue }
+    public static let control = KeyModifiers(rawValue: 1), option = KeyModifiers(rawValue: 2)
+    public static let shift = KeyModifiers(rawValue: 4), command = KeyModifiers(rawValue: 8)
+}
+
 /// Named looks for the frame around the recording (colors and sizes live in LoupecastRender's FrameStyle).
 public enum StylePreset: String, Codable, CaseIterable, Sendable {
     case pastel, dark, light, graphite, blue
@@ -530,7 +556,7 @@ public struct DisplayBounds: Sendable, Equatable {
 /// global CG coordinates. Converted once, at stop, into project events.
 public struct InputLog: Sendable {
     public struct Raw: Sendable {
-        public enum Kind: Sendable { case move, click(ClickEvent.Button) }
+        public enum Kind: Sendable { case move, click(ClickEvent.Button), shortcut(String) }
         public var host: Double
         public var gx: Double
         public var gy: Double
@@ -544,11 +570,18 @@ public struct InputLog: Sendable {
 
     public mutating func append(_ e: Raw) { events.append(e) }
 
+    /// A key press: kept only with ⌘ or ⌃ held, or ⌥ on a key that types nothing (an arrow, Return…). Everything that
+    /// types text, ⇧ and ⌥ letters (é, @ on many layouts) included, is dropped here and never stored.
+    public mutating func appendKey(host: Double, modifiers: KeyModifiers, key: String, typesText: Bool) {
+        guard !modifiers.isDisjoint(with: [.command, .control]) || (modifiers.contains(.option) && !typesText) else { return }
+        events.append(.init(host: host, gx: 0, gy: 0, kind: .shortcut(Shortcut.label(modifiers, key))))
+    }
+
     /// Keeps only events inside [0, duration] of the session. Clicks off the display (or outside a recorded area) are
     /// dropped; clicks in its excluded menu-bar strip are clamped to the top edge of the recording.
     public func relativized(sessionStartHost: Double, duration: Double, display: DisplayBounds)
-        -> (cursor: [CursorSample], clicks: [ClickEvent]) {
-        var cursor: [CursorSample] = [], clicks: [ClickEvent] = []
+        -> (cursor: [CursorSample], clicks: [ClickEvent], shortcuts: [Shortcut]) {
+        var cursor: [CursorSample] = [], clicks: [ClickEvent] = [], shortcuts: [Shortcut] = []
         for e in events.sorted(by: { $0.host < $1.host }) {
             let t = e.host - sessionStartHost
             guard t >= 0, t <= duration else { continue }
@@ -558,9 +591,11 @@ public struct InputLog: Sendable {
                 cursor.append(CursorSample(t: t, x: clamp01(p.x), y: clamp01(p.y)))
             case .click(let b):
                 if display.contains(e.gx, e.gy) { clicks.append(ClickEvent(t: t, x: clamp01(p.x), y: clamp01(p.y), button: b)) }
+            case .shortcut(let label):
+                shortcuts.append(Shortcut(t: t, label: label))
             }
         }
-        return (cursor, clicks)
+        return (cursor, clicks, shortcuts)
     }
 }
 

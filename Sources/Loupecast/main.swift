@@ -11,7 +11,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     /// UserDefaults keys; both apply to the next recording.
     static let micKey = "recordMicrophone", systemAudioKey = "recordSystemAudio", hideMenuBarKey = "hideMenuBar"
     static let screenRequestedKey = "screenAccessRequested"
-    static let soundsKey = "playSounds", cameraKey = "recordCamera"
+    static let soundsKey = "playSounds", cameraKey = "recordCamera", shortcutsKey = "showShortcuts"
 
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private var recorder: Recorder?
@@ -29,7 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         UserDefaults.standard.register(defaults: [Self.micKey: false, Self.systemAudioKey: true, Self.hideMenuBarKey: true, Self.soundsKey: true,
-                                                  Self.cameraKey: false])
+                                                  Self.cameraKey: false, Self.shortcutsKey: false])
         NSApp.mainMenu = Self.mainMenu()
         let menu = NSMenu()
         menu.delegate = self
@@ -93,13 +93,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         menu.addItem(.separator())
 
         for (title, key) in [(String(localized: "Record Microphone"), Self.micKey), (String(localized: "Record Computer Audio"), Self.systemAudioKey),
-                             (String(localized: "Record Camera"), Self.cameraKey),
+                             (String(localized: "Record Camera"), Self.cameraKey), (String(localized: "Show Shortcuts in Video"), Self.shortcutsKey),
                              (String(localized: "Hide Menu Bar in Video"), Self.hideMenuBarKey), (String(localized: "Start and Stop Sounds"), Self.soundsKey)] {
             let toggle = item(title, #selector(toggleSetting(_:)))
             toggle.representedObject = key
             toggle.state = UserDefaults.standard.bool(forKey: key) ? .on : .off
             toggle.isEnabled = !recording && !busy
             menu.addItem(toggle)
+        }
+        if UserDefaults.standard.bool(forKey: Self.shortcutsKey), !AXIsProcessTrusted() {
+            let ax = item(String(localized: "Allow Accessibility to Record Shortcuts…"), #selector(askAccessibility))
+            ax.isEnabled = !recording
+            menu.addItem(ax)
         }
         menu.addItem(.separator())
 
@@ -203,7 +208,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
 
     @objc private func toggleSetting(_ sender: NSMenuItem) {
         guard let key = sender.representedObject as? String, recorder == nil else { return }
-        UserDefaults.standard.set(!UserDefaults.standard.bool(forKey: key), forKey: key)
+        let on = !UserDefaults.standard.bool(forKey: key)
+        UserDefaults.standard.set(on, forKey: key)
+        if on, key == Self.shortcutsKey, !AXIsProcessTrusted() { askAccessibility() }
+    }
+
+    /// Key presses reach a global monitor only with Accessibility on: macOS asks, and lists Loupecast in the settings pane.
+    @objc private func askAccessibility() {
+        _ = AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)   // kAXTrustedCheckOptionPrompt
     }
 
     @objc private func showEditor(_ sender: NSMenuItem) {
@@ -352,7 +364,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         await Self.chime("loupecast-start", wait: true)   // Resources/loupecast-start.wav (NSSound(named:) checks the bundle first)
         do {
             let r = try await Recorder.start(microphone: mic, systemAudio: defaults.bool(forKey: Self.systemAudioKey),
-                                             hideMenuBar: defaults.bool(forKey: Self.hideMenuBarKey), area: area, camera: camera)
+                                             hideMenuBar: defaults.bool(forKey: Self.hideMenuBarKey), area: area, camera: camera,
+                                             shortcuts: defaults.bool(forKey: Self.shortcutsKey))
             r.onStreamError = { [weak self] error in self?.streamFailed(error) }
             recorder = r
             startedAt = ProcessInfo.processInfo.systemUptime

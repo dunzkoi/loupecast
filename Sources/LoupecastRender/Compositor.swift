@@ -1,5 +1,6 @@
 import AVFoundation
 import CoreImage
+import CoreText
 import CoreImage.CIFilterBuiltins
 import LoupecastCore
 
@@ -50,6 +51,8 @@ final class LoupecastInstruction: NSObject, AVVideoCompositionInstructionProtoco
     /// Clicks on kept material at their composition time, oldest first; empty when 클릭 표시 is off.
     let clicks: [(time: Double, at: Point, right: Bool)]
     let motionBlur: Bool
+    /// Shortcuts on kept material at their composition time, oldest first; empty when 단축키 표시 is off in the editor.
+    let shortcuts: [(time: Double, label: String)]
     let clips: [ClipRange]
     /// The cursor to draw (nil: it is in the video): its shapes, the samples sorted by time, the folder its images are in,
     /// and recording pixels per point.
@@ -67,6 +70,8 @@ final class LoupecastInstruction: NSObject, AVVideoCompositionInstructionProtoco
         motionBlur = project.motionBlur
         let clips = project.clips
         self.clips = clips
+        shortcuts = !project.showShortcuts ? [] : project.shortcuts.filter { clips.index(containing: $0.t) != nil }.sorted { $0.t < $1.t }
+            .map { (clips.compositionTime($0.t), $0.label) }
         cursor = project.cursorOverlay.map { ($0, project.cursor.sorted { $0.t < $1.t }, folder, project.pointPixelScale) }
         clicks = !project.showClicks ? [] : project.clicks.filter { clips.index(containing: $0.t) != nil }.sorted { $0.t < $1.t }
             .map { (clips.compositionTime($0.t), Point(x: $0.x, y: $0.y), $0.button == .right) }
@@ -100,6 +105,7 @@ public final class LoupecastCompositor: NSObject, AVVideoCompositing, @unchecked
     private var background: (frame: CGRect, canvas: CGSize, style: FrameStyle, image: CIImage)?   // touched only on `queue`
     private var lastSource: CIImage?                                            // touched only on `queue`
     private var cursorImages: [URL: CIImage] = [:]                              // touched only on `queue`
+    private var badges: [String: CIImage] = [:]                                 // touched only on `queue`
 
     public var sourcePixelBufferAttributes: [String: any Sendable]? { Self.bgra }
     public var requiredPixelBufferAttributesForRenderContext: [String: any Sendable] { Self.bgra }
@@ -136,8 +142,36 @@ public final class LoupecastCompositor: NSObject, AVVideoCompositing, @unchecked
             let marks = Self.ripples(ins.clicks, at: t, place, canvas: canvas) + [drawnCursor(ins, at: t, place)].compactMap { $0 }
             return marks.reduce(Self.motionBlur(content, place, from: before, canvas: canvas)) { $1.composited(over: $0) }
         }
-        guard let cam = ins.camera, let face else { return image }
-        return Self.overlay(face, on: image, canvas: canvas, cam.overlay)
+        var out = image
+        if let cam = ins.camera, let face { out = Self.overlay(face, on: out, canvas: canvas, cam.overlay) }
+        // the latest shortcut for 1.2 s, fading over its last 0.25 s; fixed at the bottom whatever the zoom does
+        if let s = ins.shortcuts.last(where: { $0.time <= t }), t < s.time + Self.badgeLength {
+            let key = "\(s.label)@\(canvas.width)x\(canvas.height)"
+            let badge = badges[key] ?? Self.badge(s.label, canvas: canvas)
+            badges[key] = badge
+            let alpha = min(1, (s.time + Self.badgeLength - t) / 0.25)
+            out = badge.applyingFilter("CIColorMatrix", parameters: ["inputAVector": CIVector(x: 0, y: 0, z: 0, w: alpha)]).composited(over: out)
+        }
+        return out
+    }
+
+    static let badgeLength = 1.2
+
+    /// The shortcut in white on a dark rounded badge, centered 7 % of the short side above the bottom edge.
+    static func badge(_ label: String, canvas: CGSize) -> CIImage {
+        let short = min(canvas.width, canvas.height), size = 0.044 * short
+        let base = CTFontCreateUIFontForLanguage(.system, size, nil)!
+        let font = CTFontCreateCopyWithSymbolicTraits(base, size, nil, .boldTrait, .boldTrait) ?? base
+        let g = CIFilter.attributedTextImageGenerator()
+        g.text = NSAttributedString(string: label, attributes: [NSAttributedString.Key(kCTFontAttributeName as String): font,
+                                                                 NSAttributedString.Key(kCTForegroundColorAttributeName as String): CGColor(gray: 1, alpha: 1)])
+        g.scaleFactor = 1
+        let text = g.outputImage!, e = text.extent
+        let box = CGRect(x: ((canvas.width - e.width) / 2 - 0.6 * size).rounded(), y: (0.07 * short).rounded(),
+                         width: (e.width + 1.2 * size).rounded(), height: (e.height + 0.5 * size).rounded())
+        let back = CIFilter.roundedRectangleGenerator()
+        back.extent = box; back.radius = Float(0.3 * box.height); back.color = CIColor(red: 0, green: 0, blue: 0, alpha: 0.72)
+        return text.transformed(by: CGAffineTransform(translationX: box.midX - e.midX, y: box.midY - e.midY)).composited(over: back.outputImage!)
     }
 
     /// Blurs the recording along its on-screen motion since the previous frame's camera `before`: a zoom blur from the frame's

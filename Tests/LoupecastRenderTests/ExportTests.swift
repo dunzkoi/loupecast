@@ -789,6 +789,36 @@ final class ExportTests: XCTestCase {
         XCTAssertTrue(isMagenta(inside), "\(inside)")
     }
 
+    // MARK: shortcut badge
+
+    /// ⌘⇧S at recording 3.0 s (composition 1.0): a dark badge with white text at the bottom center until 2.2 s, nothing
+    /// after; with 단축키 표시 off in the editor, nothing at all.
+    func testShortcutBadge() {
+        var project = Self.makeProject()
+        project.showClicks = false
+        project.shortcuts = [Shortcut(t: 3, label: "⌘ ⇧ S")]
+        let canvas = Composer.renderSize(project.aspect), c = LoupecastCompositor()
+        let light = CIImage(color: CIColor(red: 0.9, green: 0.9, blue: 0.9)).cropped(to: CGRect(origin: .zero, size: Self.size))
+        func frame(_ t: Double) -> CGImage {
+            LoupecastCompositor.context.createCGImage(c.compose(light, face: nil, at: t, canvas: canvas, Self.instruction(project)),
+                                                      from: CGRect(origin: .zero, size: canvas))!
+        }
+        let box = LoupecastCompositor.badge("⌘ ⇧ S", canvas: canvas).extent
+        let row = canvas.height - box.midY, xs = stride(from: box.minX + 4, to: box.maxX - 4, by: 1.0)
+        func dark(_ cg: CGImage) -> Int { xs.filter { let p = Self.pixel(cg, $0, row); return p.r + p.g + p.b < 500 }.count }   // the recording here is light gray (~690)
+        func white(_ cg: CGImage) -> Int { xs.filter { let p = Self.pixel(cg, $0, row); return p.r > 220 && p.g > 220 && p.b > 220 }.count }
+        let shown = frame(1.5), gone = frame(2.3)
+        print("shortcut badge: \(box), dark \(dark(shown)) white \(white(shown)) while shown, dark \(dark(gone)) after")
+        XCTAssertEqual(box.midX, canvas.width / 2, accuracy: 1, "centered")
+        XCTAssertLessThan(box.minY, canvas.height * 0.2, "at the bottom")
+        XCTAssertGreaterThan(dark(shown), Int(box.width) / 3, "dark badge")
+        XCTAssertGreaterThan(white(shown), 5, "white text")
+        XCTAssertEqual(dark(gone), 0, "gone after 1.2 s")
+        XCTAssertEqual(dark(frame(0.9)), 0, "not before the key")
+        project.showShortcuts = false
+        XCTAssertEqual(dark(frame(1.5)), 0, "hidden in the editor")
+    }
+
     // MARK: frame rate and file size
 
     func testExportPlan() {

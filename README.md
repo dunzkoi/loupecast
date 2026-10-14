@@ -41,7 +41,7 @@ Menu toggles: **Record Microphone** (off by default), **Record Computer Audio** 
 
 ## Privacy
 
-The only network request Loupecast makes is an update check against GitHub Releases at launch and then daily (`api.github.com`), plus the download when an update exists. Recordings stay in `~/Library/Application Support/Loupecast/Recordings` and exports in `~/Movies`. Nothing is uploaded, and there is no analytics or telemetry.
+The only network request Loupecast makes is an update check against GitHub Releases at launch and then daily (`api.github.com`), plus the download when an update exists. Recordings stay in `~/Library/Application Support/Loupecast/Recordings` and exports in `~/Movies`. Nothing is uploaded, and there is no analytics or telemetry. Key presses are not recorded, with one opt-in exception: with **Show Shortcuts in Video** on (off by default), combinations held with ⌘ or ⌃ (or ⌥ on a key that types nothing, like an arrow) are saved as labels like "⌘ ⇧ S" to show them in the video; anything that types text never is, and nothing is saved while a password field is active.
 
 ## Build from source
 
