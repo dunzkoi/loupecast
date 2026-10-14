@@ -685,9 +685,10 @@ final class ExportTests: XCTestCase {
         // Each input pulls its own samples whenever the writer asks for them, so the writer does the interleaving.
         // Polling video while pushing audio a fixed 0.25 s ahead deadlocked: the writer held video until audio
         // covered more of its interleave window, with every encoder thread idle (sampled at the video wait).
-        let frames = (0..<Int(duration * 60)).filter { i in
-            !(staticScreen && i >= 240 && i < 360 && i != 240)   // static screen: SCStream sends no complete frames
-                && gap?.contains(Double(i) / 60) != true
+        let frames = (0..<Int(duration * 60)).filter { (i: Int) -> Bool in
+            let frozen: Bool = staticScreen && i > 240 && i < 360   // static screen: SCStream sends no complete frames
+            let inGap: Bool = gap?.contains(Double(i) / 60) ?? false
+            return !frozen && !inGap
         }
         let rate = 48_000, total = Int(duration) * rate, chunk = 1024, chunks = (total + chunk - 1) / chunk
         async let video: Void = feed(vIn, count: frames.count) { k in
