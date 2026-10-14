@@ -30,6 +30,9 @@ public struct Project: Codable, Sendable, Equatable {
     public var aspect = AspectRatio.landscape
     /// Background around the recording; files without it get the pastel gradient every version had.
     public var style = StylePreset.pastel
+    /// A picture in the recording folder shown instead of the preset's colors (blurred a little, filling the canvas);
+    /// never with `.plain`. Nil in older files.
+    public var backgroundImage: String?
     /// 9:16 and 1:1: crop the recording to fill the frame, following the cursor. Off in older files.
     public var fill = false
     /// 16:9 never fills (the switch is hidden there), so a fill set in 9:16 stays put when switching back.
@@ -58,7 +61,7 @@ public struct Project: Codable, Sendable, Equatable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case version, name, renamed, videoFile, duration, pixelWidth, pixelHeight, pointPixelScale, cursor, clicks, keys, clips, zooms, aspect, style, fill, systemVolume, micVolume, camera, showClicks
+        case version, name, renamed, videoFile, duration, pixelWidth, pixelHeight, pointPixelScale, cursor, clicks, keys, clips, zooms, aspect, style, backgroundImage, fill, systemVolume, micVolume, camera, showClicks
     }
     private enum V1Keys: String, CodingKey { case trimIn, trimOut }
 
@@ -77,6 +80,7 @@ public struct Project: Codable, Sendable, Equatable {
         zooms = try c.decode([ZoomSegment].self, forKey: .zooms)
         aspect = try c.decodeIfPresent(AspectRatio.self, forKey: .aspect) ?? .landscape
         style = try c.decodeIfPresent(StylePreset.self, forKey: .style) ?? .pastel
+        backgroundImage = try c.decodeIfPresent(String.self, forKey: .backgroundImage)
         fill = try c.decodeIfPresent(Bool.self, forKey: .fill) ?? false
         systemVolume = Self.volumes.clamp(try c.decodeIfPresent(Double.self, forKey: .systemVolume) ?? 1)
         micVolume = Self.volumes.clamp(try c.decodeIfPresent(Double.self, forKey: .micVolume) ?? 1)

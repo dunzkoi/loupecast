@@ -595,6 +595,65 @@ final class ExportTests: XCTestCase {
         XCTAssertTrue(p.r > 60 && p.b > 200, "white over the blue square: \(p)")
     }
 
+    // MARK: background picture
+
+    /// A PNG, left half red and right half green, written next to the movies.
+    static func writePicture(_ name: String, width: Int = 400, height: Int = 300) throws -> URL {
+        let url = outDir.appendingPathComponent(name)
+        let ctx = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        ctx.setFillColor(CGColor(srgbRed: 0.85, green: 0.15, blue: 0.1, alpha: 1)); ctx.fill(CGRect(x: 0, y: 0, width: width / 2, height: height))
+        ctx.setFillColor(CGColor(srgbRed: 0.1, green: 0.7, blue: 0.3, alpha: 1)); ctx.fill(CGRect(x: width / 2, y: 0, width: width - width / 2, height: height))
+        let dest = CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil)!
+        CGImageDestinationAddImage(dest, ctx.makeImage()!, nil)
+        XCTAssertTrue(CGImageDestinationFinalize(dest))
+        return url
+    }
+
+    /// The picture covers the canvas (both halves reach the edges) behind the framed recording; a plain preset ignores it.
+    func testBackgroundPictureFillsTheCanvas() throws {
+        let url = try Self.writePicture("bg-halves.png")
+        let canvas = CGSize(width: 1920, height: 1080)
+        let source = CIImage(color: CIColor(red: 0, green: 0, blue: 1)).cropped(to: CGRect(origin: .zero, size: Self.size))
+        var style = FrameStyle(.pastel)
+        style.image = url
+        let cg = LoupecastCompositor.context.createCGImage(LoupecastCompositor().render(source, camera: .identity, canvas: canvas, style: style),
+                                                           from: CGRect(origin: .zero, size: canvas))!
+        let left = Self.pixel(cg, 4, 540), right = Self.pixel(cg, 1915, 540), top = Self.pixel(cg, 400, 2), mid = Self.pixel(cg, 960, 540)
+        print("background picture: left \(left) right \(right) top \(top) middle \(mid)")
+        XCTAssertTrue(left.r > 180 && left.g < 80, "red half at the left edge: \(left)")
+        XCTAssertTrue(right.g > 140 && right.r < 80, "green half at the right edge: \(right)")
+        XCTAssertTrue(top.r > 180, "covers the top too (cropped, not letterboxed): \(top)")
+        XCTAssertTrue(mid.b > 200 && mid.r < 40, "the recording in the middle: \(mid)")
+        var project = Self.makeProject()
+        project.backgroundImage = "bg-halves.png"
+        XCTAssertEqual(Composer.frameStyle(project, folder: Self.outDir).image, url)
+        project.style = .plain
+        XCTAssertNil(Composer.frameStyle(project, folder: Self.outDir).image, "never with No Padding")
+        XCTAssertNil(LoupecastCompositor.picture(Self.outDir.appendingPathComponent("missing.png"), canvas: canvas), "an unreadable file: the preset's colors")
+    }
+
+    /// Exported with a solid picture: the frame's corner is the picture's color; the rest of the export as usual.
+    func testBackgroundPictureExport() async throws {
+        try XCTSkipIf(ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] != nil, "no video hardware on CI VMs")
+        try await withDeadline(Self.deadline) { try await Self.backgroundPictureExport() }
+    }
+
+    static func backgroundPictureExport() async throws {
+        let mov = outDir.appendingPathComponent("synthetic-bg.mov")
+        try await writeSyntheticMovie(to: mov)
+        _ = try writePicture("bg-export.png")
+        var project = makeProject()
+        project.backgroundImage = "bg-export.png"
+        let out = outDir.appendingPathComponent("export-bg.mp4")
+        try await Exporter.export(project: project, videoURL: mov, to: out)
+        let first = try await AVAssetImageGenerator(asset: AVURLAsset(url: out)).image(at: .zero).image
+        let left = pixel(first, 4, 4), right = pixel(first, 1915, 1075)
+        print("background picture export: top-left \(left), bottom-right \(right)")
+        XCTAssertEqual(Double(left.r), 0.85 * 255, accuracy: 24); XCTAssertEqual(Double(left.g), 0.15 * 255, accuracy: 24)
+        XCTAssertEqual(Double(right.g), 0.7 * 255, accuracy: 24); XCTAssertEqual(Double(right.r), 0.1 * 255, accuracy: 24)
+    }
+
     // MARK: frame rate and file size
 
     func testExportPlan() {

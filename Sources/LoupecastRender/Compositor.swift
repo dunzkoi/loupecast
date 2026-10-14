@@ -12,6 +12,8 @@ public struct FrameStyle: Sendable, Equatable {
     public var shadowRadius = 26.0
     public var shadowOffset = 10.0
     public var shadowOpacity = 0.32
+    /// A picture filling the canvas instead of the gradient (the padding, corners and shadow stay).
+    public var image: URL?
     public static let standard = FrameStyle()
 
     /// One color top-left to bottom-right is a solid background.
@@ -203,6 +205,19 @@ public final class LoupecastCompositor: NSObject, AVVideoCompositing, @unchecked
         ]).cropped(to: CGRect(origin: .zero, size: canvas))
     }
 
+    /// The picture scaled to cover the canvas (centered, cropped) and blurred by 1 % of the short side, so the recording
+    /// stands out. Nil when it can't be read.
+    static func picture(_ url: URL, canvas: CGSize) -> CIImage? {
+        guard let image = CIImage(contentsOf: url, options: [.applyOrientationProperty: true]), image.extent.width > 0, image.extent.height > 0
+        else { return nil }
+        let e = image.extent, s = max(canvas.width / e.width, canvas.height / e.height)
+        let placed = image.transformed(by: CGAffineTransform(translationX: -e.minX, y: -e.minY)
+            .concatenating(CGAffineTransform(scaleX: s, y: s))
+            .concatenating(CGAffineTransform(translationX: (canvas.width - e.width * s) / 2, y: (canvas.height - e.height * s) / 2)))
+        return placed.clampedToExtent().applyingGaussianBlur(sigma: 0.01 * min(canvas.width, canvas.height))
+            .cropped(to: CGRect(origin: .zero, size: canvas))
+    }
+
     private static func roundedRect(_ frame: CGRect, canvas: CGSize, style: FrameStyle, color: CIColor) -> CIImage {
         let shape = CIFilter.roundedRectangleGenerator()
         shape.extent = frame
@@ -221,7 +236,8 @@ public final class LoupecastCompositor: NSObject, AVVideoCompositing, @unchecked
         return CGRect(x: ((canvas.width - w) / 2).rounded(), y: ((canvas.height - h) / 2).rounded(), width: w, height: h)
     }
 
-    /// Gradient and drop shadow never change within a render, so they are rendered once and cached.
+    /// Gradient (or picture) and drop shadow never change within a render, so they are rendered once and cached; the
+    /// picture's URL is part of `style`.
     private func backgroundImage(frame: CGRect, canvas: CGSize, style: FrameStyle) -> CIImage {
         if let bg = background, bg.frame == frame, bg.canvas == canvas, bg.style == style { return bg.image }
         let k = min(canvas.width, canvas.height) / 1080
@@ -231,11 +247,12 @@ public final class LoupecastCompositor: NSObject, AVVideoCompositing, @unchecked
         gradient.point1 = CGPoint(x: canvas.width, y: 0)             // bottom-right
         gradient.color0 = style.topLeft
         gradient.color1 = style.bottomRight
+        let backdrop = style.image.flatMap { Self.picture($0, canvas: canvas) } ?? gradient.outputImage!
         let shadow = Self.roundedRect(frame, canvas: canvas, style: style,
                                       color: CIColor(red: 0, green: 0, blue: 0, alpha: style.shadowOpacity))
             .applyingGaussianBlur(sigma: style.shadowRadius * k / 2)
             .transformed(by: CGAffineTransform(translationX: 0, y: -style.shadowOffset * k))
-        let composed = shadow.composited(over: gradient.outputImage!).cropped(to: full)
+        let composed = shadow.composited(over: backdrop).cropped(to: full)
         let cg = Self.context.createCGImage(composed, from: full, format: .RGBA8, colorSpace: Self.outputSpace)!
         let image = CIImage(cgImage: cg)
         background = (frame, canvas, style, image)
@@ -246,6 +263,8 @@ public final class LoupecastCompositor: NSObject, AVVideoCompositing, @unchecked
 // MARK: - Composition shared by preview and export
 
 public struct EditComposition: @unchecked Sendable {
+    /// The recording folder: files the project names (webcam, background picture) are here.
+    public let folder: URL
     public let asset: AVMutableComposition
     public let videoComposition: AVMutableVideoComposition
     public let audioMix: AVAudioMix?
@@ -339,8 +358,9 @@ public enum Composer {
         }
         for (_, _, track, _) in tracks.dropFirst() where track.segments.isEmpty { comp.removeTrack(track) }
         let cameraID = comp.tracks(withMediaType: .video).map(\.trackID).first { $0 != video.trackID }
-        let vc = videoComposition(project: project, trackID: video.trackID, cameraTrackID: cameraID, duration: comp.duration)
-        return EditComposition(asset: comp, videoComposition: vc, audioMix: audioMix(comp, project: project, micTracks: micTracks),
+        let folder = source.asset.url.deletingLastPathComponent()
+        let vc = videoComposition(project: project, folder: folder, trackID: video.trackID, cameraTrackID: cameraID, duration: comp.duration)
+        return EditComposition(folder: folder, asset: comp, videoComposition: vc, audioMix: audioMix(comp, project: project, micTracks: micTracks),
                                videoTrackID: video.trackID, micTracks: micTracks, cameraTrackID: cameraID)
     }
 
@@ -388,7 +408,14 @@ public enum Composer {
     }
 
     /// Rebuilt on every zoom edit; cheap (the camera path is a few thousand spring steps).
-    public static func videoComposition(project: Project, trackID: CMPersistentTrackID, cameraTrackID: CMPersistentTrackID? = nil,
+    /// The preset's look, with the project's background picture from `folder`.
+    public static func frameStyle(_ project: Project, folder: URL) -> FrameStyle {
+        var style = FrameStyle(project.style)
+        if project.style != .plain, let file = project.backgroundImage { style.image = folder.appendingPathComponent(file) }
+        return style
+    }
+
+    public static func videoComposition(project: Project, folder: URL, trackID: CMPersistentTrackID, cameraTrackID: CMPersistentTrackID? = nil,
                                         duration: CMTime) -> AVMutableVideoComposition {
         let vc = AVMutableVideoComposition()
         vc.customVideoCompositorClass = LoupecastCompositor.self
@@ -398,7 +425,7 @@ public enum Composer {
         vc.colorTransferFunction = AVVideoTransferFunction_ITU_R_709_2
         vc.colorYCbCrMatrix = AVVideoYCbCrMatrix_ITU_R_709_2
         vc.instructions = [LoupecastInstruction(timeRange: CMTimeRange(start: .zero, duration: duration), trackID: trackID,
-                                            path: cameraPath(project), style: FrameStyle(project.style), fill: project.fillsFrame,
+                                            path: cameraPath(project), style: frameStyle(project, folder: folder), fill: project.fillsFrame,
                                             camera: cameraTrackID.flatMap { id in project.camera.flatMap { $0.isVisible ? (id, $0) : nil } },
                                             project: project)]
         return vc

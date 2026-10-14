@@ -47,6 +47,9 @@
 //                                 applied, and the project in <dir> as it opens (its own look)
 //   LOUPECAST_MENUS=1                 print the toolbar's pop-up menus (title, check mark, enabled) before the snapshot
 //   LOUPECAST_SHOW_CLICKS=0|1         switch 클릭 표시 through the editor (one undo step) before the snapshot
+//   LOUPECAST_BACKGROUND_IMAGE=<file> use that picture as the background through the editor (what Image… does after
+//                                 the panel) before the snapshot; LOUPECAST_BACKGROUND_UNDO=1 undoes it, then closes the
+//                                 editor and lists the background files left in the recording folder
 //   LOUPECAST_QUIT_TEST=<dir>         export from that recording's editor, close the editor, then quit;
 //                                 LOUPECAST_QUIT_ANSWER=cancel|quit answers the export alert,
 //                                 LOUPECAST_QUIT_EDIT=<dir> splits a second recording right before quitting
@@ -228,6 +231,18 @@ enum DebugHooks {
         if let on = env["LOUPECAST_SHOW_CLICKS"].map({ $0 == "1" }) {
             m.edit(on ? "Show Clicks" : "Hide Clicks") { $0.showClicks = on }
             print("LOUPECAST: show clicks \(m.project.showClicks), undo \(m.undo.undoActionName)")
+        }
+        if let path = env["LOUPECAST_BACKGROUND_IMAGE"] {
+            m.useBackgroundImage(URL(fileURLWithPath: path))
+            let files = { ((try? FileManager.default.contentsOfDirectory(atPath: m.dir.path)) ?? []).filter { $0.hasPrefix("background-") } }
+            print("LOUPECAST: background image \(m.project.backgroundImage ?? "none") (style \(m.project.style.rawValue)), undo \(m.undo.undoActionName), files \(files())")
+            if env["LOUPECAST_BACKGROUND_UNDO"] != nil {
+                m.undoEdit()
+                print("LOUPECAST: after undo \(m.project.backgroundImage ?? "none"), files \(files())")
+                editor.window.close()
+                print("LOUPECAST: after closing \(files())")
+                NSApp.terminate(nil)
+            }
         }
         if let s = env["LOUPECAST_STYLE"].flatMap(StylePreset.init(rawValue:)) {
             m.edit("Background") { $0.style = s }

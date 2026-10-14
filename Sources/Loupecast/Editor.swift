@@ -90,6 +90,7 @@ final class EditorModel {
     }
 
     func close() {
+        removeUnusedBackgrounds()
         player.pause()
         if let timeObserver { player.removeTimeObserver(timeObserver) }
         timeObserver = nil
@@ -127,7 +128,7 @@ final class EditorModel {
         guard let item = player.currentItem, let edit else { return }
         built = project.clips
         if player.rate == 0 { seek(playhead) }   // off the item's last instant first, then re-render this frame
-        item.videoComposition = Composer.videoComposition(project: project, trackID: edit.videoTrackID, cameraTrackID: edit.cameraTrackID,
+        item.videoComposition = Composer.videoComposition(project: project, folder: dir, trackID: edit.videoTrackID, cameraTrackID: edit.cameraTrackID,
                                                           duration: edit.asset.duration)
         refreshAudio()
     }
@@ -204,6 +205,34 @@ final class EditorModel {
         guard let p = Composer.recordingPoint(canvas: CGPoint(x: f.x * canvas.width, y: f.y * canvas.height), project: project, at: playhead)
         else { return }
         edit("Zoom Focus") { $0.setZoomFocus(id: id, p) }
+    }
+
+    /// A PNG, JPEG or HEIC copied into the recording folder (the original's path is not kept) becomes the background.
+    /// Each pick gets its own file, so undo brings the previous picture back; `close` deletes the ones left unused.
+    func pickBackgroundImage() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.png, .jpeg, .heic]
+        panel.prompt = String(localized: "Use as Background")
+        NSApp.activate(ignoringOtherApps: true)
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        useBackgroundImage(url)
+    }
+
+    func useBackgroundImage(_ url: URL) {
+        let name = "background-\(UUID().uuidString.prefix(8)).\(url.pathExtension.lowercased())"
+        do {
+            try FileManager.default.copyItem(at: url, to: dir.appendingPathComponent(name))
+            edit("Background Image") { $0.backgroundImage = name; if $0.style == .plain { $0.style = .pastel } }
+        } catch {
+            exportState = .failed(describe(error))
+        }
+    }
+
+    private func removeUnusedBackgrounds() {
+        let files = (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []
+        for f in files where f.hasPrefix("background-") && f != project.backgroundImage {
+            try? FileManager.default.removeItem(at: dir.appendingPathComponent(f))
+        }
     }
 
     /// Slider moves: applied live, recorded as one undo step by `endVolumeChange`.
@@ -633,16 +662,19 @@ struct ControlBar: View {
             if let cam = model.project.camera { CameraMenu(model: model, camera: cam) }
             EffectsMenu(model: model)
             Menu {
-                Picker("Background", selection: Binding(get: { model.project.style },
-                                                        set: { s in model.edit("Background") { $0.style = s } })) {
+                // no preset is checked while a picture is the background
+                Picker("Background", selection: Binding(get: { model.project.backgroundImage == nil ? model.project.style : nil },
+                                                        set: { s in model.edit("Background") { $0.style = s ?? .pastel; $0.backgroundImage = nil } })) {
                     ForEach(StylePreset.allCases, id: \.self) { p in
-                        Label { Text(p.title) } icon: { Image(nsImage: p.swatch) }.tag(p)
+                        Label { Text(p.title) } icon: { Image(nsImage: p.swatch) }.tag(Optional(p))
                     }
                 }
                 .pickerStyle(.inline)
                 .labelsHidden()
+                if model.project.backgroundImage == nil { Button("Image…", action: model.pickBackgroundImage) }
+                else { Button("Another Image…", action: model.pickBackgroundImage) }
             } label: {
-                Image(nsImage: model.project.style.swatch)
+                if model.project.backgroundImage == nil { Image(nsImage: model.project.style.swatch) } else { Image(systemName: "photo") }
             }
             .menuIndicator(.visible)
             .fixedSize()

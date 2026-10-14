@@ -375,6 +375,10 @@ final class ClipTests: XCTestCase {
         p.style = .plain
         try p.save(to: url)
         XCTAssertEqual(try Project.load(from: url).style, .plain)
+        XCTAssertNil(try Project.load(from: url).backgroundImage, "no picture in older files")
+        p.backgroundImage = "background-1234ABCD.png"
+        try p.save(to: url)
+        XCTAssertEqual(try Project.load(from: url).backgroundImage, "background-1234ABCD.png", "a file name in the folder, no path")
     }
 
     // MARK: click rings
