@@ -7,7 +7,7 @@ final class LocalizationTests: XCTestCase {
 
     /// Calls whose first string literal is looked up in Localizable.strings (SwiftUI's LocalizedStringKey,
     /// String.LocalizationValue, and this app's helpers that take one).
-    static let calls = try! NSRegularExpression(pattern: #"(String\(localized:\s*|LoupecastError\(|\bText\(|\bButton\(|\bToggle\(|\bPicker\(|\bMenu\(|\bLabel\(|\bTextField\(|\.help\(|\.accessibilityLabel\(|\.accessibilityValue\(|\bedit\(|\bendDrag\(|\bhint\(|\brow\(|\btitle:\s*|\bdetail:\s*)""#)
+    static let calls = try! NSRegularExpression(pattern: #"(String\(localized:\s*|LoupecastError\(|\bText\(|\bButton\(|\bToggle\(|\bPicker\(|\bMenu\(|\bLabel\(|\bTextField\(|\bLink\(|\.help\(|\.accessibilityLabel\(|\.accessibilityValue\(|\bedit\(|\bendDrag\(|\bhint\(|\brow\(|\btitle:\s*|\bdetail:\s*)""#)
 
     func testEveryUIStringHasAKoreanLine() throws {
         let strings = try String(contentsOf: Self.root.appendingPathComponent("Resources/ko.lproj/Localizable.strings"), encoding: .utf8)

@@ -30,6 +30,8 @@ final class EditorModel {
     var exportState = ExportState.idle
     /// The keyboard shortcuts popover (its button, or ?).
     var showsShortcuts = false
+    /// This export was the third one that finished: a single line asks for a GitHub star (until clicked or closed).
+    var asksForStar = false
     /// Audio tracks in the recording; the volume controls show only these.
     private(set) var hasSystemAudio = false
     private(set) var hasMicrophone = false
@@ -336,7 +338,7 @@ final class EditorModel {
                 case .mp4: try await Exporter.export(project: project, videoURL: video, to: url, progress: progress)
                 case .gif: try await GIFExporter.export(project: project, videoURL: video, to: url, progress: progress)
                 }
-                exportState = .done(url)
+                exportFinished(url)
             } catch {
                 exportState = Task.isCancelled ? .idle : .failed(describe(error))
             }
@@ -346,6 +348,22 @@ final class EditorModel {
         }
         Self.exports[url] = task
         exportTask = task
+    }
+
+    static let exportCountKey = "finishedExports", starAskedKey = "starAsked"
+
+    /// Counts finished exports (MP4 and GIF; cancelled and failed ones don't count).
+    func exportFinished(_ url: URL) {
+        let n = UserDefaults.standard.integer(forKey: Self.exportCountKey) + 1
+        UserDefaults.standard.set(n, forKey: Self.exportCountKey)
+        asksForStar = n == 3 && !UserDefaults.standard.bool(forKey: Self.starAskedKey)
+        exportState = .done(url)
+    }
+
+    /// The star line was clicked or closed: it never comes back.
+    func dismissStar() {
+        UserDefaults.standard.set(true, forKey: Self.starAskedKey)
+        asksForStar = false
     }
 
     /// The exporter stops reading, cancels the writer and deletes the partial file; the state goes back to idle.
@@ -678,6 +696,7 @@ struct SelectionBar: View {
                 hint("Select a zoom or a clip to change it.")
             }
             Spacer(minLength: 0)
+            if model.asksForStar, case .done = model.exportState { StarPrompt(model: model) }
         }
         .frame(height: 22)
     }
@@ -781,6 +800,29 @@ struct NameButton: View {
                 .onSubmit { model.rename(text); shown = false }
                 .onExitCommand { shown = false }
         }
+    }
+}
+
+/// Shown once, after the third finished export: a link to the repository and a close button, no window or alert.
+struct StarPrompt: View {
+    @Bindable var model: EditorModel
+    static let repo = URL(string: "https://github.com/\(Updater.repo)")!
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "star.fill").foregroundStyle(.yellow).accessibilityHidden(true)
+            Link("Enjoying Loupecast? Star it on GitHub", destination: Self.repo)
+                .simultaneousGesture(TapGesture().onEnded { model.dismissStar() })
+                .focusable(false)
+            Button(action: model.dismissStar) { Image(systemName: "xmark.circle.fill") }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
+                .focusable(false)
+                .help("Don’t show this again")
+                .accessibilityLabel("Don’t show this again")
+        }
+        .font(.callout)
+        .fixedSize()
     }
 }
 

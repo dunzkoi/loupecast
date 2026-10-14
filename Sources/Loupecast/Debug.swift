@@ -10,6 +10,8 @@
 //                                 button's copy: prints what NSPasteboard.general holds, then restores the clipboard)
 //                    cancel|twice     cancel it at 20 %, or export from two editors of the recording at once
 //   LOUPECAST_EXPORT_DIR=<dir>        where the editor exports (default ~/Movies)
+//   LOUPECAST_EXPORT_COUNT=<n>        with fake: finish it as the n-th export ever (3 shows the GitHub star line once);
+//                                 LOUPECAST_STAR_DISMISS=1 closes the line and finishes the n-th export again
 //   LOUPECAST_PERMISSIONS=<png>       save the permission window and quit
 //   LOUPECAST_UPDATE_CHECK=1          fetch the latest GitHub release once, print current/available, quit
 //   LOUPECAST_STATUS=<png>            save the menu-bar button in its recording state, print the menu;
@@ -282,7 +284,20 @@ enum DebugHooks {
         }
         if env["LOUPECAST_EXPORT"] == "fake" {
             let url = URL(fileURLWithPath: "/tmp/Loupecast.mp4")
-            m.exportState = .done(url)
+            if let n = env["LOUPECAST_EXPORT_COUNT"].flatMap(Int.init) {
+                UserDefaults.standard.set(n - 1, forKey: EditorModel.exportCountKey)
+                UserDefaults.standard.removeObject(forKey: EditorModel.starAskedKey)
+                m.exportFinished(url)
+                print("LOUPECAST: export #\(UserDefaults.standard.integer(forKey: EditorModel.exportCountKey)) asks for a star \(m.asksForStar)")
+                if env["LOUPECAST_STAR_DISMISS"] != nil {   // closed once: even another third export doesn't ask again
+                    m.dismissStar()
+                    UserDefaults.standard.set(n - 1, forKey: EditorModel.exportCountKey)
+                    m.exportFinished(url)
+                    print("LOUPECAST: after closing it, export #\(n) again asks \(m.asksForStar)")
+                }
+            } else {
+                m.exportState = .done(url)
+            }
             let pb = NSPasteboard.general
             let saved = (pb.pasteboardItems ?? []).map { item in
                 let copy = NSPasteboardItem()

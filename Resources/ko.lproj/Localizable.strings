@@ -55,10 +55,12 @@
 "Delete the selected clip or zoom" = "선택한 클립이나 줌 삭제";
 "Delete the selected zoom" = "선택한 줌 삭제";
 "Delete the selected zoom (Delete)" = "선택한 줌 삭제 (Delete)";
+"Don’t show this again" = "다시 보지 않기";
 "Downloading %@…" = "%@ 내려받는 중…";
 "Drag the video into another app" = "다른 앱으로 끌어 영상 첨부";
 "Drag to choose the area to record. Enter or a double-click records, Esc or a right-click cancels." = "녹화할 영역을 드래그하세요. Enter나 더블클릭으로 녹화하고, Esc나 오른쪽 클릭으로 취소합니다.";
 "Edit: %@" = "편집: %@";
+"Enjoying Loupecast? Star it on GitHub" = "Loupecast가 마음에 드셨다면 GitHub에 별을 눌러 주세요";
 "Export" = "내보내기";
 "Export an MP4, or pick GIF from the arrow" = "MP4로 내보냅니다. 화살표에서 GIF를 고를 수 있습니다";
 "Export frame" = "내보내기 비율";
