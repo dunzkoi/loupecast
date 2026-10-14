@@ -53,7 +53,8 @@ swift build --build-tests && swift test   # Core ~0.1 s; Render 10-40 s, each ex
 - Performance: `LOUPECAST_PERF=<recording>` prints per-edit main-thread stalls; build with
   `swift build -c release -Xswiftc -DDEBUG` for realistic numbers.
 - Needs grants this process may not have: `LOUPECAST_SELFTEST` needs Screen Recording (and Accessibility for its
-  CGEvent clicks); the key checks in `LOUPECAST_EDITOR_TEST` need Accessibility and fail on any build without it.
+  CGEvent clicks). Without Accessibility, `LOUPECAST_EDITOR_TEST` queues its keys in NSApp's event queue instead of
+  posting them to the pid, so the window's key handler still sees one event per key.
 
 ## Invariants
 

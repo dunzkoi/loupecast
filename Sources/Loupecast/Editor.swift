@@ -28,6 +28,8 @@ final class EditorModel {
     var selection = Selection.none
     var thumbnails: [NSImage] = []
     var exportState = ExportState.idle
+    /// The keyboard shortcuts popover (its button, or ?).
+    var showsShortcuts = false
     /// Audio tracks in the recording; the volume controls show only these.
     private(set) var hasSystemAudio = false
     private(set) var hasMicrophone = false
@@ -408,38 +410,17 @@ final class EditorController: NSObject, NSWindowDelegate {
 
     func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? { model.undo }
 
-    /// Space play/pause, ← → one frame, I / O clip in/out, D split, Delete removes the selection,
-    /// ⌘Z / ⇧⌘Z undo/redo. Returns true when the key was consumed.
+    /// Runs the matching `EditorShortcut` key. Returns true when the key was consumed.
     func handle(_ e: NSEvent) -> Bool {
         // addressed to this window, or to no window while this one is key
         guard (e.window ?? (window.isKeyWindow ? window : nil)) === window else { return false }
         let mods = e.modifierFlags.intersection([.command, .shift, .option, .control])
-        let key = Int(e.keyCode)
-        if mods.contains(.command) {
-            switch (key, mods) {
-            case (kVK_ANSI_W, [.command]): window.performClose(nil)
-            case (kVK_ANSI_Z, [.command]): model.undoEdit()
-            case (kVK_ANSI_Z, [.command, .shift]): model.redoEdit()
-            default: return false
-            }
-            return true
-        }
-        guard mods.isEmpty else { return false }
-        let arrows = [kVK_LeftArrow, kVK_RightArrow]
-        if e.isARepeat, !arrows.contains(key) { return [kVK_Space, kVK_ANSI_I, kVK_ANSI_O, kVK_ANSI_D, kVK_Delete, kVK_ForwardDelete].contains(key) }
+        guard let key = EditorShortcut.all.flatMap(\.keys).first(where: { $0.matches(e, mods) }) else { return false }
+        if e.isARepeat, !key.repeats { return true }   // held down: once
         #if DEBUG
         DebugHooks.keyLog(e, model)
         #endif
-        switch key {
-        case kVK_Space: model.togglePlay()
-        case kVK_LeftArrow: model.step(-1)
-        case kVK_RightArrow: model.step(1)
-        case kVK_ANSI_I: model.markIn()
-        case kVK_ANSI_O: model.markOut()
-        case kVK_ANSI_D: model.split()
-        case kVK_Delete, kVK_ForwardDelete: model.deleteSelected()
-        default: return false
-        }
+        key.run(self)
         return true
     }
 
@@ -454,6 +435,46 @@ final class EditorController: NSObject, NSWindowDelegate {
 /// A click never parks keyboard focus on a control here (buttons, the zoom switch), so nothing but
 /// the window's key handler sees Space and friends. SwiftUI's `.focusable(false)` alone leaves its
 /// NSButton accepting first responder.
+/// The editor's keys and the preview click. The window's key handler runs these and the keyboard popover lists them,
+/// so the two never drift apart.
+struct EditorShortcut {
+    struct Key {
+        var code: Int?
+        /// Matched by the typed character instead of the key code (? sits on different keys per layout).
+        var character: String?
+        var mods: NSEvent.ModifierFlags = []
+        /// Held down: runs again on every repeat.
+        var repeats = false
+        let run: @MainActor (EditorController) -> Void
+
+        func matches(_ e: NSEvent, _ mods: NSEvent.ModifierFlags) -> Bool {
+            if let character { return e.characters == character && !mods.contains(.command) }
+            return code == Int(e.keyCode) && mods == self.mods
+        }
+    }
+    let label: String
+    let title: String.LocalizationValue
+    /// Empty: a mouse action, listed only.
+    var keys: [Key] = []
+
+    @MainActor static let all: [EditorShortcut] = [
+        .init(label: String(localized: "Space"), title: "Play or pause", keys: [.init(code: kVK_Space) { $0.model.togglePlay() }]),
+        .init(label: "← →", title: "Back or forward one frame", keys: [
+            .init(code: kVK_LeftArrow, repeats: true) { $0.model.step(-1) }, .init(code: kVK_RightArrow, repeats: true) { $0.model.step(1) }]),
+        .init(label: "I  O", title: "Move the clip’s start or end to the playhead", keys: [
+            .init(code: kVK_ANSI_I) { $0.model.markIn() }, .init(code: kVK_ANSI_O) { $0.model.markOut() }]),
+        .init(label: "D", title: "Split the clip at the playhead", keys: [.init(code: kVK_ANSI_D) { $0.model.split() }]),
+        .init(label: "Delete", title: "Delete the selected clip or zoom", keys: [
+            .init(code: kVK_Delete) { $0.model.deleteSelected() }, .init(code: kVK_ForwardDelete) { $0.model.deleteSelected() }]),
+        .init(label: "⌘Z  ⇧⌘Z", title: "Undo or redo", keys: [
+            .init(code: kVK_ANSI_Z, mods: .command, repeats: true) { $0.model.undoEdit() },
+            .init(code: kVK_ANSI_Z, mods: [.command, .shift], repeats: true) { $0.model.redoEdit() }]),
+        .init(label: "⌘W", title: "Close the editor", keys: [.init(code: kVK_ANSI_W, mods: .command, repeats: true) { $0.window.performClose(nil) }]),
+        .init(label: String(localized: "Click"), title: "On the preview: hold the selected zoom on that spot"),
+        .init(label: "?", title: "Show these shortcuts", keys: [.init(character: "?") { $0.model.showsShortcuts.toggle() }]),
+    ]
+}
+
 final class EditorWindow: LoupecastWindow {
     override func makeFirstResponder(_ responder: NSResponder?) -> Bool {
         responder is NSControl ? false : super.makeFirstResponder(responder)
@@ -612,6 +633,12 @@ struct ControlBar: View {
             .focusable(false)
             .disabled(model.exportState.isRunning || model.edit == nil)
             .help("Export an MP4, or pick GIF from the arrow")
+            Button { model.showsShortcuts.toggle() } label: { Image(systemName: "keyboard") }
+                .buttonStyle(.borderless)
+                .focusable(false)
+                .help("Keyboard Shortcuts (?)")
+                .accessibilityLabel("Keyboard Shortcuts")
+                .popover(isPresented: $model.showsShortcuts, arrowEdge: .bottom) { ShortcutList() }
         }
     }
 }
@@ -744,6 +771,23 @@ struct NameButton: View {
                 .onSubmit { model.rename(text); shown = false }
                 .onExitCommand { shown = false }
         }
+    }
+}
+
+/// Every `EditorShortcut`: the keys on the left, what they do on the right.
+struct ShortcutList: View {
+    var body: some View {
+        Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 8) {
+            ForEach(EditorShortcut.all.indices, id: \.self) { i in
+                let s = EditorShortcut.all[i]
+                GridRow {
+                    Text(verbatim: s.label).font(.callout.monospaced().weight(.semibold)).gridColumnAlignment(.trailing)
+                    Text(String(localized: s.title)).font(.callout)
+                }
+            }
+        }
+        .padding(16)
+        .fixedSize()
     }
 }
 

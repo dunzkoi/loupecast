@@ -38,6 +38,8 @@
 //                                 LOUPECAST_ZOOM_SCALE_UNDO=1 undoes it again
 //   LOUPECAST_RENAME=<name>           click the name button, type <name> into its field and press Return, before the
 //                                 snapshot (and before LOUPECAST_EXPORT); LOUPECAST_RENAME_UNDO=1 undoes it again
+//   LOUPECAST_SHORTCUTS=<png>         press ? through the window's key handler (prints whether the shortcuts popover
+//                                 opened) and save the list drawn in a plain window
 //   LOUPECAST_QUIT_TEST=<dir>         export from that recording's editor, close the editor, then quit;
 //                                 LOUPECAST_QUIT_ANSWER=cancel|quit answers the export alert,
 //                                 LOUPECAST_QUIT_EDIT=<dir> splits a second recording right before quitting
@@ -242,6 +244,22 @@ enum DebugHooks {
             print("LOUPECAST: rename popover \(pop != nil), name \(m.project.name) (renamed \(m.project.renamed)), window \(editor.window.title), "
                   + "undo \(m.undo.undoActionName), popover still open \(pop?.isVisible ?? false)")
             if env["LOUPECAST_RENAME_UNDO"] != nil { m.undoEdit(); print("LOUPECAST: name after undo \(m.project.name), window \(editor.window.title)") }
+        }
+        if let out = env["LOUPECAST_SHORTCUTS"] {
+            let e = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .shift, timestamp: 0, windowNumber: editor.window.windowNumber,
+                                     context: nil, characters: "?", charactersIgnoringModifiers: "/", isARepeat: false, keyCode: UInt16(kVK_ANSI_Slash))!
+            let consumed = editor.handle(e)
+            try? await Task.sleep(for: .seconds(1))
+            print("LOUPECAST: ? consumed \(consumed), shortcuts shown \(m.showsShortcuts), popover open \(NSApp.windows.contains { String(describing: type(of: $0)).contains("Popover") && $0.isVisible })")
+            let w = NSWindow(contentRect: NSRect(x: -20_000, y: -20_000, width: 400, height: 300), styleMask: [.borderless], backing: .buffered, defer: false)
+            w.isReleasedWhenClosed = false
+            w.contentView = NSHostingView(rootView: ShortcutList().background(Color(nsColor: .windowBackgroundColor)))
+            w.setContentSize(w.contentView!.fittingSize)
+            w.orderFront(nil)
+            try? await Task.sleep(for: .seconds(0.5))
+            save(w.contentView!, to: URL(fileURLWithPath: out))
+            w.close()
+            m.showsShortcuts = false
         }
         switch env["LOUPECAST_SELECT"] ?? "zoom" {
         case "clip": m.selection = m.project.clips.first.map { .clip($0.id) } ?? .none
@@ -452,11 +470,24 @@ enum DebugHooks {
                   + "firstResponder=\(w.firstResponder.map { String(describing: type(of: $0)) } ?? "nil") active=\(NSApp.isActive)")
             fflush(stdout)
         }
+        // without Accessibility, keys posted to the pid never arrive: queue the same key-down in NSApp's event queue instead
+        // (still one event per key, so undo groups one action per key as it does for real typing)
+        let trusted = AXIsProcessTrusted()
+        print("LOUPECAST: Accessibility \(trusted ? "on: keys go through the window server" : "off: keys go through NSApp's event queue")")
         func key(_ code: Int, _ flags: CGEventFlags = []) async {
-            for down in [true, false] {
-                let e = CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(code), keyDown: down)
-                e?.flags = flags
-                e?.postToPid(getpid())
+            if trusted {
+                for down in [true, false] {
+                    let e = CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(code), keyDown: down)
+                    e?.flags = flags
+                    e?.postToPid(getpid())
+                }
+            } else {
+                var mods: NSEvent.ModifierFlags = []
+                if flags.contains(.maskCommand) { mods.insert(.command) }
+                if flags.contains(.maskShift) { mods.insert(.shift) }
+                NSApp.postEvent(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: mods, timestamp: ProcessInfo.processInfo.systemUptime,
+                                                 windowNumber: w.windowNumber, context: nil, characters: "", charactersIgnoringModifiers: "",
+                                                 isARepeat: false, keyCode: UInt16(code))!, atStart: false)
             }
             try? await Task.sleep(for: .seconds(0.5))
         }
@@ -532,10 +563,10 @@ enum DebugHooks {
             }
         }
 
-        // 2. a button click: 줌 추가, the rightmost plain SwiftUI button (내보내기 is a split menu, not one of these)
+        // 2. a button click: 줌 추가, the rightmost bordered SwiftUI button (내보내기 is a split menu, the keyboard button borderless)
         let zooms0 = m.project.zooms.count, ids0 = Set(m.project.zooms.map(\.id))
         UserDefaults.standard.set(2.5, forKey: EditorModel.zoomScaleKey)   // as if 250 % was the last level picked
-        let buttons = views(content).filter { String(describing: type(of: $0)) == "SwiftUIAppKitButton" }
+        let buttons = views(content).filter { String(describing: type(of: $0)) == "SwiftUIAppKitButton" && ($0 as? NSButton)?.isBordered == true }
         if let add = buttons.max(by: { $0.convert($0.bounds, to: nil).minX < $1.convert($1.bounds, to: nil).minX }) {
             let r = add.convert(add.bounds, to: nil)
             click(NSPoint(x: r.midX, y: r.midY))
