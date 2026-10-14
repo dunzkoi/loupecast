@@ -36,6 +36,8 @@
 //                                 (one undo step) before the snapshot
 //   LOUPECAST_ZOOM_SCALE=<scale>      set the first zoom's level through the editor (one undo step) before the snapshot;
 //                                 LOUPECAST_ZOOM_SCALE_UNDO=1 undoes it again
+//   LOUPECAST_RENAME=<name>           click the name button, type <name> into its field and press Return, before the
+//                                 snapshot (and before LOUPECAST_EXPORT); LOUPECAST_RENAME_UNDO=1 undoes it again
 //   LOUPECAST_QUIT_TEST=<dir>         export from that recording's editor, close the editor, then quit;
 //                                 LOUPECAST_QUIT_ANSWER=cancel|quit answers the export alert,
 //                                 LOUPECAST_QUIT_EDIT=<dir> splits a second recording right before quitting
@@ -222,6 +224,24 @@ enum DebugHooks {
             m.setZoomScale(z.id, s)
             print("LOUPECAST: zoom scale \(m.project.zooms[0].scale), undo \(m.undo.undoActionName)")
             if env["LOUPECAST_ZOOM_SCALE_UNDO"] != nil { m.undoEdit(); print("LOUPECAST: zoom scale after undo \(m.project.zooms[0].scale)") }
+        }
+        if let name = env["LOUPECAST_RENAME"] {
+            func views(_ v: NSView) -> [NSView] { [v] + v.subviews.flatMap(views) }
+            let x = { (v: NSView) in v.convert(v.bounds, to: nil).minX }
+            let button = views(editor.window.contentView!).compactMap { $0 as? NSButton }.min { x($0) < x($1) }   // leftmost: the name
+            button?.performClick(nil)
+            try? await Task.sleep(for: .seconds(1))
+            let pop = NSApp.windows.first { String(describing: type(of: $0)).contains("Popover") && $0.isVisible }
+            if let pop, let field = views(pop.contentView!).compactMap({ $0 as? NSTextField }).first {
+                // what typing does, without focus (the harness never activates Loupecast): change the text, press Return
+                field.stringValue = name
+                NotificationCenter.default.post(name: NSControl.textDidChangeNotification, object: field)
+                field.sendAction(field.action, to: field.target)
+                try? await Task.sleep(for: .seconds(0.5))
+            }
+            print("LOUPECAST: rename popover \(pop != nil), name \(m.project.name) (renamed \(m.project.renamed)), window \(editor.window.title), "
+                  + "undo \(m.undo.undoActionName), popover still open \(pop?.isVisible ?? false)")
+            if env["LOUPECAST_RENAME_UNDO"] != nil { m.undoEdit(); print("LOUPECAST: name after undo \(m.project.name), window \(editor.window.title)") }
         }
         switch env["LOUPECAST_SELECT"] ?? "zoom" {
         case "clip": m.selection = m.project.clips.first.map { .clip($0.id) } ?? .none

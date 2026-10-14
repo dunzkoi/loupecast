@@ -11,6 +11,8 @@ public struct Project: Codable, Sendable, Equatable {
 
     public var version: Int
     public var name: String
+    /// The user typed the name (Rename): exports are named after it. Off in older files and new recordings.
+    public var renamed = false
     public var videoFile: String
     public var duration: Double
     public var pixelWidth: Int
@@ -54,7 +56,7 @@ public struct Project: Codable, Sendable, Equatable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case version, name, videoFile, duration, pixelWidth, pixelHeight, pointPixelScale, cursor, clicks, keys, clips, zooms, aspect, style, fill, systemVolume, micVolume, camera
+        case version, name, renamed, videoFile, duration, pixelWidth, pixelHeight, pointPixelScale, cursor, clicks, keys, clips, zooms, aspect, style, fill, systemVolume, micVolume, camera
     }
     private enum V1Keys: String, CodingKey { case trimIn, trimOut }
 
@@ -62,6 +64,7 @@ public struct Project: Codable, Sendable, Equatable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         version = try c.decode(Int.self, forKey: .version)
         name = try c.decode(String.self, forKey: .name)
+        renamed = try c.decodeIfPresent(Bool.self, forKey: .renamed) ?? false
         videoFile = try c.decode(String.self, forKey: .videoFile)
         duration = try c.decode(Double.self, forKey: .duration)
         pixelWidth = try c.decode(Int.self, forKey: .pixelWidth)
@@ -100,6 +103,14 @@ public struct Project: Codable, Sendable, Equatable {
     }
 
     // MARK: - Edit operations (pure, used by the editor UI)
+
+    /// A blank name keeps the current one.
+    public mutating func rename(_ text: String) {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty, t != name else { return }
+        name = t
+        renamed = true
+    }
 
     public var minTrimLength: Double { Self.frameDuration * 6 }
     /// Start of the kept material / end of it (single-range view of the cut list).

@@ -376,6 +376,25 @@ final class ClipTests: XCTestCase {
         try p.save(to: url)
         XCTAssertEqual(try Project.load(from: url).style, .plain)
     }
+
+    // MARK: rename
+
+    func testRenameKeepsBlankNamesAndOlderFilesAreUnnamed() throws {
+        var p = project()
+        XCTAssertFalse(p.renamed, "a new recording keeps its date name")
+        p.rename("   ")
+        XCTAssertEqual(p.name, "t"); XCTAssertFalse(p.renamed, "a blank name changes nothing")
+        p.rename("  로그인 데모 ")
+        XCTAssertEqual(p.name, "로그인 데모"); XCTAssertTrue(p.renamed)
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("rename-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try p.save(to: url)
+        XCTAssertEqual(try Project.load(from: url), p)
+        var json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(p)) as! [String: Any]
+        json["renamed"] = nil                                  // a file from before renaming
+        try JSONSerialization.data(withJSONObject: json).write(to: url)
+        XCTAssertFalse(try Project.load(from: url).renamed)
+    }
 }
 
 private extension Project {

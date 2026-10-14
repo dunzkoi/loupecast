@@ -8,14 +8,22 @@ import os
 public enum Exporter {
     public static var moviesDir: URL { FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Movies") }
 
-    /// `Loupecast <yyyy-MM-dd HH.mm.ss>.mp4` (or .gif) in `dir`, numbered " 2", " 3"… when that name is on disk or in
-    /// `taken` (exports still running), so an export never replaces an earlier one from the same second.
-    public static func defaultURL(now: Date = Date(), in dir: URL = moviesDir, taken: Set<URL> = [], fileExtension: String = "mp4") -> URL {
+    /// `<name>.mp4` (or .gif) in `dir`, `Loupecast <yyyy-MM-dd HH.mm.ss>` without a name, numbered " 2", " 3"… when that
+    /// name is on disk or in `taken` (exports still running), so an export never replaces an earlier one.
+    public static func defaultURL(name: String? = nil, now: Date = Date(), in dir: URL = moviesDir, taken: Set<URL> = [],
+                                  fileExtension: String = "mp4") -> URL {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
         f.dateFormat = "yyyy-MM-dd HH.mm.ss"
-        return (1...).lazy.map { n in dir.appendingPathComponent("Loupecast \(f.string(from: now))\(n == 1 ? "" : " \(n)").\(fileExtension)") }
+        let base = name.map(fileName).flatMap { $0.isEmpty ? nil : $0 } ?? "Loupecast \(f.string(from: now))"
+        return (1...).lazy.map { n in dir.appendingPathComponent("\(base)\(n == 1 ? "" : " \(n)").\(fileExtension)") }
             .first { !taken.contains($0) && !FileManager.default.fileExists(atPath: $0.path) }!
+    }
+
+    /// `/` and `:` can't be in a file name (Finder shows `:` as `/`); a leading dot would hide the file.
+    static func fileName(_ name: String) -> String {
+        let s = String(name.map { "/:".contains($0) ? "-" : $0 }.prefix(200))
+        return s.trimmingCharacters(in: .whitespacesAndNewlines.union(CharacterSet(charactersIn: ".")))
     }
 
     public static func export(project: Project, videoURL: URL, to output: URL,

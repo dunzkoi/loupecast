@@ -44,6 +44,8 @@ final class EditorModel {
     @ObservationIgnored private var saveTask: Task<Void, Never>?
     @ObservationIgnored private var exportTask: Task<Void, Never>?
     @ObservationIgnored private var timeObserver: Any?
+    /// The window title follows the name (a rename or its undo).
+    @ObservationIgnored var onNameChange: ((String) -> Void)?
     @ObservationIgnored private var rateObserver: NSKeyValueObservation?
 
     init(dir: URL, project: Project) {
@@ -179,6 +181,7 @@ final class EditorModel {
     func markIn() { if let c = clipAtPlayhead { edit("Set Start") { $0.setClipStart(id: c.id, playhead) } } }
     func markOut() { if let c = clipAtPlayhead { edit("Set End") { $0.setClipEnd(id: c.id, playhead) } } }
     func split() { edit("Split") { $0.split(at: playhead) } }
+    func rename(_ text: String) { edit("Rename") { $0.rename(text) } }
 
     /// Zoom levels the editor offers; Add Zoom uses the one picked last.
     static let zoomLevels = [1.5, 2, 2.5, 3]
@@ -266,6 +269,7 @@ final class EditorModel {
 
     private func projectChanged(old: Project) {
         scheduleSave()
+        if project.name != old.name { onNameChange?(project.name) }
         if case .clip(let id) = selection, !project.clips.contains(where: { $0.id == id }) { selection = .none }
         if case .zoom(let id) = selection, !project.zooms.contains(where: { $0.id == id }) { selection = .none }
         if dragBase == nil { applyToPlayer(old: old) }
@@ -315,7 +319,8 @@ final class EditorModel {
         if exportState.isRunning { return }
         exportState = .running(0)
         let project = project, video = videoURL
-        let url = Exporter.defaultURL(in: Self.exportDir, taken: Set(Self.exports.keys), fileExtension: format == .gif ? "gif" : "mp4")
+        let url = Exporter.defaultURL(name: project.renamed ? project.name : nil, in: Self.exportDir, taken: Set(Self.exports.keys),
+                                      fileExtension: format == .gif ? "gif" : "mp4")
         let task = Task {
             do {
                 let progress: @Sendable (Double) -> Void = { p in
@@ -387,6 +392,7 @@ final class EditorController: NSObject, NSWindowDelegate {
         host.sizingOptions = [.minSize]
         window.contentView = host
         window.title = project.name
+        model.onNameChange = { [weak window] in window?.title = $0 }
         window.setContentSize(NSSize(width: 1100, height: 720))
         window.isReleasedWhenClosed = false
         window.delegate = self
@@ -520,6 +526,7 @@ struct ControlBar: View {
 
     private var topRow: some View {
         HStack(spacing: 12) {
+            NameButton(model: model)
             Button(action: model.togglePlay) {
                 Image(systemName: model.isPlaying ? "pause.fill" : "play.fill")
                     .font(.title3)
@@ -707,6 +714,36 @@ struct CameraMenu: View {
         .focusable(false)
         .help("Camera")
         .accessibilityLabel("Camera")
+    }
+}
+
+/// The recording's name; a click opens a field to rename it (one undo step). The menu, the window title and the export
+/// file names follow it.
+struct NameButton: View {
+    @Bindable var model: EditorModel
+    @State private var shown = false
+    @State private var text = ""
+    @FocusState private var editing: Bool
+
+    var body: some View {
+        Button { text = model.project.name; shown = true } label: {
+            Label(model.project.name, systemImage: "pencil").lineLimit(1).truncationMode(.middle)
+        }
+        .buttonStyle(.borderless)
+        .focusable(false)
+        .frame(maxWidth: 220, alignment: .leading)
+        .layoutPriority(-1)
+        .help("Rename the recording; exports are named after it")
+        .popover(isPresented: $shown, arrowEdge: .bottom) {
+            TextField("Name", text: $text)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 280)
+                .padding(12)
+                .focused($editing)
+                .onAppear { editing = true }
+                .onSubmit { model.rename(text); shown = false }
+                .onExitCommand { shown = false }
+        }
     }
 }
 

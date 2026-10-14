@@ -593,6 +593,16 @@ final class ExportTests: XCTestCase {
         XCTAssertEqual(second.lastPathComponent, first.deletingPathExtension().lastPathComponent + " 2.mp4", "an existing file is never the target")
         let third = Exporter.defaultURL(now: now, in: dir, taken: [second])
         XCTAssertEqual(third.lastPathComponent, first.deletingPathExtension().lastPathComponent + " 3.mp4", "a running export's name is taken too")
+
+        // a renamed recording: its name, numbered the same way; characters a file name can't hold become "-"
+        let named = Exporter.defaultURL(name: "로그인 데모", now: now, in: dir)
+        XCTAssertEqual(named.lastPathComponent, "로그인 데모.mp4")
+        try Data().write(to: named)
+        XCTAssertEqual(Exporter.defaultURL(name: "로그인 데모", now: now, in: dir).lastPathComponent, "로그인 데모 2.mp4")
+        XCTAssertEqual(Exporter.defaultURL(name: "로그인 데모", now: now, in: dir, fileExtension: "gif").lastPathComponent, "로그인 데모.gif")
+        XCTAssertEqual(Exporter.defaultURL(name: " a/b:c ", now: now, in: dir).lastPathComponent, "a-b-c.mp4")
+        XCTAssertEqual(Exporter.defaultURL(name: ".hidden", now: now, in: dir).lastPathComponent, "hidden.mp4")
+        XCTAssertEqual(Exporter.defaultURL(name: " .. ", now: now, in: dir), second, "nothing left of the name: the date name")
     }
 
     // MARK: time limit
