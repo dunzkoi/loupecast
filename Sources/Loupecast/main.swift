@@ -12,7 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     static let micKey = "recordMicrophone", systemAudioKey = "recordSystemAudio", hideMenuBarKey = "hideMenuBar"
     static let screenRequestedKey = "screenAccessRequested"
     static let soundsKey = "playSounds", cameraKey = "recordCamera", shortcutsKey = "showShortcuts"
-    static let typingKey = "zoomOnTyping"
+    static let typingKey = "zoomOnTyping", countdownKey = "countdownBeforeRecording"
 
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private var recorder: Recorder?
@@ -22,6 +22,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     private var pausedTotal: TimeInterval = 0
     private var ticker: Timer?
     private var busy = false
+    /// Showing 3, 2, 1 before a recording; the start key or menu item cancels it.
+    private var countdown: Countdown?
     private var editors: [URL: EditorController] = [:]
     private var permissionWindow: NSWindow?
     private var launcher: NSWindow?
@@ -30,7 +32,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         UserDefaults.standard.register(defaults: [Self.micKey: false, Self.systemAudioKey: true, Self.hideMenuBarKey: true, Self.soundsKey: true,
-                                                  Self.cameraKey: false, Self.shortcutsKey: false, Self.typingKey: true])
+                                                  Self.cameraKey: false, Self.shortcutsKey: false, Self.typingKey: true,
+                                                  Self.countdownKey: true])
         NSApp.mainMenu = Self.mainMenu()
         let menu = NSMenu()
         menu.delegate = self
@@ -70,10 +73,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         menu.autoenablesItems = false   // isEnabled below is the source of truth (greyed while recording)
         let recording = startedAt != nil
 
-        let rec = item(recording ? String(localized: "Stop Recording") : String(localized: "Start Recording"), #selector(toggleRecording))
+        let rec = item(countdown != nil ? String(localized: "Cancel Countdown")
+                       : recording ? String(localized: "Stop Recording") : String(localized: "Start Recording"), #selector(toggleRecording))
         rec.keyEquivalent = "2"
         rec.keyEquivalentModifierMask = [.command, .shift]
-        rec.isEnabled = !busy
+        rec.isEnabled = !busy || countdown != nil
         menu.addItem(rec)
         if !recording {
             let area = item(String(localized: "Record Area…"), #selector(recordArea))
@@ -96,6 +100,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         for (title, key) in [(String(localized: "Record Microphone"), Self.micKey), (String(localized: "Record Computer Audio"), Self.systemAudioKey),
                              (String(localized: "Record Camera"), Self.cameraKey), (String(localized: "Show Shortcuts in Video"), Self.shortcutsKey),
                              (String(localized: "Zoom In on Typing"), Self.typingKey),
+                             (String(localized: "Countdown Before Recording"), Self.countdownKey),
                              (String(localized: "Hide Menu Bar in Video"), Self.hideMenuBarKey), (String(localized: "Start and Stop Sounds"), Self.soundsKey)] {
             let toggle = item(title, #selector(toggleSetting(_:)))
             toggle.representedObject = key
@@ -331,6 +336,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     // MARK: recording
 
     @objc func toggleRecording() {
+        if let countdown { return countdown.cancel() }   // ⌘⇧2 or the menu again during 3, 2, 1: no recording
         guard !busy else { return }
         busy = true
         Task {
@@ -363,6 +369,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             if !prompted { showPermissions(needsMic: mic, needsCamera: camera) }
             return
         }
+        if defaults.bool(forKey: Self.countdownKey) {
+            let c = Countdown()
+            countdown = c
+            let ranOut = await c.run(at: Self.countdownCenter(area))
+            countdown = nil
+            guard ranOut else { return }                    // cancelled: nothing recorded, no folder made
+        }
         await Self.chime("loupecast-start", wait: true)   // Resources/loupecast-start.wav (NSSound(named:) checks the bundle first)
         do {
             let r = try await Recorder.start(microphone: mic, systemAudio: defaults.bool(forKey: Self.systemAudioKey),
@@ -382,6 +395,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         } catch {
             alert(String(localized: "Couldn’t start recording"), error)
         }
+    }
+
+    /// The middle of the area to record, or of the display under the mouse (where the recording will be), in screen
+    /// coordinates.
+    static func countdownCenter(_ area: RecordingArea?) -> NSPoint {
+        let id = { (s: NSScreen) in (s.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.uint32Value }
+        if let area, let s = NSScreen.screens.first(where: { id($0) == area.displayID }) {
+            return NSPoint(x: s.frame.minX + area.rect.x + area.rect.width / 2, y: s.frame.maxY - area.rect.y - area.rect.height / 2)
+        }
+        let mouse = NSEvent.mouseLocation
+        let f = (NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) } ?? NSScreen.main)?.frame ?? .zero
+        return NSPoint(x: f.midX, y: f.midY)
     }
 
     /// `quitting`: the file and project.json are written, but no chime and no editor.

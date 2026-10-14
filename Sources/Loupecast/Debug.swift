@@ -62,6 +62,8 @@
 //                                 then drag a new area and press Enter / Esc on it; prints what each returns
 //   LOUPECAST_CURSOR_PROBE=<dir>      note three cursor shapes (arrow, I-beam, arrow again) into <dir>/cursors the way a
 //                                 recording does, then the system's current one; print the overlay, quit
+//   LOUPECAST_COUNTDOWN=<png>         run the start countdown off screen: save it at 2, press Esc (prints false), then let
+//                                 it run out (prints true and how long it took); quit
 //   LOUPECAST_EDITOR_TEST=<dir>       trim drag + button click + Space/D/Delete/⌘Z through the window's key
 //                                 handler, off screen and without activating; logs each state change
 import AVFoundation
@@ -100,6 +102,21 @@ enum DebugHooks {
             print("LOUPECAST: cursor probe images \(o.images.map { "\($0.file) \($0.width)x\($0.height) hot \($0.hotX),\($0.hotY)" }), "
                   + "shapes \(o.shapes.map(\.image)), files \(files)")
             exit(0)
+        }
+        if let out = env["LOUPECAST_COUNTDOWN"] {
+            Task {
+                let c = Countdown(), off = NSPoint(x: -20_000, y: -20_000)
+                async let cancelled = c.run(at: off)
+                try? await Task.sleep(for: .seconds(1.3))
+                save(c.view, to: URL(fileURLWithPath: out))
+                c.view.keyDown(with: NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0, context: nil,
+                                                      characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: UInt16(kVK_Escape))!)
+                print("LOUPECAST: countdown after Esc ran out: \(await cancelled)")
+                let start = ProcessInfo.processInfo.systemUptime
+                let ranOut = await Countdown().run(at: off)
+                print("LOUPECAST: countdown left alone ran out: \(ranOut) after \(String(format: "%.2f", ProcessInfo.processInfo.systemUptime - start)) s")
+                exit(0)
+            }
         }
         if let out = env["LOUPECAST_AREA_PICKER"] { Task { await areaPickerTest(to: URL(fileURLWithPath: out)) } }
         if let path = env["LOUPECAST_OPEN_TEST"] {

@@ -113,3 +113,87 @@ final class AreaPickerView: NSView {
         (text as NSString).draw(at: NSPoint(x: box.minX + 10, y: box.minY + 5), withAttributes: attrs)
     }
 }
+
+/// 3, 2, 1 in a dark rounded square before a recording starts. A non-activating panel: it takes Esc without pulling the
+/// app being recorded out of the front, and it is gone before the first frame is captured.
+@MainActor
+final class Countdown {
+    static let seconds = 3
+    let view = CountdownView(frame: NSRect(x: 0, y: 0, width: 280, height: 300))
+    private var panel: NSPanel?
+    private var done: CheckedContinuation<Bool, Never>?
+    private var ticking: Task<Void, Never>?
+
+    /// Centered on `center` (screen coordinates); true when it ran out, false when cancelled.
+    func run(at center: NSPoint) async -> Bool {
+        let p = KeyPanel(contentRect: NSRect(x: center.x - 140, y: center.y - 150, width: 280, height: 300),
+                         styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        p.level = .screenSaver
+        p.isOpaque = false
+        p.backgroundColor = .clear
+        p.hidesOnDeactivate = false
+        p.isReleasedWhenClosed = false
+        p.contentView = view
+        view.onEscape = { [weak self] in self?.cancel() }
+        panel = p
+        p.makeKeyAndOrderFront(nil)
+        p.makeFirstResponder(view)
+        return await withCheckedContinuation { c in
+            done = c
+            ticking = Task { [weak self] in
+                for n in stride(from: Self.seconds, to: 0, by: -1) {
+                    self?.view.number = n
+                    try? await Task.sleep(for: .seconds(1))
+                    if Task.isCancelled { return }
+                }
+                self?.finish(true)
+            }
+        }
+    }
+
+    func cancel() { finish(false) }
+
+    private func finish(_ ranOut: Bool) {
+        ticking?.cancel()
+        panel?.orderOut(nil)
+        panel = nil
+        done?.resume(returning: ranOut)
+        done = nil
+    }
+}
+
+/// Borderless panels can't become key on their own; the countdown needs Esc.
+final class KeyPanel: NSPanel {
+    override var canBecomeKey: Bool { true }
+}
+
+final class CountdownView: NSView {
+    var number = Countdown.seconds { didSet { needsDisplay = true } }
+    var onEscape: (() -> Void)?
+
+    override var acceptsFirstResponder: Bool { true }
+
+    override func keyDown(with e: NSEvent) {
+        if Int(e.keyCode) == kVK_Escape { onEscape?() } else { super.keyDown(with: e) }
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let box = NSRect(x: 20, y: 40, width: 240, height: 240)
+        NSColor.black.withAlphaComponent(0.7).setFill()
+        NSBezierPath(roundedRect: box, xRadius: 44, yRadius: 44).fill()
+        let digit: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 150, weight: .bold).monospacedDigitFont(),
+                                                    .foregroundColor: NSColor.white]
+        let text = "\(number)" as NSString, size = text.size(withAttributes: digit)
+        text.draw(at: NSPoint(x: box.midX - size.width / 2, y: box.midY - size.height / 2), withAttributes: digit)
+        let hint = String(localized: "Esc to cancel") as NSString
+        let small: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 13, weight: .medium), .foregroundColor: NSColor.white]
+        let hs = hint.size(withAttributes: small), pill = NSRect(x: bounds.midX - hs.width / 2 - 10, y: 4, width: hs.width + 20, height: hs.height + 8)
+        NSColor.black.withAlphaComponent(0.7).setFill()
+        NSBezierPath(roundedRect: pill, xRadius: pill.height / 2, yRadius: pill.height / 2).fill()
+        hint.draw(at: NSPoint(x: pill.minX + 10, y: pill.minY + 4), withAttributes: small)
+    }
+}
+
+private extension NSFont {
+    func monospacedDigitFont() -> NSFont { NSFont.monospacedDigitSystemFont(ofSize: pointSize, weight: .bold) }
+}

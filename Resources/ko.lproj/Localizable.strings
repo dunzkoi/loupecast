@@ -26,6 +26,7 @@
 "Camera Position" = "카메라 위치";
 "Camera Size" = "카메라 크기";
 "Cancel" = "취소";
+"Cancel Countdown" = "카운트다운 취소";
 "Cancel Export" = "내보내기 취소";
 "Check for Updates…" = "업데이트 확인…";
 "Click" = "클릭";
@@ -50,6 +51,7 @@
 "Couldn’t start recording" = "녹화를 시작하지 못했습니다";
 "Couldn’t start the camera." = "카메라를 켜지 못했습니다.";
 "Couldn’t start writing." = "쓰기를 시작하지 못했습니다.";
+"Countdown Before Recording" = "녹화 전 카운트다운";
 "Crop the recording to fill the frame; it follows the cursor" = "녹화 화면을 잘라 프레임을 채우고 커서를 따라갑니다";
 "Cursor Size" = "커서 크기";
 "Cut %@" = "잘라냄 %@";
@@ -68,6 +70,7 @@
 "Effects" = "효과";
 "Effects: click rings, motion blur, cursor" = "효과: 클릭 표시, 모션 블러, 커서";
 "Enjoying Loupecast? Star it on GitHub" = "Loupecast가 마음에 드셨다면 GitHub에 별을 눌러 주세요";
+"Esc to cancel" = "Esc로 취소";
 "Export" = "내보내기";
 "Export an MP4, or pick GIF from the arrow" = "MP4로 내보냅니다. 화살표에서 GIF를 고를 수 있습니다";
 "Export an MP4, or pick GIF, the frame rate and a size limit from the arrow" = "MP4로 내보냅니다. 화살표에서 GIF, 프레임 속도, 파일 크기 제한을 고를 수 있습니다";
