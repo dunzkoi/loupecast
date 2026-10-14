@@ -35,7 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         menu.delegate = self
         statusItem.menu = menu
         updateStatusItem()
-        Updater.finishRelaunch { HotKey.register { [weak self] in self?.toggleRecording() } }
+        Updater.finishRelaunch { [weak self] in HotKey.register { self?.toggleRecording() } }
         Updater.start { [weak self] in self?.isIdle ?? false }
         Task { await Library.recoverCrashed() }
         // the user went to another app instead of clicking the floating window: stop floating

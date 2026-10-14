@@ -191,7 +191,7 @@ enum Updater {
         let a = NSAlert()
         a.messageText = title
         a.informativeText = info
-        if let link { a.addButton(withTitle: String(localized: "OK")); a.addButton(withTitle: String(localized: "View Changes")) }
+        if link != nil { a.addButton(withTitle: String(localized: "OK")); a.addButton(withTitle: String(localized: "View Changes")) }
         NSApp.activate(ignoringOtherApps: true)   // a menu-bar app is not active, so the alert would open behind
         if a.runModal() == .alertSecondButtonReturn, let link {
             NSWorkspace.shared.open(URL(string: "https://github.com/\(repo)/releases/tag/\(link)")!)
