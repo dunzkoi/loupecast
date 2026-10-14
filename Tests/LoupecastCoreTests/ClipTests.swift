@@ -461,7 +461,10 @@ final class ClipTests: XCTestCase {
         let lines = Caption.lines(words)
         XCTAssertEqual(lines, [Caption(start: 1, end: 2, text: "Click the button."), Caption(start: 2.1, end: 2.8, text: "Then type"),
                                Caption(start: 3.7, end: 4.5, text: "your name")])
-        let long = (0..<20).map { (start: Double($0) * 0.4, end: Double($0) * 0.4 + 0.3, text: "word") }
+        let long: [(start: Double, end: Double, text: String)] = (0..<20).map { (i: Int) in
+            let t = Double(i) * 0.4
+            return (start: t, end: t + 0.3, text: "word")
+        }
         XCTAssertTrue(Caption.lines(long).allSatisfy { $0.text.count <= 46 && $0.end - $0.start <= 6.5 }, "long speech splits into lines")
 
         // kept: [0, 2) at 1×, [3, 5) at 2× → composition [0, 2) and [2, 3); 2–3 s of recording is cut
