@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     static let micKey = "recordMicrophone", systemAudioKey = "recordSystemAudio", hideMenuBarKey = "hideMenuBar"
     static let screenRequestedKey = "screenAccessRequested"
     static let soundsKey = "playSounds", cameraKey = "recordCamera", shortcutsKey = "showShortcuts"
+    static let typingKey = "zoomOnTyping"
 
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private var recorder: Recorder?
@@ -29,7 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         UserDefaults.standard.register(defaults: [Self.micKey: false, Self.systemAudioKey: true, Self.hideMenuBarKey: true, Self.soundsKey: true,
-                                                  Self.cameraKey: false, Self.shortcutsKey: false])
+                                                  Self.cameraKey: false, Self.shortcutsKey: false, Self.typingKey: true])
         NSApp.mainMenu = Self.mainMenu()
         let menu = NSMenu()
         menu.delegate = self
@@ -94,6 +95,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
 
         for (title, key) in [(String(localized: "Record Microphone"), Self.micKey), (String(localized: "Record Computer Audio"), Self.systemAudioKey),
                              (String(localized: "Record Camera"), Self.cameraKey), (String(localized: "Show Shortcuts in Video"), Self.shortcutsKey),
+                             (String(localized: "Zoom In on Typing"), Self.typingKey),
                              (String(localized: "Hide Menu Bar in Video"), Self.hideMenuBarKey), (String(localized: "Start and Stop Sounds"), Self.soundsKey)] {
             let toggle = item(title, #selector(toggleSetting(_:)))
             toggle.representedObject = key
@@ -101,8 +103,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             toggle.isEnabled = !recording && !busy
             menu.addItem(toggle)
         }
-        if UserDefaults.standard.bool(forKey: Self.shortcutsKey), !AXIsProcessTrusted() {
-            let ax = item(String(localized: "Allow Accessibility to Record Shortcuts…"), #selector(askAccessibility))
+        if [Self.shortcutsKey, Self.typingKey].contains(where: UserDefaults.standard.bool(forKey:)), !AXIsProcessTrusted() {
+            let ax = item(String(localized: "Allow Accessibility for Typing Zoom and Shortcuts…"), #selector(askAccessibility))
             ax.isEnabled = !recording
             menu.addItem(ax)
         }
@@ -210,7 +212,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         guard let key = sender.representedObject as? String, recorder == nil else { return }
         let on = !UserDefaults.standard.bool(forKey: key)
         UserDefaults.standard.set(on, forKey: key)
-        if on, key == Self.shortcutsKey, !AXIsProcessTrusted() { askAccessibility() }
+        if on, [Self.shortcutsKey, Self.typingKey].contains(key), !AXIsProcessTrusted() { askAccessibility() }
     }
 
     /// Key presses reach a global monitor only with Accessibility on: macOS asks, and lists Loupecast in the settings pane.
@@ -365,7 +367,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         do {
             let r = try await Recorder.start(microphone: mic, systemAudio: defaults.bool(forKey: Self.systemAudioKey),
                                              hideMenuBar: defaults.bool(forKey: Self.hideMenuBarKey), area: area, camera: camera,
-                                             shortcuts: defaults.bool(forKey: Self.shortcutsKey))
+                                             shortcuts: defaults.bool(forKey: Self.shortcutsKey), typing: defaults.bool(forKey: Self.typingKey))
             r.onStreamError = { [weak self] error in self?.streamFailed(error) }
             recorder = r
             startedAt = ProcessInfo.processInfo.systemUptime

@@ -43,6 +43,9 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
     private var cursorTimer: Timer?
     private var cursorShapes: CursorShapes?
     private var ticks = 0
+    /// The stretch of typing in progress (host clock) and where its text goes; the last click, global coordinates.
+    private var typingSpan: (start: Double, last: Double, at: CGPoint)?
+    private var lastClick: CGPoint?
 
     #if DEBUG
     deinit { NSLog("Loupecast: recorder released") }
@@ -52,7 +55,7 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
     /// of its display instead. `camera` records the default camera next to it (started first: it takes a moment).
     @MainActor
     static func start(microphone: Bool, systemAudio: Bool, hideMenuBar: Bool, area: RecordingArea? = nil, camera: Bool = false,
-                      shortcuts: Bool = false) async throws -> Recorder {
+                      shortcuts: Bool = false, typing: Bool = false) async throws -> Recorder {
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
         let mouse = CGEvent(source: nil)?.location ?? .zero
         let display = area.map { a in content.displays.first { $0.displayID == a.displayID } }
@@ -84,7 +87,7 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
                 _ = await r.camera?.stop()
                 throw error
             }
-            r.startInputMonitors(shortcuts: shortcuts)
+            r.startInputMonitors(shortcuts: shortcuts, typing: typing)
             return r
         } catch {
             try? FileManager.default.removeItem(at: dir)
@@ -201,15 +204,19 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
 
     // MARK: input log (main thread)
 
-    @MainActor private func startInputMonitors(shortcuts: Bool) {
+    @MainActor private func startInputMonitors(shortcuts: Bool, typing: Bool) {
         let clicks = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] e in
             let p = e.cgEvent?.location ?? CGEvent(source: nil)?.location ?? .zero
             let kind: InputLog.Raw.Kind = .click(e.type == .rightMouseDown ? .right : .left)
-            MainActor.assumeIsolated { self?.log.append(.init(host: Self.hostTime(e.timestamp), gx: p.x, gy: p.y, kind: kind)) }
+            MainActor.assumeIsolated {
+                self?.log.append(.init(host: Self.hostTime(e.timestamp), gx: p.x, gy: p.y, kind: kind))
+                self?.lastClick = p
+            }
         }
-        // Keys only for 단축키 표시, and InputLog.appendKey keeps nothing but combinations with ⌘, ⌃ or ⌥: typed text
-        // (passwords included) never goes into project.json. Needs Accessibility; without it macOS sends no key events.
-        let keys = !shortcuts ? nil : NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] e in
+        // Keys only for 단축키 표시 and 타이핑 구간 확대: InputLog.appendKey keeps nothing but combinations with ⌘ or ⌃, and
+        // typing leaves only where each stretch began and ended, so typed text (passwords included) never goes into
+        // project.json. Needs Accessibility; without it macOS sends no key events.
+        let keys = !shortcuts && !typing ? nil : NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] e in
             guard !e.isARepeat, !IsSecureEventInputEnabled() else { return }   // a password field: nothing at all
             let f = e.modifierFlags
             var m = KeyModifiers()
@@ -221,7 +228,10 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
             // every key but the special ones may type text (dead keys like ⌥E included)
             let name = special ?? (e.characters(byApplyingModifiers: []) ?? e.charactersIgnoringModifiers ?? "?").uppercased()
             let types = special == nil || [kVK_Space, kVK_Tab].contains(Int(e.keyCode))   // ⌥Space types a no-break space
-            MainActor.assumeIsolated { self?.log.appendKey(host: host, modifiers: m, key: name, typesText: types) }
+            MainActor.assumeIsolated {
+                if shortcuts { self?.log.appendKey(host: host, modifiers: m, key: name, typesText: types) }
+                if typing, m.isDisjoint(with: [.command, .control]) { self?.typed(at: host) }
+            }
         }
         monitors = [clicks, keys].compactMap { $0 }
         let shapes = CursorShapes(dir: dir)
@@ -239,6 +249,51 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
         }
         RunLoop.main.add(timer, forMode: .common)
         cursorTimer = timer
+    }
+
+    /// One more key of typing: extends the current stretch, or (after 0.8 s without a key) logs it and starts a new one
+    /// where the text goes.
+    @MainActor private func typed(at host: Double) {
+        if let s = typingSpan, host - s.last <= TypingSpan.gap { typingSpan?.last = host; return }
+        endTyping()
+        let p = Self.typingFocus() ?? lastClick ?? CGEvent(source: nil)?.location ?? .zero
+        typingSpan = (host, host, p)
+    }
+
+    @MainActor private func endTyping() {
+        guard let s = typingSpan else { return }
+        log.append(.init(host: s.start, gx: s.at.x, gy: s.at.y, kind: .typing(untilHost: s.last)))
+        typingSpan = nil
+    }
+
+    /// Where typed text goes, in global CG coordinates: the caret (the selection's bounds), else the focused element's
+    /// center. Nil without Accessibility or when the app doesn't say (AX calls give up after 0.25 s).
+    @MainActor static func typingFocus() -> CGPoint? {
+        guard AXIsProcessTrusted() else { return nil }
+        let system = AXUIElementCreateSystemWide()
+        AXUIElementSetMessagingTimeout(system, 0.25)
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(system, "AXFocusedUIElement" as CFString, &value) == .success, let value,
+              CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
+        let element = value as! AXUIElement
+        func rect(_ v: CFTypeRef?) -> CGRect? {
+            guard let v, CFGetTypeID(v) == AXValueGetTypeID() else { return nil }
+            var r = CGRect.zero
+            return AXValueGetValue(v as! AXValue, .cgRect, &r) && r.width + r.height > 0 ? r : nil
+        }
+        var range: CFTypeRef?, bounds: CFTypeRef?
+        if AXUIElementCopyAttributeValue(element, "AXSelectedTextRange" as CFString, &range) == .success, let range,
+           AXUIElementCopyParameterizedAttributeValue(element, "AXBoundsForRange" as CFString, range, &bounds) == .success,
+           let caret = rect(bounds) {
+            return CGPoint(x: caret.midX, y: caret.midY)
+        }
+        var position: CFTypeRef?, size: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, "AXPosition" as CFString, &position) == .success,
+              AXUIElementCopyAttributeValue(element, "AXSize" as CFString, &size) == .success, let position, let size,
+              CFGetTypeID(position) == AXValueGetTypeID(), CFGetTypeID(size) == AXValueGetTypeID() else { return nil }
+        var origin = CGPoint.zero, extent = CGSize.zero
+        guard AXValueGetValue(position as! AXValue, .cgPoint, &origin), AXValueGetValue(size as! AXValue, .cgSize, &extent) else { return nil }
+        return CGPoint(x: origin.x + extent.width / 2, y: origin.y + extent.height / 2)
     }
 
     /// Named keys, by key code, as the video shows them (all but Space and Tab type no text); any other key shows its
@@ -266,6 +321,7 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
         cursorTimer = nil
         monitors.forEach(NSEvent.removeMonitor)
         monitors = []
+        endTyping()
         try? await stream.stopCapture()
         for t in [SCStreamOutputType.screen, .audio, .microphone] { try? stream.removeStreamOutput(self, type: t) }
         stream = nil
@@ -299,7 +355,8 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
         let paused = pauses.map { ClipRange(start: max(0, ($0.start - start).seconds), end: (($0.end.isValid ? $0.end : end) - start).seconds) }
         var project = Project(name: Self.name(Date()), duration: duration,
                               pixelWidth: pixelSize.0, pixelHeight: pixelSize.1, pointPixelScale: scale,
-                              cursor: events.cursor, clicks: events.clicks, shortcuts: events.shortcuts, paused: paused)
+                              cursor: events.cursor, clicks: events.clicks, shortcuts: events.shortcuts, typing: events.typing,
+                              paused: paused)
         project.camera = cameraStart.map { CameraOverlay(offset: $0 - start.seconds) }   // recording-relative, like everything stored
         project.cursorOverlay = cursorShapes?.overlay(sessionStartHost: start.seconds)
         project.motionBlur = true                        // new recordings blur their zooms (older files stay sharp)

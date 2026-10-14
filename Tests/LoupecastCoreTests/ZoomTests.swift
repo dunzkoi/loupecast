@@ -483,4 +483,42 @@ final class ZoomTests: XCTestCase {
         try p.save(to: url)
         XCTAssertEqual(try Project.load(from: url).shortcuts, p.shortcuts)
     }
+
+    // MARK: typing
+
+    /// Two seconds of typing make a zoom held on where the text went; under 1.5 s makes none; a click zoom touching it
+    /// becomes the same zoom.
+    func testTypingSpansZoom() throws {
+        let long = TypingSpan(start: 3, end: 5, focus: Point(x: 0.2, y: 0.8)), short = TypingSpan(start: 8, end: 9.2, focus: Point(x: 0.9, y: 0.1))
+        let z = AutoZoom.segments(clicks: [], typing: [long, short], duration: 20)
+        XCTAssertEqual(z.count, 1, "1.2 s of typing is too short to zoom")
+        XCTAssertEqual(z[0].start, 3 - AutoZoom.leadIn, accuracy: 1e-9); XCTAssertEqual(z[0].end, 5 + AutoZoom.tail, accuracy: 1e-9)
+        XCTAssertEqual(z[0].focus, long.focus); XCTAssertFalse(z[0].followsCursor, "held on the text, not the mouse")
+
+        // the click into the field just before typing: one zoom, on the text
+        let merged = AutoZoom.segments(clicks: [click(2.5, 0.21, 0.79)], typing: [long], duration: 20)
+        XCTAssertEqual(merged.count, 1)
+        XCTAssertEqual(merged[0].start, 2.5 - AutoZoom.leadIn, accuracy: 1e-9); XCTAssertEqual(merged[0].end, 5 + AutoZoom.tail, accuracy: 1e-9)
+        XCTAssertEqual(merged[0].focus, long.focus); XCTAssertFalse(merged[0].followsCursor)
+        // clicks alone are unchanged
+        let clicks = AutoZoom.segments(clicks: [click(2.5, 0.21, 0.79)], typing: [], duration: 20)
+        XCTAssertTrue(clicks[0].followsCursor)
+
+        // the log keeps a stretch as its start, end and focus; project.json has nothing else about it
+        var log = InputLog()
+        log.append(.init(host: 103, gx: 20, gy: 80, kind: .typing(untilHost: 105)))
+        let d = DisplayBounds(x: 0, y: 0, width: 100, height: 100)
+        let r = log.relativized(sessionStartHost: 100, duration: 10, display: d)
+        XCTAssertEqual(r.typing, [TypingSpan(start: 3, end: 5, focus: Point(x: 0.2, y: 0.8))])
+        let p = Project(name: "t", duration: 10, pixelWidth: 100, pixelHeight: 100, pointPixelScale: 1, cursor: [], clicks: [], typing: r.typing)
+        XCTAssertEqual(p.zooms.count, 1, "new recordings zoom on typing")
+        let json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(p)) as! [String: Any]
+        XCTAssertEqual(Set(((json["typing"] as? [[String: Any]])?.first ?? [:]).keys), ["start", "end", "focus"], "no keys, no key times")
+        var old = json
+        old["typing"] = nil
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("typing-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try JSONSerialization.data(withJSONObject: old).write(to: url)
+        XCTAssertEqual(try Project.load(from: url).typing, [], "older files open without typing")
+    }
 }

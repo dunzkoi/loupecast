@@ -84,20 +84,28 @@ public enum AutoZoom {
     public static let defaultScale = 2.0
     public static let transition = 0.6
 
-    /// Clicks → ordered, merged zoom segments.
-    public static func segments(clicks: [ClickEvent], duration: Double) -> [ZoomSegment] {
+    /// Typing shorter than this makes no zoom.
+    public static let minTyping = 1.5
+
+    /// Clicks and typing → ordered, merged zoom segments. A segment with typing in it holds still on where the text went
+    /// (the first span's focus); the others follow the cursor from the clicks' centroid.
+    public static func segments(clicks: [ClickEvent], typing: [TypingSpan] = [], duration: Double) -> [ZoomSegment] {
+        let windows = clusters(clicks).map { (start: max(0, $0.first!.t - leadIn), end: min(duration, $0.last!.t + tail), clicks: $0, typed: Point?.none) }
+            + typing.filter { $0.end - $0.start >= minTyping }
+                .map { (start: max(0, $0.start - leadIn), end: min(duration, $0.end + tail), clicks: [ClickEvent](), typed: Optional($0.focus)) }
         // merge windows whose gap is shorter than mergeGap (also overlapping ones)
-        var merged: [(start: Double, end: Double, clicks: [ClickEvent])] = []
-        for cl in clusters(clicks) {
-            let s = max(0, cl.first!.t - leadIn), e = min(duration, cl.last!.t + tail)
-            if let last = merged.last, s - last.end < mergeGap {
-                merged[merged.count - 1].end = max(last.end, e)
-                merged[merged.count - 1].clicks += cl
+        var merged: [(start: Double, end: Double, clicks: [ClickEvent], typed: Point?)] = []
+        for w in windows.sorted(by: { $0.start < $1.start }) {
+            if let last = merged.last, w.start - last.end < mergeGap {
+                merged[merged.count - 1].end = max(last.end, w.end)
+                merged[merged.count - 1].clicks += w.clicks
+                merged[merged.count - 1].typed = last.typed ?? w.typed
             } else {
-                merged.append((s, e, cl))
+                merged.append(w)
             }
         }
         return merged.filter { $0.end > $0.start }.map {
+            if let f = $0.typed { return ZoomSegment(start: $0.start, end: $0.end, focus: f, followsCursor: false) }
             let f = centroid($0.clicks)
             return ZoomSegment(start: $0.start, end: $0.end, focus: Point(x: clamp01(f.x), y: clamp01(f.y)))
         }

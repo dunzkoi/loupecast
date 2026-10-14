@@ -53,24 +53,28 @@ public struct Project: Codable, Sendable, Equatable {
     /// Key combinations pressed with ⌘, ⌃ or ⌥ (only when 단축키 표시 was on while recording), shown as a badge.
     public var shortcuts: [Shortcut] = []
     public var showShortcuts = true
+    /// Stretches of typing (when 타이핑 구간 확대 was on): only where each started and ended, never a key or its time.
+    public var typing: [TypingSpan] = []
 
     /// `paused`: recording-time ranges the recording was paused for. They start out cut, and the clicks and cursor
     /// samples in them are dropped, so the editor opens with the pauses already gone.
     public init(name: String, videoFile: String = "recording.mov", duration: Double,
                 pixelWidth: Int, pixelHeight: Int, pointPixelScale: Double,
-                cursor: [CursorSample], clicks: [ClickEvent], shortcuts: [Shortcut] = [], paused: [ClipRange] = []) {
+                cursor: [CursorSample], clicks: [ClickEvent], shortcuts: [Shortcut] = [], typing: [TypingSpan] = [],
+                paused: [ClipRange] = []) {
         version = Self.currentVersion
         self.name = name; self.videoFile = videoFile; self.duration = duration
         self.pixelWidth = pixelWidth; self.pixelHeight = pixelHeight; self.pointPixelScale = pointPixelScale
         let live = { (t: Double) in !paused.contains { $0.start <= t && t < $0.end } }
         self.cursor = cursor.filter { live($0.t) }; self.clicks = clicks.filter { live($0.t) }
         self.shortcuts = shortcuts.filter { live($0.t) }
+        self.typing = typing.filter { live($0.start) }
         clips = [ClipRange].excluding(paused, from: 0, to: max(0, duration - Self.stopTrim))
-        zooms = AutoZoom.segments(clicks: self.clicks, duration: duration)
+        zooms = AutoZoom.segments(clicks: self.clicks, typing: self.typing, duration: duration)
     }
 
     private enum CodingKeys: String, CodingKey {
-        case version, name, renamed, videoFile, duration, pixelWidth, pixelHeight, pointPixelScale, cursor, clicks, keys, clips, zooms, aspect, style, backgroundImage, fill, systemVolume, micVolume, camera, showClicks, motionBlur, cursorOverlay, shortcuts, showShortcuts
+        case version, name, renamed, videoFile, duration, pixelWidth, pixelHeight, pointPixelScale, cursor, clicks, keys, clips, zooms, aspect, style, backgroundImage, fill, systemVolume, micVolume, camera, showClicks, motionBlur, cursorOverlay, shortcuts, showShortcuts, typing
     }
     private enum V1Keys: String, CodingKey { case trimIn, trimOut }
 
@@ -99,6 +103,7 @@ public struct Project: Codable, Sendable, Equatable {
         cursorOverlay = try c.decodeIfPresent(CursorOverlay.self, forKey: .cursorOverlay)
         shortcuts = try c.decodeIfPresent([Shortcut].self, forKey: .shortcuts) ?? []
         showShortcuts = try c.decodeIfPresent(Bool.self, forKey: .showShortcuts) ?? true
+        typing = try c.decodeIfPresent([TypingSpan].self, forKey: .typing) ?? []
         if let clips = try c.decodeIfPresent([ClipRange].self, forKey: .clips) {
             self.clips = clips
         } else {                                // version 1: one trim range
@@ -342,6 +347,16 @@ public struct CursorOverlay: Codable, Equatable, Sendable {
     }
 }
 
+/// Keys typed less than 0.8 s apart, from the first to the last (recording time), and where the text went (the caret or
+/// the focused field, else the last click; normalized like clicks).
+public struct TypingSpan: Codable, Equatable, Sendable {
+    public var start: Double
+    public var end: Double
+    public var focus: Point
+    public init(start: Double, end: Double, focus: Point) { self.start = start; self.end = end; self.focus = focus }
+    public static let gap = 0.8
+}
+
 /// A key combination as the video shows it ("⌘ ⇧ S"), at recording time `t`.
 public struct Shortcut: Codable, Equatable, Sendable {
     public var t: Double
@@ -556,7 +571,7 @@ public struct DisplayBounds: Sendable, Equatable {
 /// global CG coordinates. Converted once, at stop, into project events.
 public struct InputLog: Sendable {
     public struct Raw: Sendable {
-        public enum Kind: Sendable { case move, click(ClickEvent.Button), shortcut(String) }
+        public enum Kind: Sendable { case move, click(ClickEvent.Button), shortcut(String), typing(untilHost: Double) }
         public var host: Double
         public var gx: Double
         public var gy: Double
@@ -580,8 +595,8 @@ public struct InputLog: Sendable {
     /// Keeps only events inside [0, duration] of the session. Clicks off the display (or outside a recorded area) are
     /// dropped; clicks in its excluded menu-bar strip are clamped to the top edge of the recording.
     public func relativized(sessionStartHost: Double, duration: Double, display: DisplayBounds)
-        -> (cursor: [CursorSample], clicks: [ClickEvent], shortcuts: [Shortcut]) {
-        var cursor: [CursorSample] = [], clicks: [ClickEvent] = [], shortcuts: [Shortcut] = []
+        -> (cursor: [CursorSample], clicks: [ClickEvent], shortcuts: [Shortcut], typing: [TypingSpan]) {
+        var cursor: [CursorSample] = [], clicks: [ClickEvent] = [], shortcuts: [Shortcut] = [], typing: [TypingSpan] = []
         for e in events.sorted(by: { $0.host < $1.host }) {
             let t = e.host - sessionStartHost
             guard t >= 0, t <= duration else { continue }
@@ -593,9 +608,11 @@ public struct InputLog: Sendable {
                 if display.contains(e.gx, e.gy) { clicks.append(ClickEvent(t: t, x: clamp01(p.x), y: clamp01(p.y), button: b)) }
             case .shortcut(let label):
                 shortcuts.append(Shortcut(t: t, label: label))
+            case .typing(let until):
+                typing.append(TypingSpan(start: t, end: min(duration, until - sessionStartHost), focus: Point(x: clamp01(p.x), y: clamp01(p.y))))
             }
         }
-        return (cursor, clicks, shortcuts)
+        return (cursor, clicks, shortcuts, typing)
     }
 }
 

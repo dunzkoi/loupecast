@@ -10,7 +10,7 @@
 "Add a 2-second zoom at the playhead" = "재생 위치에 2초 줌 추가";
 "Adjust Clip End" = "클립 끝 지점 조절";
 "Adjust Clip Start" = "클립 시작 지점 조절";
-"Allow Accessibility to Record Shortcuts…" = "단축키를 기록하려면 손쉬운 사용 허용…";
+"Allow Accessibility for Typing Zoom and Shortcuts…" = "타이핑 확대와 단축키 표시를 쓰려면 손쉬운 사용 허용…";
 "Allowed" = "허용됨";
 "An export is in progress" = "내보내기가 진행 중입니다";
 "Another Image…" = "다른 이미지…";
@@ -211,6 +211,7 @@
 "You’re up to date" = "최신 버전입니다";
 "Zoom" = "줌";
 "Zoom Focus" = "줌 초점";
+"Zoom In on Typing" = "타이핑 구간 확대";
 "Zoom Length" = "줌 길이";
 "Zoom Level" = "확대 정도";
 "Zoom level of the selected zoom" = "선택한 줌의 확대 정도";
