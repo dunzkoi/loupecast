@@ -559,6 +559,25 @@ public struct DisplayBounds: Sendable, Equatable {
         return Point(x: (gx - x - r.x) / r.width, y: (gy - y - r.y) / r.height)
     }
 
+    /// A window on screen as CGWindowListCopyWindowInfo lists it: global bounds in points, layer, owning process.
+    public struct Window: Sendable, Equatable {
+        public var bounds: Rect
+        public var layer: Int
+        public var owner: Int32
+        public init(bounds: Rect, layer: Int, owner: Int32) { self.bounds = bounds; self.layer = layer; self.owner = owner }
+    }
+
+    /// The area to record for a click at global point (gx, gy): the frontmost normal window (layer 0, not `excluding`'s)
+    /// there, cut to this display, in display-local points (top-left origin). `windows` is front to back.
+    public func windowArea(at gx: Double, _ gy: Double, windows: [Window], excluding owner: Int32) -> Rect? {
+        guard let w = windows.first(where: { w in
+            w.layer == 0 && w.owner != owner && (w.bounds.x...(w.bounds.x + w.bounds.width)).contains(gx) && (w.bounds.y...(w.bounds.y + w.bounds.height)).contains(gy)
+        }) else { return nil }
+        let x0 = max(0, w.bounds.x - x), y0 = max(0, w.bounds.y - y)
+        let x1 = min(width, w.bounds.x + w.bounds.width - x), y1 = min(height, w.bounds.y + w.bounds.height - y)
+        return x1 > x0 && y1 > y0 ? Rect(x: x0, y: y0, width: x1 - x0, height: y1 - y0) : nil
+    }
+
     /// Where a click can make a zoom: the recorded area, or anywhere on the display (the excluded menu-bar strip
     /// included: those clicks are clamped to the top edge).
     public func contains(_ gx: Double, _ gy: Double) -> Bool {

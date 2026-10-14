@@ -13,8 +13,9 @@ struct RecordingArea: Codable, Equatable {
     }
 }
 
-/// Dims the display under the mouse: drag a rectangle, Enter (or a double-click in it) records it, Esc (or a
-/// right-click) cancels. The last area on that display is preselected, so Enter alone repeats it.
+/// Dims the display under the mouse: click a window (it is outlined under the mouse) or drag a rectangle, then Enter (or a
+/// double-click in it) records it, Esc (or a right-click) cancels. The last area on that display is preselected, so Enter
+/// alone repeats it.
 @MainActor
 enum AreaPicker {
     static func pick() async -> RecordingArea? {
@@ -29,6 +30,16 @@ enum AreaPicker {
         window.setFrame(screen.frame, display: false)
         let view = AreaPickerView(frame: NSRect(origin: .zero, size: screen.frame.size))
         if let last = RecordingArea.last, last.displayID == id { view.selection = view.viewRect(last.rect) }
+        // the windows as they are now (they don't move while the overlay covers them), front to back
+        let b = CGDisplayBounds(id)
+        view.display = DisplayBounds(x: b.minX, y: b.minY, width: b.width, height: b.height)
+        view.windows = (CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? [])
+            .compactMap { info in
+                guard let dict = info[kCGWindowBounds as String] as? NSDictionary, let r = CGRect(dictionaryRepresentation: dict),
+                      let layer = info[kCGWindowLayer as String] as? Int, let owner = info[kCGWindowOwnerPID as String] as? Int32 else { return nil }
+                return DisplayBounds.Window(bounds: Rect(x: r.minX, y: r.minY, width: r.width, height: r.height), layer: layer, owner: owner)
+            }
+        window.acceptsMouseMovedEvents = true
         window.contentView = view
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
@@ -48,8 +59,28 @@ final class AreaPickerView: NSView {
     static let minSide: CGFloat = 64
     /// View coordinates (bottom-left origin).
     var selection: NSRect? { didSet { needsDisplay = true } }
+    /// The window a click would pick, outlined while the mouse is over it.
+    var hover: NSRect? { didSet { needsDisplay = true } }
     var done: ((Rect?) -> Void)?
     private var anchor: NSPoint?
+    private var dragged = false
+    var display: DisplayBounds?
+    var windows: [DisplayBounds.Window] = []
+    let owner = ProcessInfo.processInfo.processIdentifier
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .activeAlways, .inVisibleRect], owner: self))
+    }
+
+    /// The window under view point `p` (bottom-left origin), in view coordinates.
+    func windowRect(at p: NSPoint) -> NSRect? {
+        guard let d = display else { return nil }
+        return d.windowArea(at: d.x + p.x, d.y + bounds.height - p.y, windows: windows, excluding: owner).map(viewRect)
+    }
+
+    override func mouseMoved(with e: NSEvent) { hover = windowRect(at: convert(e.locationInWindow, from: nil)) }
 
     override var acceptsFirstResponder: Bool { true }
     override func viewDidMoveToWindow() { window?.makeFirstResponder(self) }
@@ -66,12 +97,22 @@ final class AreaPickerView: NSView {
         let p = convert(e.locationInWindow, from: nil)
         if e.clickCount == 2, selection?.contains(p) == true, let r = picked { return finish(r) }
         anchor = p
+        dragged = false
     }
 
     override func mouseDragged(with e: NSEvent) {
         guard let a = anchor else { return }
         let p = convert(e.locationInWindow, from: nil)
+        dragged = true
+        hover = nil
         selection = NSRect(x: min(a.x, p.x), y: min(a.y, p.y), width: abs(p.x - a.x), height: abs(p.y - a.y)).intersection(bounds)
+    }
+
+    /// A click without a drag picks the window under it (like ⌘⇧4 then Space).
+    override func mouseUp(with e: NSEvent) {
+        let p = convert(e.locationInWindow, from: nil)
+        if !dragged, anchor != nil, let w = windowRect(at: p) { selection = w }
+        anchor = nil
     }
 
     override func rightMouseDown(with e: NSEvent) { finish(nil) }
@@ -100,7 +141,15 @@ final class AreaPickerView: NSView {
             NSBezierPath(rect: s.insetBy(dx: -0.5, dy: -0.5)).stroke()
             badge("\(Int(s.width.rounded())) × \(Int(s.height.rounded()))", centeredAt: NSPoint(x: s.midX, y: s.minY > 40 ? s.minY - 20 : s.maxY + 20))
         }
-        badge(String(localized: "Drag to choose the area to record. Enter or a double-click records, Esc or a right-click cancels."),
+        if let h = hover, h != selection {
+            NSColor.white.withAlphaComponent(0.12).setFill()
+            h.fill(using: .sourceOver)
+            NSColor.controlAccentColor.setStroke()
+            let outline = NSBezierPath(rect: h.insetBy(dx: 1.5, dy: 1.5))
+            outline.lineWidth = 3
+            outline.stroke()
+        }
+        badge(String(localized: "Click a window or drag to choose the area to record. Enter or a double-click records, Esc or a right-click cancels."),
               centeredAt: NSPoint(x: bounds.midX, y: bounds.maxY - 60))
     }
 

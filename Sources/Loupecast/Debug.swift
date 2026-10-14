@@ -58,8 +58,9 @@
 //                                 stall after each (debounced autosave included), the close time and two menu builds
 //   LOUPECAST_OPEN_TEST=<dir>         open that recording the way 녹화 열기… does after the panel, twice (with and
 //                                 without a trailing slash: one editor), print the menu and the editors, quit
-//   LOUPECAST_AREA_PICKER=<png>       draw the area picker off screen (1512 × 982 pt, a 1280 × 720 area picked), save it,
-//                                 then drag a new area and press Enter / Esc on it; prints what each returns
+//   LOUPECAST_AREA_PICKER=<png>       draw the area picker off screen (1512 × 982 pt, a 1280 × 720 area picked, the mouse
+//                                 over a 700 × 500 window), save it, then drag a new area and press Enter / Esc on it,
+//                                 then click the window and press Enter; prints what each returns
 //   LOUPECAST_CURSOR_PROBE=<dir>      note three cursor shapes (arrow, I-beam, arrow again) into <dir>/cursors the way a
 //                                 recording does, then the system's current one; print the overlay, quit
 //   LOUPECAST_COUNTDOWN=<png>         run the start countdown off screen: save it at 2, press Esc (prints false), then let
@@ -788,6 +789,13 @@ enum DebugHooks {
         w.contentView = v
         w.orderFront(nil)
         v.selection = v.viewRect(Rect(x: 116, y: 131, width: 1280, height: 720))
+        // a window under the mouse (top-left 200, 150, 700 × 500 pt): outlined in the snapshot
+        v.display = DisplayBounds(x: 0, y: 0, width: 1512, height: 982)
+        v.windows = [.init(bounds: Rect(x: 0, y: 0, width: 1512, height: 982), layer: 0, owner: v.owner),   // our overlay
+                     .init(bounds: Rect(x: 200, y: 150, width: 700, height: 500), layer: 0, owner: 1)]
+        v.mouseMoved(with: NSEvent.mouseEvent(with: .mouseMoved, location: NSPoint(x: 400, y: 982 - 300), modifierFlags: [], timestamp: 0,
+                                              windowNumber: w.windowNumber, context: nil, eventNumber: 0, clickCount: 0, pressure: 0)!)
+        print("LOUPECAST: hovered window \(v.hover.map { "\($0)" } ?? "none")")
         try? await Task.sleep(for: .seconds(0.3))
         save(v, to: url)
         var results: [String] = []
@@ -810,6 +818,10 @@ enum DebugHooks {
         v.mouseDragged(with: mouse(.leftMouseDragged, NSPoint(x: 40, y: 40)))          // too small: Enter only beeps
         key(kVK_Return)
         key(kVK_Escape)
+        v.done = { results.append($0.map { "\($0)" } ?? "cancelled") }   // a click on the window, no drag: its bounds
+        v.mouseDown(with: mouse(.leftMouseDown, NSPoint(x: 400, y: 982 - 300)))
+        v.mouseUp(with: mouse(.leftMouseUp, NSPoint(x: 400, y: 982 - 300)))
+        key(kVK_Return)
         print("LOUPECAST: area picker results \(results)")
         let area = RecordingArea(displayID: 7, rect: Rect(x: 1, y: 2, width: 3, height: 4)), before = RecordingArea.last
         RecordingArea.last = area

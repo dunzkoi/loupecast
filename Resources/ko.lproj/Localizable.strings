@@ -30,6 +30,7 @@
 "Cancel Export" = "내보내기 취소";
 "Check for Updates…" = "업데이트 확인…";
 "Click" = "클릭";
+"Click a window or drag to choose the area to record. Enter or a double-click records, Esc or a right-click cancels." = "창을 클릭하거나 녹화할 영역을 드래그하세요. Enter나 더블클릭으로 녹화하고, Esc나 오른쪽 클릭으로 취소합니다.";
 "Click the preview to hold this zoom on a spot." = "미리보기를 클릭하면 이 줌을 그 자리에 고정합니다.";
 "Click to hold the selected zoom on that spot" = "클릭한 곳에 선택한 줌을 고정";
 "Close" = "닫기";
@@ -65,7 +66,6 @@
 "Don’t show this again" = "다시 보지 않기";
 "Downloading %@…" = "%@ 내려받는 중…";
 "Drag the video into another app" = "다른 앱으로 끌어 영상 첨부";
-"Drag to choose the area to record. Enter or a double-click records, Esc or a right-click cancels." = "녹화할 영역을 드래그하세요. Enter나 더블클릭으로 녹화하고, Esc나 오른쪽 클릭으로 취소합니다.";
 "Edit: %@" = "편집: %@";
 "Effects" = "효과";
 "Effects: click rings, motion blur, cursor" = "효과: 클릭 표시, 모션 블러, 커서";

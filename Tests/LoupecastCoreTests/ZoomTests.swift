@@ -521,4 +521,25 @@ final class ZoomTests: XCTestCase {
         try JSONSerialization.data(withJSONObject: old).write(to: url)
         XCTAssertEqual(try Project.load(from: url).typing, [], "older files open without typing")
     }
+
+    // MARK: window pick
+
+    /// A click in the area picker picks the frontmost normal window under it (not Loupecast's, not a menu or the Dock),
+    /// cut to the display it is on.
+    func testWindowAreaPick() {
+        let d = DisplayBounds(x: 1512, y: 0, width: 1920, height: 1080)          // a second display, right of the main one
+        let editor = DisplayBounds.Window(bounds: Rect(x: 1600, y: 100, width: 800, height: 600), layer: 0, owner: 10)
+        let browser = DisplayBounds.Window(bounds: Rect(x: 2000, y: -50, width: 2000, height: 900), layer: 0, owner: 11)   // off the right and top
+        let overlay = DisplayBounds.Window(bounds: Rect(x: 1512, y: 0, width: 1920, height: 1080), layer: 1000, owner: 99)  // the picker itself
+        let menu = DisplayBounds.Window(bounds: Rect(x: 1700, y: 120, width: 200, height: 300), layer: 101, owner: 12)
+        let ours = DisplayBounds.Window(bounds: Rect(x: 1650, y: 150, width: 100, height: 100), layer: 0, owner: 99)
+        let windows = [overlay, menu, ours, editor, browser]                    // front to back
+        XCTAssertEqual(d.windowArea(at: 1800, 300, windows: windows, excluding: 99), Rect(x: 88, y: 100, width: 800, height: 600),
+                       "the editor: the menu and our own windows are skipped")
+        XCTAssertEqual(d.windowArea(at: 3000, 500, windows: windows, excluding: 99), Rect(x: 488, y: 0, width: 1432, height: 850),
+                       "cut to the display")
+        XCTAssertNil(d.windowArea(at: 1550, 900, windows: windows, excluding: 99), "the desktop: no window")
+        XCTAssertEqual(DisplayBounds(x: d.x, y: d.y, width: d.width, height: d.height, area: d.windowArea(at: 1800, 300, windows: windows, excluding: 99))
+                        .pixelSize(scale: 2).width % 2, 0, "even pixels, as for a dragged area")
+    }
 }
