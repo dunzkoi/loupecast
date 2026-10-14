@@ -553,6 +553,88 @@ final class ExportTests: XCTestCase {
         print("gif: \(n) frames, \(total) s, \(size / 1024) KB → \(out.path)")
     }
 
+    // MARK: frame rate and file size
+
+    func testExportPlan() {
+        XCTAssertTrue(ExportOptions().plan(seconds: 60, hasAudio: true) == (16_000_000, 60), "no target: full bit rate")
+        XCTAssertTrue(ExportOptions(fps: 30).plan(seconds: 60, hasAudio: true) == (16_000_000, 30))
+        let tenMB = ExportOptions(targetBytes: 10_000_000).plan(seconds: 60, hasAudio: true)
+        XCTAssertEqual(tenMB.bitRate, 1_008_000, accuracy: 1); XCTAssertEqual(tenMB.fps, 60)
+        let oneMB = ExportOptions(targetBytes: 1_000_000).plan(seconds: 10, hasAudio: true)
+        XCTAssertEqual(oneMB.bitRate, 528_000, accuracy: 1); XCTAssertEqual(oneMB.fps, 30, "below 1 Mbps: 30 fps")
+        XCTAssertEqual(ExportOptions(targetBytes: 1_000_000).plan(seconds: 600, hasAudio: true).bitRate, 100_000, "never below 100 kbps")
+        XCTAssertEqual(ExportOptions(targetBytes: 1_000_000_000).plan(seconds: 1, hasAudio: false).bitRate, 16_000_000, "never above the full rate")
+    }
+
+    /// 30 fps: the same 5.5 s, half the frames, evenly spaced.
+    func testThirtyFPSExport() async throws {
+        try XCTSkipIf(ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] != nil, "no video hardware on CI VMs")
+        try await withDeadline(Self.deadline) { try await Self.thirtyFPSExport() }
+    }
+
+    static func thirtyFPSExport() async throws {
+        do {
+            let mov = outDir.appendingPathComponent("synthetic-30.mov")
+            try await writeSyntheticMovie(to: mov)
+            let out = outDir.appendingPathComponent("export-30fps.mp4")
+            try await Exporter.export(project: makeProject(), videoURL: mov, to: out, options: ExportOptions(fps: 30))
+            let asset = AVURLAsset(url: out)
+            let seconds = try await asset.load(.duration).seconds
+            XCTAssertEqual(seconds, 5.5, accuracy: 1.0 / 30)
+            let videoTracks = try await asset.loadTracks(withMediaType: .video)
+            let v = try XCTUnwrap(videoTracks.first)
+            let fps = try await v.load(.nominalFrameRate)
+            XCTAssertEqual(Double(fps), 30, accuracy: 0.01)
+            let pts = try frameTimes(asset, v)
+            XCTAssertEqual(pts.count, 165, "5.5 s × 30 fps")
+            let gaps = zip(pts.dropFirst(), pts).map { $0 - $1 }
+            XCTAssertEqual(gaps.max() ?? 0, 1.0 / 30, accuracy: 1e-4); XCTAssertEqual(gaps.min() ?? 0, 1.0 / 30, accuracy: 1e-4)
+        }
+    }
+
+    /// The whole 10 s with a 1 MB target: the file fits, and it is a playable 30 fps movie with sound.
+    func testFileSizeTargetExport() async throws {
+        try XCTSkipIf(ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] != nil, "no video hardware on CI VMs")
+        try await withDeadline(Self.deadline) { try await Self.fileSizeTargetExport() }
+    }
+
+    static func fileSizeTargetExport() async throws {
+        do {
+            let mov = outDir.appendingPathComponent("synthetic-size.mov")
+            try await writeSyntheticMovie(to: mov, staticScreen: false)
+            var project = makeProject()
+            project.clips = [ClipRange(start: 0, end: duration)]
+            let out = outDir.appendingPathComponent("export-1mb.mp4")
+            try await Exporter.export(project: project, videoURL: mov, to: out, options: ExportOptions(targetBytes: 1_000_000))
+            let bytes = try FileManager.default.attributesOfItem(atPath: out.path)[.size] as? Int ?? .max
+            let full = outDir.appendingPathComponent("export-full-rate.mp4")
+            try await Exporter.export(project: project, videoURL: mov, to: full)
+            let fullBytes = try FileManager.default.attributesOfItem(atPath: full.path)[.size] as? Int ?? 0
+            print("size target: \(bytes) bytes for 1 MB (full rate \(fullBytes))")
+            XCTAssertLessThanOrEqual(bytes, 1_000_000)
+            XCTAssertGreaterThan(fullBytes, 2_000_000, "without a target the same edit is much larger")
+            let asset = AVURLAsset(url: out)
+            let seconds = try await asset.load(.duration).seconds
+            XCTAssertEqual(seconds, duration, accuracy: 1.0 / 30)
+            let videoTracks = try await asset.loadTracks(withMediaType: .video)
+            let v = try XCTUnwrap(videoTracks.first)
+            let fps = try await v.load(.nominalFrameRate)
+            XCTAssertEqual(Double(fps), 30, accuracy: 0.01, "528 kbps: dropped to 30 fps")
+            let audio = try await asset.loadTracks(withMediaType: .audio)
+            XCTAssertEqual(audio.count, 1)
+        }
+    }
+
+    static func frameTimes(_ asset: AVURLAsset, _ track: AVAssetTrack) throws -> [Double] {
+        let reader = try AVAssetReader(asset: asset)
+        let o = AVAssetReaderTrackOutput(track: track, outputSettings: nil)
+        reader.add(o)
+        XCTAssertTrue(reader.startReading())
+        var pts: [Double] = []
+        while let b = o.copyNextSampleBuffer() { if CMSampleBufferGetNumSamples(b) > 0 { pts.append(CMSampleBufferGetPresentationTimeStamp(b).seconds) } }
+        return pts.sorted()
+    }
+
     // MARK: cancel and file names
 
     /// Cancelled at 20 %: the partial MP4 that existed then is gone and the export throws CancellationError.

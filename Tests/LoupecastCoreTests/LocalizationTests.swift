@@ -18,29 +18,30 @@ final class LocalizationTests: XCTestCase {
         var missing: [String] = []
         let sources = FileManager.default.enumerator(at: Self.root.appendingPathComponent("Sources"), includingPropertiesForKeys: nil)!
         for case let url as URL in sources where url.pathExtension == "swift" && url.lastPathComponent != "Debug.swift" {
-            for key in Self.keys(in: try String(contentsOf: url, encoding: .utf8)) where !korean.contains(key) {
-                missing.append("\(url.lastPathComponent): \(key)")
+            for keys in Self.keys(in: try String(contentsOf: url, encoding: .utf8)) where !keys.contains(where: korean.contains) {
+                missing.append("\(url.lastPathComponent): \(keys[0])")
             }
         }
         XCTAssertEqual(missing, [], "add these keys to Resources/ko.lproj/Localizable.strings")
     }
 
-    /// The lookup keys in `source`: `\(…)` becomes %lld for an integer (`Int(…)`, `.count`, `.version`), %@ otherwise.
-    /// Text concatenations (`Text("\(Text(…))…")`) and strings without letters are skipped.
-    static func keys(in source: String) -> [String] {
+    /// The lookup keys in `source`, each with its spellings: `\(…)` is %lld for a known integer (`Int(…)`, `.count`,
+    /// `.version`) and %@ or %lld for anything else (a variable's type isn't in the text). Text concatenations
+    /// (`Text("\(Text(…))…")`) and strings without letters are skipped.
+    static func keys(in source: String) -> [[String]] {
         let s = Array(source.unicodeScalars), ns = source as NSString
-        var out: [String] = []
+        var out: [[String]] = []
         for m in calls.matches(in: source, range: NSRange(location: 0, length: ns.length)) {
             // NSRange counts UTF-16 units; map the opening quote to a scalar index
             let quote = ns.substring(to: m.range.location + m.range.length - 1).unicodeScalars.count
             guard let (text, parts, _) = literal(s, quote), !parts.contains(where: { $0.contains("Text(") }) else { continue }
-            var key = text
+            var keys = [text]
             for p in parts {
                 let p = p.trimmingCharacters(in: .whitespaces)
-                let spec = p.hasPrefix("Int(") || p.hasSuffix(".count") || p.hasSuffix(".version") ? "%lld" : "%@"
-                key = key.replacingOccurrences(of: "\u{0}", with: spec, options: [], range: key.range(of: "\u{0}"))
+                let specs = p.hasPrefix("Int(") || p.hasSuffix(".count") || p.hasSuffix(".version") ? ["%lld"] : ["%@", "%lld"]
+                keys = keys.flatMap { k in specs.map { k.replacingOccurrences(of: "\u{0}", with: $0, options: [], range: k.range(of: "\u{0}")) } }
             }
-            if key.replacingOccurrences(of: "%lld", with: "").replacingOccurrences(of: "%@", with: "").contains(where: \.isLetter) { out.append(key) }
+            if text.replacingOccurrences(of: "\u{0}", with: "").contains(where: \.isLetter) { out.append(keys) }
         }
         return out
     }
@@ -78,6 +79,6 @@ final class LocalizationTests: XCTestCase {
         Text("\(Text(timecode(a)))\(Text(" / \(timecode(b))"))"); Text("\(Int(p * 100))%"); Text(verbatim: "x")
         Picker("Size", selection: x) { Text(name) }
         """#
-        XCTAssertEqual(Self.keys(in: src), ["Cut %@", "Plays at %lld× speed", "Size"])
+        XCTAssertEqual(Self.keys(in: src), [["Cut %@", "Cut %lld"], ["Plays at %lld× speed"], ["Size"]])
     }
 }

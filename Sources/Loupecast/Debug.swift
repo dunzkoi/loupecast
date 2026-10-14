@@ -10,6 +10,7 @@
 //                                 button's copy: prints what NSPasteboard.general holds, then restores the clipboard)
 //                    cancel|twice     cancel it at 20 %, or export from two editors of the recording at once
 //   LOUPECAST_EXPORT_DIR=<dir>        where the editor exports (default ~/Movies)
+//   LOUPECAST_SIZE_LIMIT_BYTES=<n>    the editor's MP4 exports aim at n bytes instead of the menu's size limit
 //   LOUPECAST_EXPORT_COUNT=<n>        with fake: finish it as the n-th export ever (3 shows the GitHub star line once);
 //                                 LOUPECAST_STAR_DISMISS=1 closes the line and finishes the n-th export again
 //   LOUPECAST_PERMISSIONS=<png>       save the permission window and quit
@@ -44,6 +45,7 @@
 //                                 opened) and save the list drawn in a plain window
 //   LOUPECAST_LOOK=<dir>              after the edits above, print the saved look defaults, a new project with them
 //                                 applied, and the project in <dir> as it opens (its own look)
+//   LOUPECAST_MENUS=1                 print the toolbar's pop-up menus (title, check mark, enabled) before the snapshot
 //   LOUPECAST_QUIT_TEST=<dir>         export from that recording's editor, close the editor, then quit;
 //                                 LOUPECAST_QUIT_ANSWER=cancel|quit answers the export alert,
 //                                 LOUPECAST_QUIT_EDIT=<dir> splits a second recording right before quitting
@@ -273,6 +275,23 @@ enum DebugHooks {
                   + "new project \(fresh.aspect.rawValue) \(fresh.style.rawValue) fill \(fresh.fill), "
                   + "reopened \(other.map { "\($0.aspect.rawValue) \($0.style.rawValue) fill \($0.fill)" } ?? "none")")
         }
+        if env["LOUPECAST_MENUS"] != nil {
+            func views(_ v: NSView) -> [NSView] { [v] + v.subviews.flatMap(views) }
+            func lines(_ m: NSMenu, _ indent: String) -> [String] {
+                m.delegate?.menuNeedsUpdate?(m)   // SwiftUI fills its menus only when they open
+                m.update()
+                return m.items.flatMap { i -> [String] in
+                    [indent + (i.isSeparatorItem ? "────" : (i.state == .on ? "✓ " : "") + i.title + (i.isEnabled ? "" : " (disabled)"))]
+                        + (i.submenu.map { lines($0, indent + "  ") } ?? [])
+                }
+            }
+            for c in views(editor.window.contentView!).compactMap({ $0 as? NSSegmentedControl }) {   // the Export split button
+                for i in 0..<c.segmentCount { if let menu = c.menu(forSegment: i) { print("LOUPECAST: menu export \(lines(menu, ""))") } }
+            }
+            for b in views(editor.window.contentView!).compactMap({ $0 as? NSPopUpButton ?? ($0 as? NSButton).flatMap { $0.menu == nil ? nil : $0 } }) {
+                if let menu = (b as? NSPopUpButton)?.menu ?? b.menu { print("LOUPECAST: menu \(type(of: b)) \(lines(menu, ""))") }
+            }
+        }
         switch env["LOUPECAST_SELECT"] ?? "zoom" {
         case "clip": m.selection = m.project.clips.first.map { .clip($0.id) } ?? .none
         case "zoom": m.selection = m.project.zooms.first.map { .zoom($0.id) } ?? .none
@@ -313,7 +332,7 @@ enum DebugHooks {
         if let format = ["1": EditorModel.ExportFormat.mp4, "gif": .gif][env["LOUPECAST_EXPORT"] ?? ""] {
             m.export(format)
             while m.exportState.isRunning { try? await Task.sleep(for: .milliseconds(100)) }
-            print("LOUPECAST: export state \(m.exportState)")
+            print("LOUPECAST: export state \(m.exportState), size warning \(m.sizeWarning ?? "none")")
         }
         if env["LOUPECAST_EXPORT"] == "cancel" {
             m.export()

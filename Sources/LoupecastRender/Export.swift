@@ -1,8 +1,29 @@
 import AVFoundation
 import LoupecastCore
 import os
+import VideoToolbox
 
-/// H.264 at the project's aspect (1920×1080, 1080×1920 or 1080×1080), constant 60 fps, + one stereo AAC track
+/// Frame rate and file size of an MP4 export. The preview always plays at 60 fps.
+public struct ExportOptions: Sendable, Equatable {
+    /// 60 or 30.
+    public var fps: Int
+    /// Upper bound for the file in bytes; nil: the full 16 Mbps.
+    public var targetBytes: Int?
+    public init(fps: Int = 60, targetBytes: Int? = nil) { self.fps = fps; self.targetBytes = targetBytes }
+
+    public static let audioBitRate = 192_000
+    static let fullBitRate = 16_000_000
+
+    /// Video bit rate and frame rate for `seconds` of composition. A target leaves 10 % of it for the container and
+    /// the audio's 192 kbps; below 1 Mbps a 60 fps export drops to 30 fps, so each frame gets twice the bits.
+    public func plan(seconds: Double, hasAudio: Bool) -> (bitRate: Int, fps: Int) {
+        guard let targetBytes else { return (Self.fullBitRate, fps) }
+        let budget = Double(targetBytes) * 8 * 0.9 / max(0.1, seconds) - (hasAudio ? Double(Self.audioBitRate) : 0)
+        return (Int(min(Double(Self.fullBitRate), max(100_000, budget))), budget < 1_000_000 ? 30 : fps)
+    }
+}
+
+/// H.264 at the project's aspect (1920×1080, 1080×1920 or 1080×1080), constant 60 or 30 fps, + one stereo AAC track
 /// (system and mic mixed at the project's volumes).
 /// The composition is the kept clips back to back, so the file is exactly their total length.
 public enum Exporter {
@@ -26,16 +47,20 @@ public enum Exporter {
         return s.trimmingCharacters(in: .whitespacesAndNewlines.union(CharacterSet(charactersIn: ".")))
     }
 
-    public static func export(project: Project, videoURL: URL, to output: URL,
+    public static func export(project: Project, videoURL: URL, to output: URL, options: ExportOptions = ExportOptions(),
                               progress: @escaping @Sendable (Double) -> Void = { _ in }) async throws {
         let edit = try Composer.make(project: project, source: try await SourceTracks.load(videoURL, camera: project.camera?.file))
         let duration = edit.asset.duration
+        let audioTracks = edit.asset.tracks(withMediaType: .audio)
+        let plan = options.plan(seconds: duration.seconds, hasAudio: !audioTracks.isEmpty)
         let reader = try AVAssetReader(asset: edit.asset)
 
         let vOut = AVAssetReaderVideoCompositionOutput(
             videoTracks: edit.asset.tracks(withMediaType: .video),
             videoSettings: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA])
-        vOut.videoComposition = edit.videoComposition
+        let vc = edit.videoComposition.mutableCopy() as! AVMutableVideoComposition
+        vc.frameDuration = CMTime(value: 1, timescale: CMTimeScale(plan.fps))
+        vOut.videoComposition = vc
         vOut.alwaysCopiesSampleData = false
         reader.add(vOut)
 
@@ -44,7 +69,14 @@ public enum Exporter {
         let writer = try AVAssetWriter(outputURL: output, fileType: .mp4)
         let size = Composer.renderSize(project.aspect)
         writer.shouldOptimizeForNetworkUse = true
-        let vIn = AVAssetWriterInput(mediaType: .video, outputSettings: [
+        var compression: [String: Any] = [
+            AVVideoAverageBitRateKey: plan.bitRate,
+            AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel,
+            AVVideoExpectedSourceFrameRateKey: plan.fps,
+            AVVideoMaxKeyFrameIntervalKey: plan.fps * 2,
+            AVVideoAllowFrameReorderingKey: false,   // no B-frames: PTS == DTS, no edit-list offset
+        ]
+        func settings() -> [String: Any] { [
             AVVideoCodecKey: AVVideoCodecType.h264,
             AVVideoWidthKey: Int(size.width), AVVideoHeightKey: Int(size.height),
             AVVideoColorPropertiesKey: [
@@ -52,16 +84,17 @@ public enum Exporter {
                 AVVideoTransferFunctionKey: AVVideoTransferFunction_ITU_R_709_2,
                 AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_709_2,
             ],
-            AVVideoCompressionPropertiesKey: [
-                AVVideoAverageBitRateKey: 16_000_000,
-                AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel,
-                AVVideoExpectedSourceFrameRateKey: 60,
-                AVVideoMaxKeyFrameIntervalKey: 120,
-                AVVideoAllowFrameReorderingKey: false,   // no B-frames: PTS == DTS, no edit-list offset
-            ],
-        ])
+            AVVideoCompressionPropertiesKey: compression,
+        ] }
+        if options.targetBytes != nil {
+            // a size target also caps every second at 1.5× the average, so a busy stretch can't blow the budget
+            compression[kVTCompressionPropertyKey_DataRateLimits as String] = [plan.bitRate / 8 * 3 / 2, 1]
+            if !writer.canApply(outputSettings: settings(), forMediaType: .video) {
+                compression[kVTCompressionPropertyKey_DataRateLimits as String] = nil
+            }
+        }
+        let vIn = AVAssetWriterInput(mediaType: .video, outputSettings: settings())
         writer.add(vIn)
-        let audioTracks = edit.asset.tracks(withMediaType: .audio)
         var audio: Pumps.Job?
         if !audioTracks.isEmpty {
             let o = AVAssetReaderAudioMixOutput(audioTracks: audioTracks, audioSettings: [
@@ -77,7 +110,7 @@ public enum Exporter {
             layout.mChannelLayoutTag = kAudioChannelLayoutTag_Stereo
             let i = AVAssetWriterInput(mediaType: .audio, outputSettings: [
                 AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: 48_000, AVNumberOfChannelsKey: 2,
-                AVEncoderBitRateKey: 192_000,
+                AVEncoderBitRateKey: ExportOptions.audioBitRate,
                 AVChannelLayoutKey: Data(bytes: &layout, count: MemoryLayout<AudioChannelLayout>.size),
             ])
             writer.add(i)

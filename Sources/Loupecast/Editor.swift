@@ -32,6 +32,8 @@ final class EditorModel {
     var showsShortcuts = false
     /// This export was the third one that finished: a single line asks for a GitHub star (until clicked or closed).
     var asksForStar = false
+    /// The finished MP4 came out larger than the size limit picked in the Export menu.
+    var sizeWarning: String?
     /// Audio tracks in the recording; the volume controls show only these.
     private(set) var hasSystemAudio = false
     private(set) var hasMicrophone = false
@@ -320,11 +322,23 @@ final class EditorModel {
     static var exportDir = Exporter.moviesDir
 
     enum ExportFormat { case mp4, gif }
+    /// The Export menu's frame rate (60 or 30) and size limit in MB (0: none); they apply to MP4 exports.
+    static let fpsKey = "exportFPS", sizeLimitKey = "exportSizeLimitMB"
+    static let sizeLimits = [0, 10, 25]
+
+    static var exportOptions: ExportOptions {
+        #if DEBUG
+        if let b = DebugHooks.env["LOUPECAST_SIZE_LIMIT_BYTES"].flatMap(Int.init) { return ExportOptions(targetBytes: b) }
+        #endif
+        let mb = UserDefaults.standard.integer(forKey: sizeLimitKey)
+        return ExportOptions(fps: UserDefaults.standard.integer(forKey: fpsKey) == 30 ? 30 : 60, targetBytes: mb > 0 ? mb * 1_000_000 : nil)
+    }
 
     func export(_ format: ExportFormat = .mp4) {
         if exportState.isRunning { return }
         exportState = .running(0)
-        let project = project, video = videoURL
+        sizeWarning = nil
+        let project = project, video = videoURL, options = Self.exportOptions
         let url = Exporter.defaultURL(name: project.renamed ? project.name : nil, in: Self.exportDir, taken: Set(Self.exports.keys),
                                       fileExtension: format == .gif ? "gif" : "mp4")
         let task = Task {
@@ -335,8 +349,13 @@ final class EditorModel {
                     }
                 }
                 switch format {
-                case .mp4: try await Exporter.export(project: project, videoURL: video, to: url, progress: progress)
+                case .mp4: try await Exporter.export(project: project, videoURL: video, to: url, options: options, progress: progress)
                 case .gif: try await GIFExporter.export(project: project, videoURL: video, to: url, progress: progress)
+                }
+                if format == .mp4, let limit = options.targetBytes,
+                   let bytes = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize, bytes > limit {
+                    let f = { (n: Int) in ByteCountFormatter.string(fromByteCount: Int64(n), countStyle: .file) }
+                    sizeWarning = String(localized: "\(f(bytes)), over the \(f(limit)) limit")
                 }
                 exportFinished(url)
             } catch {
@@ -565,6 +584,8 @@ struct PlayerView: NSViewRepresentable {
 /// Transport and output on top, the selection's own controls below.
 struct ControlBar: View {
     @Bindable var model: EditorModel
+    @AppStorage(EditorModel.fpsKey) private var fps = 60
+    @AppStorage(EditorModel.sizeLimitKey) private var sizeLimit = 0
 
     var body: some View {
         VStack(spacing: 10) {
@@ -650,6 +671,17 @@ struct ControlBar: View {
             Menu {
                 Button("MP4 Video") { model.export(.mp4) }
                 Button("GIF (no sound, loops)") { model.export(.gif) }
+                Picker("Frame Rate", selection: $fps) {
+                    Text(verbatim: "60 fps").tag(60)
+                    Text(verbatim: "30 fps").tag(30)
+                }
+                .pickerStyle(.inline)
+                Picker("File Size", selection: $sizeLimit) {
+                    ForEach(EditorModel.sizeLimits, id: \.self) { mb in
+                        Text(mb == 0 ? String(localized: "No Limit") : String(localized: "Up to \(mb) MB")).tag(mb)
+                    }
+                }
+                .pickerStyle(.inline)
             } label: {
                 Label("Export", systemImage: "square.and.arrow.up")
             } primaryAction: {
@@ -660,7 +692,7 @@ struct ControlBar: View {
             .fixedSize()
             .focusable(false)
             .disabled(model.exportState.isRunning || model.edit == nil)
-            .help("Export an MP4, or pick GIF from the arrow")
+            .help("Export an MP4, or pick GIF, the frame rate and a size limit from the arrow")
             Button { model.showsShortcuts.toggle() } label: { Image(systemName: "keyboard") }
                 .buttonStyle(.borderless)
                 .focusable(false)
@@ -967,6 +999,12 @@ struct ExportStatus: View {
                 .fixedSize()
                 .focusable(false)
                 .help("Copy the video to paste it into Slack, an issue or an email")
+                if let warning = model.sizeWarning {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                        .help(warning)
+                        .accessibilityLabel(warning)
+                }
             }
         case .failed(let text):
             Label(text, systemImage: "exclamationmark.triangle.fill")
