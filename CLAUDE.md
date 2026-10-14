@@ -102,6 +102,9 @@ swift build --build-tests && swift test   # Core ~0.1 s; Render 10-40 s, each ex
 - The webcam is its own file (`camera.mov`); `Project.camera.offset` is the recording time of its first frame (both
   stamped on the host clock), and `Composer` inserts it as a second video track shifted by that offset, so cuts,
   speed and export apply to it like the screen. The circle is drawn after the zoom, so it never moves.
+- `LoupecastCompositor.compose` makes one frame: the recording through the camera, then `decorate` draws on it inside
+  the frame (motion blur from camera(t − one frame) vs camera(t), click rings at `Placement.point`), then the rounded
+  mask over the background, then the webcam circle. Everything is a function of composition time, so preview = export.
 - The site's `x-default` hreflang is the English page; README's Website link points there.
 
 ## Open

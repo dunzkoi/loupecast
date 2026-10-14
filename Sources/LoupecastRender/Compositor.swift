@@ -49,6 +49,7 @@ final class LoupecastInstruction: NSObject, AVVideoCompositionInstructionProtoco
     let camera: (trackID: CMPersistentTrackID, overlay: CameraOverlay)?
     /// Clicks on kept material at their composition time, oldest first; empty when 클릭 표시 is off.
     let clicks: [(time: Double, at: Point, right: Bool)]
+    let motionBlur: Bool
 
     init(timeRange: CMTimeRange, trackID: CMPersistentTrackID, path: CameraPath, style: FrameStyle, fill: Bool,
          camera: (trackID: CMPersistentTrackID, overlay: CameraOverlay)?, project: Project) {
@@ -59,6 +60,7 @@ final class LoupecastInstruction: NSObject, AVVideoCompositionInstructionProtoco
         self.style = style
         self.fill = fill
         self.camera = camera
+        motionBlur = project.motionBlur
         let clips = project.clips
         clicks = !project.showClicks ? [] : project.clicks.filter { clips.index(containing: $0.t) != nil }.sorted { $0.t < $1.t }
             .map { (clips.compositionTime($0.t), Point(x: $0.x, y: $0.y), $0.button == .right) }
@@ -111,19 +113,46 @@ public final class LoupecastCompositor: NSObject, AVVideoCompositing, @unchecked
             let size = request.renderContext.size
             // no webcam frame where the camera started late or stopped early: no circle there
             let face = ins.camera.flatMap { request.sourceFrame(byTrackID: $0.trackID) }.map { CIImage(cvPixelBuffer: $0) }
-            let image = compose(src, face: face, at: request.compositionTime.seconds, canvas: size, ins)
+            let image = compose(src, face: face, at: request.compositionTime.seconds, frame: request.renderContext.videoComposition.frameDuration.seconds,
+                                canvas: size, ins)
             Self.context.render(image, to: out, bounds: CGRect(origin: .zero, size: size), colorSpace: Self.outputSpace)
             request.finish(withComposedVideoFrame: out)
         }
     }
 
-    /// One output frame at composition time `t`, from its source frames (`face`: the webcam's, if any).
-    func compose(_ src: CIImage, face: CIImage?, at t: Double, canvas: CGSize, _ ins: LoupecastInstruction) -> CIImage {
-        let image = render(src, camera: ins.path.camera(composition: t), canvas: canvas, style: ins.style, fill: ins.fill, window: ins.path.window) {
-            content, place in Self.ripples(ins.clicks, at: t, place, canvas: canvas).reduce(content) { $1.composited(over: $0) }
+    /// One output frame at composition time `t`, from its source frames (`face`: the webcam's, if any); `frame` is the
+    /// frame duration (s), how far back motion blur looks.
+    func compose(_ src: CIImage, face: CIImage?, at t: Double, frame: Double = 1.0 / 60, canvas: CGSize, _ ins: LoupecastInstruction) -> CIImage {
+        let camera = ins.path.camera(composition: t)
+        let before = ins.motionBlur ? ins.path.camera(composition: max(0, t - frame)) : camera
+        let image = render(src, camera: camera, canvas: canvas, style: ins.style, fill: ins.fill, window: ins.path.window) { content, place in
+            Self.ripples(ins.clicks, at: t, place, canvas: canvas).reduce(Self.motionBlur(content, place, from: before, canvas: canvas)) { $1.composited(over: $0) }
         }
         guard let cam = ins.camera, let face else { return image }
         return Self.overlay(face, on: image, canvas: canvas, cam.overlay)
+    }
+
+    /// Blurs the recording along its on-screen motion since the previous frame's camera `before`: a zoom blur from the frame's
+    /// center for a scale change, a motion blur along the pan. Half of the frame's movement (a 180° shutter; CIZoomBlur's
+    /// amount reads stronger, so a third of that), at most 2 % of the canvas's short side; a camera that holds still costs nothing.
+    static func motionBlur(_ content: CIImage, _ place: Placement, from before: Camera, canvas: CGSize) -> CIImage {
+        guard before != place.camera else { return content }
+        let cap = 0.02 * min(canvas.width, canvas.height), mid = CGPoint(x: place.frame.midX, y: place.frame.midY)
+        // where the point now at the frame's center was a frame ago, and how much the frame's half width grew
+        let was = Placement(frame: place.frame, camera: before, window: place.window, source: place.source).point(place.camera.center)
+        let pan = hypot(mid.x - was.x, mid.y - was.y) / 2, zoom = abs(1 - before.scale / place.camera.scale) * place.frame.width / 12
+        var image = content.clampedToExtent()
+        if zoom > 0.5 {
+            let z = CIFilter.zoomBlur()
+            z.inputImage = image; z.center = mid; z.amount = Float(min(cap, zoom))
+            image = z.outputImage!
+        }
+        if pan > 0.5 {
+            let m = CIFilter.motionBlur()
+            m.inputImage = image; m.radius = Float(min(cap, pan)); m.angle = Float(atan2(mid.y - was.y, mid.x - was.x))
+            image = m.outputImage!
+        }
+        return image.cropped(to: content.extent)
     }
 
     static let rippleLength = 0.4

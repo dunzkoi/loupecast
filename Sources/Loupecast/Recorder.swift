@@ -266,6 +266,7 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
                               pixelWidth: pixelSize.0, pixelHeight: pixelSize.1, pointPixelScale: scale,
                               cursor: events.cursor, clicks: events.clicks, paused: paused)
         project.camera = cameraStart.map { CameraOverlay(offset: $0 - start.seconds) }   // recording-relative, like everything stored
+        project.motionBlur = true                        // new recordings blur their zooms (older files stay sharp)
         LookDefaults.saved?.apply(to: &project)          // the aspect, background… picked last in an editor
         try project.save(to: dir.appendingPathComponent(Project.fileName))
         return project

@@ -821,13 +821,15 @@ struct EffectsMenu: View {
         Menu {
             Toggle("Show Clicks", isOn: Binding(get: { model.project.showClicks },
                                                 set: { on in model.edit(on ? "Show Clicks" : "Hide Clicks") { $0.showClicks = on } }))
+            Toggle("Motion Blur", isOn: Binding(get: { model.project.motionBlur },
+                                                set: { on in model.edit(on ? "Turn Motion Blur On" : "Turn Motion Blur Off") { $0.motionBlur = on } }))
         } label: {
             Image(systemName: "cursorarrow.click.2")
         }
         .menuIndicator(.visible)
         .fixedSize()
         .focusable(false)
-        .help("Effects: click rings")
+        .help("Effects: click rings, motion blur")
         .accessibilityLabel("Effects")
     }
 }

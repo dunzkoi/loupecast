@@ -50,6 +50,7 @@
 //   LOUPECAST_BACKGROUND_IMAGE=<file> use that picture as the background through the editor (what Image… does after
 //                                 the panel) before the snapshot; LOUPECAST_BACKGROUND_UNDO=1 undoes it, then closes the
 //                                 editor and lists the background files left in the recording folder
+//   LOUPECAST_MOTION_BLUR=0|1         switch 모션 블러 through the editor (one undo step) before the snapshot
 //   LOUPECAST_QUIT_TEST=<dir>         export from that recording's editor, close the editor, then quit;
 //                                 LOUPECAST_QUIT_ANSWER=cancel|quit answers the export alert,
 //                                 LOUPECAST_QUIT_EDIT=<dir> splits a second recording right before quitting
@@ -243,6 +244,10 @@ enum DebugHooks {
                 print("LOUPECAST: after closing \(files())")
                 NSApp.terminate(nil)
             }
+        }
+        if let on = env["LOUPECAST_MOTION_BLUR"].map({ $0 == "1" }) {
+            m.edit(on ? "Turn Motion Blur On" : "Turn Motion Blur Off") { $0.motionBlur = on }
+            print("LOUPECAST: motion blur \(m.project.motionBlur), undo \(m.undo.undoActionName)")
         }
         if let s = env["LOUPECAST_STYLE"].flatMap(StylePreset.init(rawValue:)) {
             m.edit("Background") { $0.style = s }

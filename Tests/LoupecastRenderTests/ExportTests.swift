@@ -654,6 +654,68 @@ final class ExportTests: XCTestCase {
         XCTAssertEqual(Double(right.g), 0.7 * 255, accuracy: 24); XCTAssertEqual(Double(right.r), 0.1 * 255, accuracy: 24)
     }
 
+    // MARK: motion blur
+
+    /// The compositor's own instruction for `project`, as preview and export build it.
+    static func instruction(_ project: Project) -> LoupecastInstruction {
+        Composer.videoComposition(project: project, folder: outDir, trackID: 1, duration: CMTime(seconds: 6, preferredTimescale: 600))
+            .instructions[0] as! LoupecastInstruction
+    }
+
+    /// A striped stand-in for the recording: blur shows as smeared stripes.
+    static let stripes = CIFilter.stripesGenerator().outputImage!.cropped(to: CGRect(origin: .zero, size: size))
+
+    static func meanDifference(_ a: CIImage, _ b: CIImage, canvas: CGSize) -> Double {
+        let ctx = LoupecastCompositor.context, r = CGRect(origin: .zero, size: canvas)
+        let d = a.applyingFilter("CIDifferenceBlendMode", parameters: [kCIInputBackgroundImageKey: b]).cropped(to: r)
+        let avg = d.applyingFilter("CIAreaAverage", parameters: [kCIInputExtentKey: CIVector(cgRect: r)])
+        var px = [Float](repeating: 0, count: 4)
+        ctx.render(avg, toBitmap: &px, rowBytes: 16, bounds: CGRect(x: 0, y: 0, width: 1, height: 1), format: .RGBAf, colorSpace: nil)
+        return Double(px[0] + px[1] + px[2]) / 3 * 255
+    }
+
+    /// Where the zoom ramps in (composition 0.6 – 1.2 s), the blurred frame differs from the sharp one; before it, where the
+    /// camera holds still, the two are the same pixels.
+    func testMotionBlurOnlyWhileTheCameraMoves() {
+        var project = Self.makeProject()
+        project.showClicks = false
+        let canvas = Composer.renderSize(project.aspect), c = LoupecastCompositor()
+        func frame(_ t: Double, blur: Bool) -> CIImage {
+            project.motionBlur = blur
+            return c.compose(Self.stripes, face: nil, at: t, canvas: canvas, Self.instruction(project))
+        }
+        let ramp = Self.meanDifference(frame(0.9, blur: true), frame(0.9, blur: false), canvas: canvas)
+        let still = Self.meanDifference(frame(0.3, blur: true), frame(0.3, blur: false), canvas: canvas)
+        let noise = Self.meanDifference(frame(0.3, blur: false), frame(0.3, blur: false), canvas: canvas)
+        print("motion blur: \(ramp) levels apart mid-zoom, \(still) while still, \(noise) between two identical renders")
+        XCTAssertGreaterThan(ramp, 2, "zooming in: blurred")
+        XCTAssertEqual(still, noise, accuracy: 1e-9, "camera at rest: untouched (the same as rendering the sharp frame twice)")
+        let before = Composer.cameraPath(project).camera(composition: 0.3 - 1.0 / 60)
+        XCTAssertEqual(before, Composer.cameraPath(project).camera(composition: 0.3), "the still frame really is still")
+    }
+
+    /// Export time with blur on vs off on the synthetic edit (a zoom in, a cursor-following stretch, a zoom out).
+    func testMotionBlurExportCost() async throws {
+        try XCTSkipIf(ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] != nil, "no video hardware on CI VMs")
+        try await withDeadline(Self.deadline) { try await Self.motionBlurExportCost() }
+    }
+
+    static func motionBlurExportCost() async throws {
+        let mov = outDir.appendingPathComponent("synthetic-blur.mov")
+        try await writeSyntheticMovie(to: mov, staticScreen: false)
+        var project = makeProject()
+        var times: [Bool: [Double]] = [:]
+        for blur in [false, true, false, true] {
+            project.motionBlur = blur
+            let start = Date()
+            try await Exporter.export(project: project, videoURL: mov, to: outDir.appendingPathComponent("export-blur-\(blur).mp4"))
+            times[blur, default: []].append(Date().timeIntervalSince(start))
+        }
+        let off = times[false]!.min()!, on = times[true]!.min()!
+        print("motion blur export: \(on) s on, \(off) s off (+\(Int((on / off - 1) * 100)) %)")
+        XCTAssertLessThan(on, off * 2, "blur stays a fraction of the export time")
+    }
+
     // MARK: frame rate and file size
 
     func testExportPlan() {

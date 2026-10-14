@@ -404,6 +404,25 @@ final class ClipTests: XCTestCase {
         XCTAssertTrue(other.showClicks, "a look saved before the switch leaves it on")
     }
 
+    func testMotionBlurIsOffInOlderFiles() throws {
+        var p = project()
+        XCTAssertFalse(p.motionBlur, "the recorder turns it on for new recordings; anything else stays sharp")
+        p.motionBlur = true
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("blur-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try p.save(to: url)
+        XCTAssertTrue(try Project.load(from: url).motionBlur)
+        var json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(p)) as! [String: Any]
+        json["motionBlur"] = nil
+        try JSONSerialization.data(withJSONObject: json).write(to: url)
+        XCTAssertFalse(try Project.load(from: url).motionBlur, "a file from before motion blur exports as it did")
+        var next = project()
+        next.motionBlur = true
+        p.motionBlur = false
+        LookDefaults(p).apply(to: &next)
+        XCTAssertFalse(next.motionBlur, "turned off in an editor: new recordings start without it")
+    }
+
     // MARK: look defaults
 
     /// The look of the last edited project carries over to new recordings; the webcam's only to ones with a webcam.
