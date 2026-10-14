@@ -105,15 +105,20 @@ swift build --build-tests && swift test   # Core ~0.1 s; Render 10-40 s, each ex
 - `LoupecastCompositor.compose` makes one frame: the recording through the camera, then `decorate` draws on it inside
   the frame (motion blur from camera(t − one frame) vs camera(t), click rings at `Placement.point`), then the rounded
   mask over the background, then the webcam circle. Everything is a function of composition time, so preview = export.
+- The cursor is left out of new recordings (`showsCursor = false`): `CursorShapes` saves each shape as
+  `cursors/<n>.png` (checked at 10 Hz), and the compositor draws it at the cursor samples, spring-smoothed with the zoom's
+  spring over the last 1.5 s (`CameraPath.smoothCursor`, a pure function of time) and enlarged with the zoom. Files
+  without `cursorOverlay` have the cursor in the video and render as before.
 - The site's `x-default` hreflang is the English page; README's Website link points there.
 
 ## Open
 
 - Releases use a fixed self-signed identity (since 0.3.1) and aren't notarized (README's `xattr` step).
 - Recording-path changes (start-failure cleanup, finishing a recording on quit, pause/resume dropping samples, area
-  recording's `sourceRect`) were
+  recording's `sourceRect`, the cursor left out of the capture with its shapes saved by `CursorShapes`) were
   verified only by reading the code and with synthetic movies here; they need a machine with the Screen Recording
   grant. The webcam capture (`CameraRecorder`) also needs the Camera grant; only its compositing is tested. A crash while paused recovers without the pause cut (recovery.json has no pauses).
+  A recovered recording has no cursor at all: the capture leaves it out and recovery keeps no samples or shapes.
 - Hour-long projects: each edit rebuilds the whole camera path (~5 ms) and redraws the timeline; 화면 채우기 adds a
   cursor-following track over the whole edit (tens of ms an hour).
 - The demo's screen is drawn by a script, not recorded (no Screen Recording grant here, and a real desktop would be

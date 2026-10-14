@@ -50,9 +50,13 @@ final class LoupecastInstruction: NSObject, AVVideoCompositionInstructionProtoco
     /// Clicks on kept material at their composition time, oldest first; empty when 클릭 표시 is off.
     let clicks: [(time: Double, at: Point, right: Bool)]
     let motionBlur: Bool
+    let clips: [ClipRange]
+    /// The cursor to draw (nil: it is in the video): its shapes, the samples sorted by time, the folder its images are in,
+    /// and recording pixels per point.
+    let cursor: (overlay: CursorOverlay, samples: [CursorSample], folder: URL, pixelsPerPoint: Double)?
 
     init(timeRange: CMTimeRange, trackID: CMPersistentTrackID, path: CameraPath, style: FrameStyle, fill: Bool,
-         camera: (trackID: CMPersistentTrackID, overlay: CameraOverlay)?, project: Project) {
+         camera: (trackID: CMPersistentTrackID, overlay: CameraOverlay)?, project: Project, folder: URL) {
         self.timeRange = timeRange
         self.trackID = trackID
         self.requiredSourceTrackIDs = ([trackID] + (camera.map { [$0.trackID] } ?? [])).map { NSNumber(value: $0) }
@@ -62,6 +66,8 @@ final class LoupecastInstruction: NSObject, AVVideoCompositionInstructionProtoco
         self.camera = camera
         motionBlur = project.motionBlur
         let clips = project.clips
+        self.clips = clips
+        cursor = project.cursorOverlay.map { ($0, project.cursor.sorted { $0.t < $1.t }, folder, project.pointPixelScale) }
         clicks = !project.showClicks ? [] : project.clicks.filter { clips.index(containing: $0.t) != nil }.sorted { $0.t < $1.t }
             .map { (clips.compositionTime($0.t), Point(x: $0.x, y: $0.y), $0.button == .right) }
     }
@@ -93,6 +99,7 @@ public final class LoupecastCompositor: NSObject, AVVideoCompositing, @unchecked
     private let queue = DispatchQueue(label: "loupecast.compositor", qos: .userInitiated)
     private var background: (frame: CGRect, canvas: CGSize, style: FrameStyle, image: CIImage)?   // touched only on `queue`
     private var lastSource: CIImage?                                            // touched only on `queue`
+    private var cursorImages: [URL: CIImage] = [:]                              // touched only on `queue`
 
     public var sourcePixelBufferAttributes: [String: any Sendable]? { Self.bgra }
     public var requiredPixelBufferAttributesForRenderContext: [String: any Sendable] { Self.bgra }
@@ -126,7 +133,8 @@ public final class LoupecastCompositor: NSObject, AVVideoCompositing, @unchecked
         let camera = ins.path.camera(composition: t)
         let before = ins.motionBlur ? ins.path.camera(composition: max(0, t - frame)) : camera
         let image = render(src, camera: camera, canvas: canvas, style: ins.style, fill: ins.fill, window: ins.path.window) { content, place in
-            Self.ripples(ins.clicks, at: t, place, canvas: canvas).reduce(Self.motionBlur(content, place, from: before, canvas: canvas)) { $1.composited(over: $0) }
+            let marks = Self.ripples(ins.clicks, at: t, place, canvas: canvas) + [drawnCursor(ins, at: t, place)].compactMap { $0 }
+            return marks.reduce(Self.motionBlur(content, place, from: before, canvas: canvas)) { $1.composited(over: $0) }
         }
         guard let cam = ins.camera, let face else { return image }
         return Self.overlay(face, on: image, canvas: canvas, cam.overlay)
@@ -153,6 +161,24 @@ public final class LoupecastCompositor: NSObject, AVVideoCompositing, @unchecked
             image = m.outputImage!
         }
         return image.cropped(to: content.extent)
+    }
+
+    /// The recorded cursor shape at its (smoothed) position, hot spot first. It is as large as it was on screen times the
+    /// zoom, times the overlay's scale.
+    func drawnCursor(_ ins: LoupecastInstruction, at t: Double, _ place: Placement) -> CIImage? {
+        guard let c = ins.cursor else { return nil }
+        let r = ins.clips.recordingTime(t)
+        guard let p = c.overlay.smooth ? CameraPath.smoothCursor(c.samples, clips: ins.clips, at: t) : cursorAt(c.samples, r),
+              let shape = c.overlay.image(at: r) else { return nil }
+        let url = c.folder.appendingPathComponent(shape.file)
+        guard let image = cursorImages[url] ?? CIImage(contentsOf: url) else { return nil }
+        cursorImages[url] = image
+        // canvas pixels per point: recording pixels per point × canvas pixels per recording pixel × the overlay's scale
+        let k = c.pixelsPerPoint * place.frame.width / (place.source.width * place.window.width / place.camera.scale) * c.overlay.scale
+        let e = image.extent, hot = place.point(p)
+        return image.transformed(by: CGAffineTransform(translationX: -e.minX, y: -e.minY)
+            .concatenating(CGAffineTransform(scaleX: shape.width * k / e.width, y: shape.height * k / e.height))
+            .concatenating(CGAffineTransform(translationX: hot.x - shape.hotX * k, y: hot.y - (shape.height - shape.hotY) * k)))
     }
 
     static let rippleLength = 0.4
@@ -456,7 +482,7 @@ public enum Composer {
         vc.instructions = [LoupecastInstruction(timeRange: CMTimeRange(start: .zero, duration: duration), trackID: trackID,
                                             path: cameraPath(project), style: frameStyle(project, folder: folder), fill: project.fillsFrame,
                                             camera: cameraTrackID.flatMap { id in project.camera.flatMap { $0.isVisible ? (id, $0) : nil } },
-                                            project: project)]
+                                            project: project, folder: folder)]
         return vc
     }
 }

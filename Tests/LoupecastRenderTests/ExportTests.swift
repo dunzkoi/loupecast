@@ -716,6 +716,79 @@ final class ExportTests: XCTestCase {
         XCTAssertLessThan(on, off * 2, "blur stays a fraction of the export time")
     }
 
+    // MARK: drawn cursor
+
+    /// A 28 × 40 pt magenta cursor (56 × 80 px) with its hot spot 5 pt from the top-left, next to the movies.
+    static func cursorOverlay(scale: Double = 1, smooth: Bool = false) throws -> CursorOverlay {
+        let ctx = CGContext(data: nil, width: 56, height: 80, bitsPerComponent: 8, bytesPerRow: 0,
+                            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        ctx.setFillColor(CGColor(srgbRed: 1, green: 0, blue: 1, alpha: 1)); ctx.fill(CGRect(x: 0, y: 0, width: 56, height: 80))
+        try FileManager.default.createDirectory(at: outDir.appendingPathComponent("cursors"), withIntermediateDirectories: true)
+        let dest = CGImageDestinationCreateWithURL(outDir.appendingPathComponent("cursors/0.png") as CFURL, UTType.png.identifier as CFString, 1, nil)!
+        CGImageDestinationAddImage(dest, ctx.makeImage()!, nil)
+        XCTAssertTrue(CGImageDestinationFinalize(dest))
+        var o = CursorOverlay(images: [.init(file: "cursors/0.png", width: 28, height: 40, hotX: 5, hotY: 5)], shapes: [.init(t: 0, image: 0)])
+        o.scale = scale; o.smooth = smooth
+        return o
+    }
+
+    static func isMagenta(_ p: (r: Int, g: Int, b: Int)) -> Bool { p.r > 200 && p.b > 200 && p.g < 70 }
+
+    /// The cursor's hot spot lands where camera(t) puts the cursor sample, and the drawn cursor grows with the zoom and
+    /// with its own scale; a project without an overlay draws none.
+    func testDrawnCursorFollowsSamplesAndZoom() throws {
+        var project = Self.makeProject()
+        project.showClicks = false
+        let canvas = Composer.renderSize(project.aspect), c = LoupecastCompositor(), source = Self.stripes
+        let frame = LoupecastCompositor.frameRect(source: Self.size, canvas: canvas, style: FrameStyle(project.style)), path = Composer.cameraPath(project)
+        /// Canvas point (top-left origin) of the hot spot at composition time `t`, and the magenta run's width along its row.
+        func measure(_ t: Double, _ overlay: CursorOverlay?) -> (hot: (Double, Double), width: Int, inside: (r: Int, g: Int, b: Int)) {
+            project.cursorOverlay = overlay
+            let cg = LoupecastCompositor.context.createCGImage(c.compose(source, face: nil, at: t, canvas: canvas, Self.instruction(project)),
+                                                               from: CGRect(origin: .zero, size: canvas))!
+            let sample = cursorAt(project.cursor.sorted { $0.t < $1.t }, project.clips.recordingTime(t))!
+            let p = Placement(frame: frame, camera: path.camera(composition: t), window: path.window, source: Self.size).point(sample)
+            let hot = (Double(p.x), Double(canvas.height - p.y)), y = hot.1 + 10
+            let width = (0..<200).filter { Self.isMagenta(Self.pixel(cg, hot.0 - 20 + Double($0), y)) }.count
+            return (hot, width, Self.pixel(cg, hot.0 + 6, hot.1 + 6))
+        }
+        let plain = measure(0.3, try Self.cursorOverlay()), zoomed = measure(2.0, try Self.cursorOverlay()), big = measure(0.3, try Self.cursorOverlay(scale: 2))
+        let none = measure(0.3, nil)
+        let k = frame.width / Self.size.width * 2            // canvas pixels per point at scale 1 (2 px per point)
+        print("drawn cursor: \(plain.width) px wide unzoomed (expect \(28 * k)), \(zoomed.width) zoomed ×\(path.camera(composition: 2).scale), \(big.width) at 200 %")
+        XCTAssertTrue(Self.isMagenta(plain.inside), "the cursor sits at its hot spot: \(plain.inside)")
+        XCTAssertFalse(Self.isMagenta(none.inside), "no overlay, no cursor")
+        XCTAssertEqual(Double(plain.width), 28 * k, accuracy: 3, "28 pt wide, as on screen")
+        XCTAssertEqual(Double(zoomed.width), 28 * k * path.camera(composition: 2).scale, accuracy: 4, "grows with the zoom")
+        XCTAssertEqual(Double(big.width), 56 * k, accuracy: 4, "200 %")
+    }
+
+    /// The export of a movie without a cursor, with an overlay: magenta at the cursor's spot in the MP4 too.
+    func testDrawnCursorExport() async throws {
+        try XCTSkipIf(ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] != nil, "no video hardware on CI VMs")
+        try await withDeadline(Self.deadline) { try await Self.drawnCursorExport() }
+    }
+
+    static func drawnCursorExport() async throws {
+        let mov = outDir.appendingPathComponent("synthetic-cursor.mov")
+        try await writeSyntheticMovie(to: mov)
+        var project = makeProject()
+        project.showClicks = false
+        project.cursorOverlay = try cursorOverlay()
+        let out = outDir.appendingPathComponent("export-cursor.mp4")
+        try await Exporter.export(project: project, videoURL: mov, to: out)
+        let gen = AVAssetImageGenerator(asset: AVURLAsset(url: out))
+        gen.requestedTimeToleranceBefore = .zero; gen.requestedTimeToleranceAfter = .zero
+        let cg = try await gen.image(at: CMTime(seconds: 0.3, preferredTimescale: 600)).image
+        let canvas = Composer.renderSize(project.aspect), path = Composer.cameraPath(project)
+        let frame = LoupecastCompositor.frameRect(source: size, canvas: canvas, style: FrameStyle(project.style))
+        let p = Placement(frame: frame, camera: path.camera(composition: 0.3), window: path.window, source: size)
+            .point(cursorAt(project.cursor.sorted { $0.t < $1.t }, project.clips.recordingTime(0.3))!)
+        let inside = pixel(cg, p.x + 6, canvas.height - p.y + 6)
+        print("drawn cursor export: \(inside) next to the hot spot")
+        XCTAssertTrue(isMagenta(inside), "\(inside)")
+    }
+
     // MARK: frame rate and file size
 
     func testExportPlan() {

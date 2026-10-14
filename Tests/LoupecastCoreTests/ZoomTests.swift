@@ -413,4 +413,40 @@ final class ZoomTests: XCTestCase {
         XCTAssertLessThanOrEqual(abs(cam.center.x - 0.25), 0.5 / cam.scale)
         XCTAssertLessThanOrEqual(abs(cam.center.y - 0.25), 0.5 / cam.scale)
     }
+
+    // MARK: drawn cursor
+
+    func testCursorShapesAndSmoothing() throws {
+        var o = CursorOverlay(images: [.init(file: "cursors/0.png", width: 28, height: 40, hotX: 5, hotY: 5),
+                                       .init(file: "cursors/1.png", width: 32, height: 32, hotX: 16, hotY: 16)],
+                              shapes: [.init(t: 0.5, image: 0), .init(t: 2, image: 1), .init(t: 3, image: 0)])
+        XCTAssertEqual(o.image(at: 0)?.file, "cursors/0.png", "before the first change: the first shape")
+        XCTAssertEqual(o.image(at: 2.5)?.file, "cursors/1.png")
+        XCTAssertEqual(o.image(at: 9)?.file, "cursors/0.png")
+        XCTAssertEqual([o.scale], [1]); XCTAssertTrue(o.smooth)
+        o.scale = 2
+        var p = Project(name: "t", duration: 10, pixelWidth: 100, pixelHeight: 50, pointPixelScale: 2, cursor: [], clicks: [])
+        XCTAssertNil(p.cursorOverlay, "older files: the cursor is in the video")
+        p.cursorOverlay = o
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("cursor-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try p.save(to: url)
+        XCTAssertEqual(try Project.load(from: url).cursorOverlay, o)
+        var next = Project(name: "n", duration: 10, pixelWidth: 100, pixelHeight: 50, pointPixelScale: 2, cursor: [], clicks: [])
+        LookDefaults(p).apply(to: &next)
+        XCTAssertNil(next.cursorOverlay, "no drawn cursor: nothing to size")
+        next.cursorOverlay = CursorOverlay(images: [], shapes: [])
+        LookDefaults(p).apply(to: &next)
+        XCTAssertEqual(next.cursorOverlay?.scale, 2, "the size picked last")
+
+        // the cursor jumps at 1 s: the smoothed one lags, catches up, and is the same for the same time
+        let cursor = (0...180).map { i in CursorSample(t: Double(i) / 60, x: i < 60 ? 0.1 : 0.9, y: 0.5) }
+        let clips = [ClipRange(start: 0, end: 3)]
+        let soon = try XCTUnwrap(CameraPath.smoothCursor(cursor, clips: clips, at: 1.05)), later = try XCTUnwrap(CameraPath.smoothCursor(cursor, clips: clips, at: 2.5))
+        XCTAssertTrue(soon.x > 0.1 && soon.x < 0.5, "50 ms after the jump it is on its way: \(soon.x)")
+        XCTAssertEqual(later.x, 0.9, accuracy: 1e-3, "1.5 s later it is there")
+        XCTAssertEqual(CameraPath.smoothCursor(cursor, clips: clips, at: 1.05), soon, "a pure function of time")
+        XCTAssertEqual(CameraPath.smoothCursor(cursor, clips: clips, at: 0.5)?.x ?? 0, 0.1, accuracy: 1e-9, "still cursor: no drift")
+        XCTAssertNil(CameraPath.smoothCursor([], clips: clips, at: 1))
+    }
 }

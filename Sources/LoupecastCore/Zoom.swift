@@ -215,6 +215,13 @@ public struct CameraPath: Sendable {
         return pts
     }
 
+    /// The cursor at composition time `t` with the zoom's spring over the 1.5 s before it (enough for the spring to forget
+    /// where it started): a pure function of `t`, so preview and export put it in the same place. `cursor` sorted by time.
+    public static func smoothCursor(_ cursor: [CursorSample], clips: [ClipRange], at t: Double) -> Point? {
+        guard !cursor.isEmpty else { return nil }
+        return follow((start: Swift.max(0, t - 1.5), end: t), from: nil, cursor: cursor, clips: clips).last
+    }
+
     public init(segments: [ZoomSegment], cursor: [CursorSample], trimIn: Double, trimOut: Double) {
         self.init(segments: segments, cursor: cursor, clips: [ClipRange(start: trimIn, end: trimOut)])
     }

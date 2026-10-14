@@ -40,6 +40,8 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
     private var log = InputLog()
     private var monitors: [Any] = []
     private var cursorTimer: Timer?
+    private var cursorShapes: CursorShapes?
+    private var ticks = 0
 
     #if DEBUG
     deinit { NSLog("Loupecast: recorder released") }
@@ -102,7 +104,7 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
         cfg.width = w
         cfg.height = h
         cfg.minimumFrameInterval = CMTime(value: 1, timescale: 60)
-        cfg.showsCursor = true
+        cfg.showsCursor = false   // the compositor draws it from the samples and shapes below (CursorOverlay)
         cfg.queueDepth = 8
         cfg.pixelFormat = kCVPixelFormatType_32BGRA
         cfg.colorSpaceName = CGColorSpace.sRGB
@@ -206,10 +208,18 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
         // No key monitor: typed keys (passwords included) never go into project.json. A future shortcut overlay
         // should record only combinations with ⌘, ⌃ or ⌥ held, never plain typing.
         monitors = [clicks].compactMap { $0 }
+        let shapes = CursorShapes(dir: dir)
+        shapes.note()
+        cursorShapes = shapes
         let timer = Timer(timeInterval: 1.0 / 60, repeats: true) { [weak self] _ in
             guard let p = CGEvent(source: nil)?.location else { return }
             let host = ProcessInfo.processInfo.systemUptime
-            MainActor.assumeIsolated { self?.log.append(.init(host: host, gx: p.x, gy: p.y, kind: .move)) }
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.log.append(.init(host: host, gx: p.x, gy: p.y, kind: .move))
+                self.ticks += 1
+                if self.ticks % 6 == 0 { self.cursorShapes?.note() }   // 10 Hz: a read takes ~2.4 ms
+            }
         }
         RunLoop.main.add(timer, forMode: .common)
         cursorTimer = timer
@@ -266,6 +276,7 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
                               pixelWidth: pixelSize.0, pixelHeight: pixelSize.1, pointPixelScale: scale,
                               cursor: events.cursor, clicks: events.clicks, paused: paused)
         project.camera = cameraStart.map { CameraOverlay(offset: $0 - start.seconds) }   // recording-relative, like everything stored
+        project.cursorOverlay = cursorShapes?.overlay(sessionStartHost: start.seconds)
         project.motionBlur = true                        // new recordings blur their zooms (older files stay sharp)
         LookDefaults.saved?.apply(to: &project)          // the aspect, background… picked last in an editor
         try project.save(to: dir.appendingPathComponent(Project.fileName))
@@ -276,6 +287,48 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
         let f = DateFormatter()
         f.dateFormat = String(localized: "MMM d HH.mm.ss", comment: "Date in a recording's name")
         return String(localized: "Recording \(f.string(from: date))")
+    }
+}
+
+/// The system cursor's shapes during a recording: each new one is saved as cursors/<n>.png in the recording folder, with
+/// the host time it started showing. Keyed by its pixels and hot spot.
+@MainActor
+final class CursorShapes {
+    let dir: URL
+    private(set) var images: [CursorOverlay.Image] = []
+    private(set) var changes: [(host: Double, image: Int)] = []
+    private var last: Int?
+
+    init(dir: URL) { self.dir = dir }
+
+    /// Saves the system's current shape if it changed (an arrow when macOS won't say which).
+    func note(_ shown: NSCursor? = NSCursor.currentSystem) {
+        let cursor = shown ?? NSCursor.arrow
+        guard let cg = cursor.image.cgImage(forProposedRect: nil, context: nil, hints: nil), let data = cg.dataProvider?.data else { return }
+        var h = Hasher()
+        h.combine(data as Data); h.combine(cursor.hotSpot.x); h.combine(cursor.hotSpot.y)
+        let key = h.finalize()
+        guard key != last else { return }
+        last = key
+        let host = ProcessInfo.processInfo.systemUptime
+        if let i = keys.firstIndex(of: key) { changes.append((host, i)); return }   // seen before: no second file
+        let file = "cursors/\(images.count).png", url = dir.appendingPathComponent(file)
+        do {
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try NSBitmapImageRep(cgImage: cg).representation(using: .png, properties: [:])?.write(to: url)
+        } catch {
+            NSLog("Loupecast: cursor image not saved: %@", describe(error))
+            return
+        }
+        images.append(.init(file: file, width: cursor.image.size.width, height: cursor.image.size.height, hotX: cursor.hotSpot.x, hotY: cursor.hotSpot.y))
+        keys.append(key)
+        changes.append((host, images.count - 1))
+    }
+    private var keys: [Int] = []
+
+    /// Recording-relative; a shape from before the first frame shows from 0.
+    func overlay(sessionStartHost: Double) -> CursorOverlay {
+        CursorOverlay(images: images, shapes: changes.map { .init(t: max(0, $0.host - sessionStartHost), image: $0.image) })
     }
 }
 

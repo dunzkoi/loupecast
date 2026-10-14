@@ -60,6 +60,8 @@
 //                                 without a trailing slash: one editor), print the menu and the editors, quit
 //   LOUPECAST_AREA_PICKER=<png>       draw the area picker off screen (1512 × 982 pt, a 1280 × 720 area picked), save it,
 //                                 then drag a new area and press Enter / Esc on it; prints what each returns
+//   LOUPECAST_CURSOR_PROBE=<dir>      note three cursor shapes (arrow, I-beam, arrow again) into <dir>/cursors the way a
+//                                 recording does, then the system's current one; print the overlay, quit
 //   LOUPECAST_EDITOR_TEST=<dir>       trim drag + button click + Space/D/Delete/⌘Z through the window's key
 //                                 handler, off screen and without activating; logs each state change
 import AVFoundation
@@ -89,6 +91,16 @@ enum DebugHooks {
             }
         }
         if let path = env["LOUPECAST_EDITOR_TEST"] { Task { await editorTest(URL(fileURLWithPath: path)) } }
+        if let path = env["LOUPECAST_CURSOR_PROBE"] {
+            let shapes = CursorShapes(dir: URL(fileURLWithPath: path))
+            for c in [NSCursor.arrow, .iBeam, .arrow] { shapes.note(c) }
+            shapes.note()
+            let o = shapes.overlay(sessionStartHost: ProcessInfo.processInfo.systemUptime - 1)
+            let files = ((try? FileManager.default.contentsOfDirectory(atPath: path + "/cursors")) ?? []).sorted()
+            print("LOUPECAST: cursor probe images \(o.images.map { "\($0.file) \($0.width)x\($0.height) hot \($0.hotX),\($0.hotY)" }), "
+                  + "shapes \(o.shapes.map(\.image)), files \(files)")
+            exit(0)
+        }
         if let out = env["LOUPECAST_AREA_PICKER"] { Task { await areaPickerTest(to: URL(fileURLWithPath: out)) } }
         if let path = env["LOUPECAST_OPEN_TEST"] {
             Task {

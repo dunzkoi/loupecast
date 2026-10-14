@@ -48,6 +48,8 @@ public struct Project: Codable, Sendable, Equatable {
     /// Zooms and pans blur in the direction they move. Off in older files (their export stays the same); the recorder
     /// turns it on for new recordings.
     public var motionBlur = false
+    /// The cursor the compositor draws (new recordings leave it out of the video); nil: it is in the video, as in older files.
+    public var cursorOverlay: CursorOverlay?
 
     /// `paused`: recording-time ranges the recording was paused for. They start out cut, and the clicks and cursor
     /// samples in them are dropped, so the editor opens with the pauses already gone.
@@ -64,7 +66,7 @@ public struct Project: Codable, Sendable, Equatable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case version, name, renamed, videoFile, duration, pixelWidth, pixelHeight, pointPixelScale, cursor, clicks, keys, clips, zooms, aspect, style, backgroundImage, fill, systemVolume, micVolume, camera, showClicks, motionBlur
+        case version, name, renamed, videoFile, duration, pixelWidth, pixelHeight, pointPixelScale, cursor, clicks, keys, clips, zooms, aspect, style, backgroundImage, fill, systemVolume, micVolume, camera, showClicks, motionBlur, cursorOverlay
     }
     private enum V1Keys: String, CodingKey { case trimIn, trimOut }
 
@@ -90,6 +92,7 @@ public struct Project: Codable, Sendable, Equatable {
         camera = try c.decodeIfPresent(CameraOverlay.self, forKey: .camera)
         showClicks = try c.decodeIfPresent(Bool.self, forKey: .showClicks) ?? true
         motionBlur = try c.decodeIfPresent(Bool.self, forKey: .motionBlur) ?? false
+        cursorOverlay = try c.decodeIfPresent(CursorOverlay.self, forKey: .cursorOverlay)
         if let clips = try c.decodeIfPresent([ClipRange].self, forKey: .clips) {
             self.clips = clips
         } else {                                // version 1: one trim range
@@ -101,9 +104,27 @@ public struct Project: Codable, Sendable, Equatable {
     public static func load(from url: URL) throws -> Project {
         var p = try JSONDecoder().decode(Project.self, from: Data(contentsOf: url))
         guard p.version <= currentVersion else { throw LoupecastError("Unsupported project version: \(p.version)") }
+        // a shared recording must not make the app read (and export) a file from elsewhere on the disk
+        let folder = url.deletingLastPathComponent()
+        guard isLocal(p.videoFile, in: folder) else { throw LoupecastError("The project names a file outside its folder.") }
+        if let b = p.backgroundImage, !isLocal(b, in: folder) { p.backgroundImage = nil }
+        if let c = p.camera, !isLocal(c.file, in: folder) { p.camera = nil }
+        if let o = p.cursorOverlay, !o.images.allSatisfy({ isLocal($0.file, in: folder) }) { p.cursorOverlay = nil }
         p.version = currentVersion
         p.clips = p.clips.sanitized(duration: p.duration)
         return p
+    }
+
+    /// A file name from project.json that stays inside the recording folder: relative, no `..`, and no symbolic link on
+    /// the way (the app never makes one there).
+    static func isLocal(_ name: String, in folder: URL) -> Bool {
+        guard !name.isEmpty, !name.hasPrefix("/"), !name.hasPrefix("~"), !name.split(separator: "/").contains("..") else { return false }
+        var url = folder
+        for part in name.split(separator: "/") {
+            url.appendPathComponent(String(part))
+            if (try? url.resourceValues(forKeys: [.isSymbolicLinkKey]))?.isSymbolicLink == true { return false }
+        }
+        return true
     }
 
     /// Compact: an hour of 60 Hz cursor samples is ~20 MB, and indentation made it larger and slower to write.
@@ -255,10 +276,15 @@ public struct LookDefaults: Codable, Equatable, Sendable {
     /// Optional: looks saved before these switches existed decode without them.
     public var showClicks: Bool?
     public var motionBlur: Bool?
+    /// From the last project with a drawn cursor; applied only to recordings with one.
+    public var cursorScale: Double?
+    public var cursorSmooth: Bool?
 
     /// `p`'s look; the camera's from `previous` when `p` has no webcam.
     public init(_ p: Project, previous: LookDefaults? = nil) {
         aspect = p.aspect; style = p.style; fill = p.fill; showClicks = p.showClicks; motionBlur = p.motionBlur
+        cursorScale = p.cursorOverlay?.scale ?? previous?.cursorScale
+        cursorSmooth = p.cursorOverlay?.smooth ?? previous?.cursorSmooth
         cameraCorner = p.camera?.corner ?? previous?.cameraCorner
         cameraSize = p.camera?.size ?? previous?.cameraSize
     }
@@ -267,8 +293,46 @@ public struct LookDefaults: Codable, Equatable, Sendable {
         p.aspect = aspect; p.style = style; p.fill = fill
         if let showClicks { p.showClicks = showClicks }
         if let motionBlur { p.motionBlur = motionBlur }
+        if let cursorScale { p.cursorOverlay?.scale = cursorScale }
+        if let cursorSmooth { p.cursorOverlay?.smooth = cursorSmooth }
         if let cameraCorner { p.camera?.corner = cameraCorner }
         if let cameraSize { p.camera?.size = cameraSize }
+    }
+}
+
+/// The cursor as the recorder saw it: its shapes as PNGs in the recording folder, and when each one was showing.
+/// The compositor draws it at the cursor samples' position, larger and spring-smoothed if asked.
+public struct CursorOverlay: Codable, Equatable, Sendable {
+    public struct Image: Codable, Equatable, Sendable {
+        /// Relative to the recording folder, e.g. "cursors/0.png".
+        public var file: String
+        /// Size and hot spot in points; the hot spot is measured from the top-left corner.
+        public var width, height, hotX, hotY: Double
+        public init(file: String, width: Double, height: Double, hotX: Double, hotY: Double) {
+            self.file = file; self.width = width; self.height = height; self.hotX = hotX; self.hotY = hotY
+        }
+    }
+    /// From recording time `t` on, `images[image]` is showing.
+    public struct Shape: Codable, Equatable, Sendable {
+        public var t: Double
+        public var image: Int
+        public init(t: Double, image: Int) { self.t = t; self.image = image }
+    }
+    public var images: [Image]
+    /// Sorted by time.
+    public var shapes: [Shape]
+    /// Drawn this many times its size (the zoom enlarges it on top of that).
+    public var scale = 1.0
+    public static let scales = [1.0, 1.5, 2.0]
+    /// Spring-smoothed position (the zoom's spring) instead of the raw samples.
+    public var smooth = true
+
+    public init(images: [Image], shapes: [Shape]) { self.images = images; self.shapes = shapes }
+
+    /// The shape at recording time `t` (the first one before any change).
+    public func image(at t: Double) -> Image? {
+        let i = shapes.last { $0.t <= t }?.image ?? shapes.first?.image ?? 0
+        return images.indices.contains(i) ? images[i] : nil
     }
 }
 

@@ -450,6 +450,38 @@ final class ClipTests: XCTestCase {
         XCTAssertEqual(next.aspect, .square); XCTAssertEqual(next.cameraCorner, .topLeft); XCTAssertEqual(next.cameraSize, 0.38)
     }
 
+    // MARK: file names
+
+    /// project.json names files next to it; names that climb out of the folder are dropped (the movie's refuses to open).
+    func testFileNamesStayInTheFolder() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("names-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        var p = project()
+        p.backgroundImage = "../../Pictures/private.png"
+        p.camera = CameraOverlay(offset: 0); p.camera?.file = "/Users/someone/camera.mov"
+        p.cursorOverlay = CursorOverlay(images: [.init(file: "cursors/../../x.png", width: 1, height: 1, hotX: 0, hotY: 0)], shapes: [])
+        try p.save(to: url)
+        let back = try Project.load(from: url)
+        XCTAssertNil(back.backgroundImage); XCTAssertNil(back.camera); XCTAssertNil(back.cursorOverlay)
+        p.backgroundImage = "background-1A2B3C4D.png"; p.camera?.file = "camera.mov"
+        p.cursorOverlay = CursorOverlay(images: [.init(file: "cursors/0.png", width: 1, height: 1, hotX: 0, hotY: 0)], shapes: [])
+        try p.save(to: url)
+        let ok = try Project.load(from: url)
+        XCTAssertEqual(ok.backgroundImage, p.backgroundImage); XCTAssertEqual(ok.camera, p.camera); XCTAssertEqual(ok.cursorOverlay, p.cursorOverlay)
+        p.videoFile = "../other/recording.mov"
+        try p.save(to: url)
+        XCTAssertThrowsError(try Project.load(from: url))
+
+        // a folder whose cursors/ is a link to somewhere else
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("linked-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: dir.appendingPathComponent("cursors"), withDestinationURL: FileManager.default.temporaryDirectory)
+        p.videoFile = "recording.mov"
+        try p.save(to: dir.appendingPathComponent(Project.fileName))
+        XCTAssertNil(try Project.load(from: dir.appendingPathComponent(Project.fileName)).cursorOverlay, "a link out of the folder")
+    }
+
     // MARK: rename
 
     func testRenameKeepsBlankNamesAndOlderFilesAreUnnamed() throws {

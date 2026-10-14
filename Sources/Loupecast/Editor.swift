@@ -823,13 +823,22 @@ struct EffectsMenu: View {
                                                 set: { on in model.edit(on ? "Show Clicks" : "Hide Clicks") { $0.showClicks = on } }))
             Toggle("Motion Blur", isOn: Binding(get: { model.project.motionBlur },
                                                 set: { on in model.edit(on ? "Turn Motion Blur On" : "Turn Motion Blur Off") { $0.motionBlur = on } }))
+            // recordings from before 0.9 have the cursor in the video: nothing to change there
+            if let cursor = model.project.cursorOverlay {
+                Picker("Cursor Size", selection: Binding(get: { cursor.scale }, set: { s in model.edit("Cursor Size") { $0.cursorOverlay?.scale = s } })) {
+                    ForEach(CursorOverlay.scales, id: \.self) { Text(verbatim: "\(Int($0 * 100))%").tag($0) }
+                }
+                .pickerStyle(.inline)
+                Toggle("Smooth Cursor Movement", isOn: Binding(get: { cursor.smooth },
+                                                               set: { on in model.edit("Smooth Cursor Movement") { $0.cursorOverlay?.smooth = on } }))
+            }
         } label: {
             Image(systemName: "cursorarrow.click.2")
         }
         .menuIndicator(.visible)
         .fixedSize()
         .focusable(false)
-        .help("Effects: click rings, motion blur")
+        .help("Effects: click rings, motion blur, cursor")
         .accessibilityLabel("Effects")
     }
 }
