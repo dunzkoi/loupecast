@@ -70,7 +70,7 @@ swift build --build-tests && swift test   # Core ~0.1 s; Render 10-40 s, each ex
   "Guard against an unstable signature" step in `release-please.yml` and the `MACOS_CERT_*` secrets.
 - UI text is English in the source (`String(localized:)`, SwiftUI `LocalizedStringKey`) with Korean in
   `Resources/ko.lproj/Localizable.strings`; keys are the English text with `%@`/`%lld` for interpolations. New UI
-  text needs its Korean line; Korean users must keep seeing the same wording.
+  text needs its Korean line (`LocalizationTests` fails on a missing one); Korean users must keep seeing the same wording.
 - Never call `AVAssetReader.cancelReading()` while a pump may be inside `copyNextSampleBuffer()` (it crashes).
   Cancel through `Pumps.stop()`; the reader is cancelled after both pumps return.
 - Quitting from inside a Swift task goes through `Updater.quit()`: a `.terminateLater` quit spins a nested run loop
