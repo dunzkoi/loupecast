@@ -450,6 +450,45 @@ final class ClipTests: XCTestCase {
         XCTAssertEqual(next.aspect, .square); XCTAssertEqual(next.cameraCorner, .topLeft); XCTAssertEqual(next.cameraSize, 0.38)
     }
 
+    // MARK: captions
+
+    func testCaptionLinesAndSRT() throws {
+        let words: [(start: Double, end: Double, text: String)] = [
+            (1.0, 1.3, "Click"), (1.35, 1.6, "the"), (1.65, 2.0, "button."),               // a sentence
+            (2.1, 2.4, "Then"), (2.45, 2.8, "type"),                                       // a 0.9 s pause after "type"
+            (3.7, 4.0, "your"), (4.05, 4.5, "name"),
+        ]
+        let lines = Caption.lines(words)
+        XCTAssertEqual(lines, [Caption(start: 1, end: 2, text: "Click the button."), Caption(start: 2.1, end: 2.8, text: "Then type"),
+                               Caption(start: 3.7, end: 4.5, text: "your name")])
+        let long = (0..<20).map { (start: Double($0) * 0.4, end: Double($0) * 0.4 + 0.3, text: "word") }
+        XCTAssertTrue(Caption.lines(long).allSatisfy { $0.text.count <= 46 && $0.end - $0.start <= 6.5 }, "long speech splits into lines")
+
+        // kept: [0, 2) at 1×, [3, 5) at 2× → composition [0, 2) and [2, 3); 2–3 s of recording is cut
+        let clips = [ClipRange(start: 0, end: 2), ClipRange(start: 3, end: 5, speed: 2)]
+        let srt = lines.srt(clips: clips)
+        XCTAssertEqual(srt, """
+            1
+            00:00:01,000 --> 00:00:02,000
+            Click the button.
+
+            2
+            00:00:02,350 --> 00:00:02,750
+            your name
+
+            """, "the line in the cut is gone, the one in the 2× clip runs at half its length")
+        XCTAssertEqual([Caption(start: 3600 + 61.5, end: 3600 + 62, text: "late")].srt(clips: [ClipRange(start: 0, end: 4000)]),
+                       "1\n01:01:01,500 --> 01:01:02,000\nlate\n")
+
+        var p = project()
+        XCTAssertEqual(p.captions, [])
+        p.captions = lines
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("captions-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try p.save(to: url)
+        XCTAssertEqual(try Project.load(from: url).captions, lines)
+    }
+
     // MARK: file names
 
     /// project.json names files next to it; names that climb out of the folder are dropped (the movie's refuses to open).

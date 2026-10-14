@@ -34,6 +34,8 @@ final class EditorModel {
     var asksForStar = false
     /// The finished MP4 came out larger than the size limit picked in the Export menu.
     var sizeWarning: String?
+    /// 자막 만들기 in progress: the share done (0 while the recognizer hasn't said); nil when not running.
+    var captionProgress: Double?
     /// Audio tracks in the recording; the volume controls show only these.
     private(set) var hasSystemAudio = false
     private(set) var hasMicrophone = false
@@ -49,6 +51,7 @@ final class EditorModel {
     @ObservationIgnored private var volumeBase: Project?
     @ObservationIgnored private var saveTask: Task<Void, Never>?
     @ObservationIgnored private var exportTask: Task<Void, Never>?
+    @ObservationIgnored private var captionTask: Task<Void, Never>?
     @ObservationIgnored private var timeObserver: Any?
     /// The window title follows the name (a rename or its undo).
     @ObservationIgnored var onNameChange: ((String) -> Void)?
@@ -90,6 +93,7 @@ final class EditorModel {
     }
 
     func close() {
+        captionTask?.cancel()
         removeUnusedBackgrounds()
         player.pause()
         if let timeObserver { player.removeTimeObserver(timeObserver) }
@@ -416,6 +420,41 @@ final class EditorModel {
         asksForStar = false
     }
 
+    /// Transcribes the microphone on this Mac into `project.captions` (one undo step); replaces earlier captions.
+    func createCaptions() {
+        guard hasMicrophone, captionProgress == nil else { return }
+        captionProgress = 0
+        let video = videoURL, duration = project.duration
+        captionTask = Task {
+            do {
+                let lines = try await Transcriber.captions(video, duration: duration) { p in
+                    Task { @MainActor in if self.captionProgress != nil { self.captionProgress = p } }
+                }
+                edit("Create Captions") { $0.captions = lines }
+                if lines.isEmpty { exportState = .failed(String(localized: "No speech was recognized.")) }
+            } catch {
+                if !Task.isCancelled { exportState = .failed(describe(error)) }
+            }
+            captionProgress = nil
+            captionTask = nil
+        }
+    }
+
+    func cancelCaptions() { captionTask?.cancel() }
+
+    /// The captions as SubRip next to the exports, timed for the edit (cuts and speed applied).
+    func exportSRT() {
+        let url = Exporter.defaultURL(name: project.renamed ? project.name : nil, in: Self.exportDir, taken: Set(Self.exports.keys), fileExtension: "srt")
+        do {
+            try FileManager.default.createDirectory(at: Self.exportDir, withIntermediateDirectories: true)
+            try project.captions.srt(clips: project.clips).write(to: url, atomically: true, encoding: .utf8)
+            sizeWarning = nil
+            exportState = .done(url)
+        } catch {
+            exportState = .failed(describe(error))
+        }
+    }
+
     /// The exporter stops reading, cancels the writer and deletes the partial file; the state goes back to idle.
     func cancelExport() { exportTask?.cancel() }
 
@@ -658,6 +697,7 @@ struct ControlBar: View {
             Spacer(minLength: 12)
 
             ExportStatus(model: model)
+            CaptionsButton(model: model)
             if model.hasSystemAudio || model.hasMicrophone { VolumeButton(model: model) }
             if let cam = model.project.camera { CameraMenu(model: model, camera: cam) }
             EffectsMenu(model: model)
@@ -712,6 +752,7 @@ struct ControlBar: View {
                     Button("MP4 4K (the recording has too few pixels)") {}.disabled(true)
                 }
                 Button("GIF (no sound, loops)") { model.export(.gif) }
+                Button("Captions (SRT)", action: model.exportSRT).disabled(model.project.captions.isEmpty)
                 Picker("Frame Rate", selection: $fps) {
                     Text(verbatim: "60 fps").tag(60)
                     Text(verbatim: "30 fps").tag(30)
@@ -906,6 +947,36 @@ struct NameButton: View {
                 .onAppear { editing = true }
                 .onSubmit { model.rename(text); shown = false }
                 .onExitCommand { shown = false }
+        }
+    }
+}
+
+/// 자막 만들기: off without a microphone track; while it runs, its progress and a cancel button.
+struct CaptionsButton: View {
+    @Bindable var model: EditorModel
+
+    var body: some View {
+        if let p = model.captionProgress {
+            HStack(spacing: 8) {
+                if p > 0 { ProgressView(value: p).frame(width: 80) } else { ProgressView().controlSize(.small) }
+                Text("Captions").font(.callout).foregroundStyle(.secondary)
+                Button(action: model.cancelCaptions) { Image(systemName: "xmark.circle.fill") }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(.secondary)
+                    .focusable(false)
+                    .help("Stop Making Captions")
+                    .accessibilityLabel("Stop Making Captions")
+            }
+            .fixedSize()
+        } else {
+            Button(action: model.createCaptions) { Image(systemName: "captions.bubble") }
+                .buttonStyle(.bordered)
+                .focusable(false)
+                .disabled(!model.hasMicrophone || model.edit == nil)
+                .help(!model.hasMicrophone ? String(localized: "Captions need a recording with the microphone on")
+                      : model.project.captions.isEmpty ? String(localized: "Create captions from the microphone, recognized on this Mac")
+                      : String(localized: "Create the captions again (export them from the Export menu)"))
+                .accessibilityLabel("Create Captions")
         }
     }
 }

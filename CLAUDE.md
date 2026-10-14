@@ -16,8 +16,9 @@ only in the maintainer's checkout); the rules that matter are below.
   `GIFExporter` (the same composition at 15 fps, long side 960 px, silent and looping).
 - `Sources/Loupecast`: the app. `main.swift` (AppDelegate, menu, quit handling, `Library`: recent recordings,
   crash recovery, disk usage, `HotKey`), `Recorder` (SCStream → AVAssetWriter), `CameraRecorder` (webcam →
-  `camera.mov`), `AreaPicker` (the 영역 지정 녹화 overlay), `Editor` (EditorModel and views), `Updater` (self-update), `Debug.swift` (verification hooks, DEBUG
-  builds only).
+  `camera.mov`), `AreaPicker` (the 영역 지정 녹화 overlay and the start countdown), `Editor` (EditorModel and views), `Captions`
+  (자막 만들기: the microphone transcribed on device with SFSpeechRecognizer), `Updater` (self-update), `Debug.swift`
+  (verification hooks, DEBUG builds only).
 - `Resources`: app icon, chimes, `en.lproj`/`ko.lproj`. `build.sh` copies them into `Contents/Resources`.
 - `site/`: landing pages, Korean at `/loupecast/`, English at `/loupecast/en/`, shared `site.css`/`site.js`;
   deployed by `pages.yml` on pushes to `main` that touch `site/`. `scripts/make-demo.sh` rebuilds the demo
@@ -119,6 +120,9 @@ swift build --build-tests && swift test   # Core ~0.1 s; Render 10-40 s, each ex
   verified only by reading the code and with synthetic movies here; they need a machine with the Screen Recording
   grant. The webcam capture (`CameraRecorder`) also needs the Camera grant; only its compositing is tested. A crash while paused recovers without the pause cut (recovery.json has no pauses).
   A recovered recording has no cursor at all: the capture leaves it out and recovery keeps no samples or shapes.
+- 자막 만들기 itself (SFSpeechRecognizer on the microphone m4a) needs the Speech Recognition grant, which this process
+  doesn't have: the mic extraction, the line grouping, the SRT timing and the button state are tested, the recognition and
+  whether partial results carry times (the progress bar) are not. Captions aren't drawn on the video yet (next step).
 - Hour-long projects: each edit rebuilds the whole camera path (~5 ms) and redraws the timeline; 화면 채우기 adds a
   cursor-following track over the whole edit (tens of ms an hour).
 - The demo's screen is drawn by a script, not recorded (no Screen Recording grant here, and a real desktop would be

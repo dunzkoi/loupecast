@@ -28,6 +28,9 @@
 "Cancel" = "취소";
 "Cancel Countdown" = "카운트다운 취소";
 "Cancel Export" = "내보내기 취소";
+"Captions" = "자막";
+"Captions (SRT)" = "자막 (SRT)";
+"Captions need a recording with the microphone on" = "자막을 만들려면 마이크를 켜고 녹화해야 합니다";
 "Check for Updates…" = "업데이트 확인…";
 "Click" = "클릭";
 "Click a window or drag to choose the area to record. Enter or a double-click records, Esc or a right-click cancels." = "창을 클릭하거나 녹화할 영역을 드래그하세요. Enter나 더블클릭으로 녹화하고, Esc나 오른쪽 클릭으로 취소합니다.";
@@ -53,6 +56,9 @@
 "Couldn’t start the camera." = "카메라를 켜지 못했습니다.";
 "Couldn’t start writing." = "쓰기를 시작하지 못했습니다.";
 "Countdown Before Recording" = "녹화 전 카운트다운";
+"Create Captions" = "자막 만들기";
+"Create captions from the microphone, recognized on this Mac" = "마이크 소리를 이 Mac 안에서 인식해 자막을 만듭니다";
+"Create the captions again (export them from the Export menu)" = "자막을 다시 만듭니다 (내보내기 메뉴에서 내보낼 수 있습니다)";
 "Crop the recording to fill the frame; it follows the cursor" = "녹화 화면을 잘라 프레임을 채우고 커서를 따라갑니다";
 "Cursor Size" = "커서 크기";
 "Cut %@" = "잘라냄 %@";
@@ -122,6 +128,7 @@
 "No camera is connected." = "연결된 카메라가 없습니다.";
 "No screen frames arrived. Check the Screen Recording permission." = "화면 프레임을 하나도 받지 못했습니다. 화면 녹화 권한을 확인해 주세요.";
 "No source frame to compose." = "합성할 원본 프레임이 없습니다.";
+"No speech was recognized." = "인식된 말소리가 없습니다.";
 "OK" = "확인";
 "Off: the zoom holds still. Click the preview to pick the spot." = "끄면 줌이 한곳에 머뭅니다. 미리보기를 클릭해 위치를 고르세요.";
 "On the preview: hold the selected zoom on that spot" = "미리보기에서: 선택한 줌을 그 자리에 고정";
@@ -180,6 +187,7 @@
 "Sponsor…" = "후원하기…";
 "Start Recording" = "녹화 시작";
 "Start and Stop Sounds" = "시작·종료 효과음";
+"Stop Making Captions" = "자막 만들기 중단";
 "Stop Recording" = "녹화 중지";
 "The display with the chosen area isn’t connected." = "고른 영역이 있는 디스플레이가 연결돼 있지 않습니다.";
 "The downloaded app’s version (%@) isn’t %@." = "받은 앱의 버전(%1$@)이 %2$@와 다릅니다.";
@@ -187,8 +195,10 @@
 "The file is complete only when the export finishes. Quitting now cancels the export and deletes the unfinished file." = "내보내기가 끝나야 파일이 완성됩니다. 지금 종료하면 내보내기를 취소하고 만들던 파일을 지웁니다.";
 "The new version is installed but couldn’t be opened. Open Loupecast again yourself. (%@)" = "새 버전은 설치됐지만 다시 열지 못했습니다. Loupecast를 직접 다시 열어 주세요. (%@)";
 "The project names a file outside its folder." = "프로젝트가 녹화 폴더 밖의 파일을 가리킵니다.";
+"The recording has no microphone sound." = "녹화에 마이크 소리가 없습니다.";
 "The recording has no video track." = "녹화 파일에 영상 트랙이 없습니다.";
 "The recording’s video file is missing." = "녹화 영상 파일이 없습니다.";
+"This Mac can’t recognize %@ speech offline." = "이 Mac에서는 %@ 음성을 오프라인으로 인식할 수 없습니다.";
 "Timeline" = "타임라인";
 "Top Left" = "왼쪽 위";
 "Top Right" = "오른쪽 위";
@@ -197,6 +207,7 @@
 "Turn Motion Blur On" = "모션 블러 켜기";
 "Turn Zoom Off" = "줌 끄기";
 "Turn Zoom On" = "줌 켜기";
+"Turn on Loupecast in System Settings › Privacy & Security › Speech Recognition." = "시스템 설정 › 개인정보 보호 및 보안 › 음성 인식에서 Loupecast를 켜 주세요.";
 "Turn on the items below in System Settings." = "아래 항목을 시스템 설정에서 켜 주세요.";
 "Undo or redo" = "실행 취소 또는 다시 실행";
 "Unmute" = "음소거 해제";

@@ -55,6 +55,8 @@ public struct Project: Codable, Sendable, Equatable {
     public var showShortcuts = true
     /// Stretches of typing (when 타이핑 구간 확대 was on): only where each started and ended, never a key or its time.
     public var typing: [TypingSpan] = []
+    /// The microphone transcribed on this Mac (자막 만들기), in recording time.
+    public var captions: [Caption] = []
 
     /// `paused`: recording-time ranges the recording was paused for. They start out cut, and the clicks and cursor
     /// samples in them are dropped, so the editor opens with the pauses already gone.
@@ -74,7 +76,7 @@ public struct Project: Codable, Sendable, Equatable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case version, name, renamed, videoFile, duration, pixelWidth, pixelHeight, pointPixelScale, cursor, clicks, keys, clips, zooms, aspect, style, backgroundImage, fill, systemVolume, micVolume, camera, showClicks, motionBlur, cursorOverlay, shortcuts, showShortcuts, typing
+        case version, name, renamed, videoFile, duration, pixelWidth, pixelHeight, pointPixelScale, cursor, clicks, keys, clips, zooms, aspect, style, backgroundImage, fill, systemVolume, micVolume, camera, showClicks, motionBlur, cursorOverlay, shortcuts, showShortcuts, typing, captions
     }
     private enum V1Keys: String, CodingKey { case trimIn, trimOut }
 
@@ -104,6 +106,7 @@ public struct Project: Codable, Sendable, Equatable {
         shortcuts = try c.decodeIfPresent([Shortcut].self, forKey: .shortcuts) ?? []
         showShortcuts = try c.decodeIfPresent(Bool.self, forKey: .showShortcuts) ?? true
         typing = try c.decodeIfPresent([TypingSpan].self, forKey: .typing) ?? []
+        captions = try c.decodeIfPresent([Caption].self, forKey: .captions) ?? []
         if let clips = try c.decodeIfPresent([ClipRange].self, forKey: .clips) {
             self.clips = clips
         } else {                                // version 1: one trim range
@@ -344,6 +347,47 @@ public struct CursorOverlay: Codable, Equatable, Sendable {
     public func image(at t: Double) -> Image? {
         let i = shapes.last { $0.t <= t }?.image ?? shapes.first?.image ?? 0
         return images.indices.contains(i) ? images[i] : nil
+    }
+}
+
+/// A line of transcribed speech, in recording time.
+public struct Caption: Codable, Equatable, Sendable {
+    public var start: Double
+    public var end: Double
+    public var text: String
+    public init(start: Double, end: Double, text: String) { self.start = start; self.end = end; self.text = text }
+
+    /// Recognized words (recording time) as subtitle lines: a line ends after a sentence's last word, before a pause of
+    /// 0.6 s or more, or once it reaches 42 characters or 6 s.
+    public static func lines(_ words: [(start: Double, end: Double, text: String)]) -> [Caption] {
+        var out: [Caption] = [], line: Caption?
+        for (i, w) in words.enumerated() {
+            let text = line.map { $0.text + (w.text.first.map { ",.?!，。？！".contains($0) } == true ? "" : " ") + w.text } ?? w.text
+            line = Caption(start: line?.start ?? w.start, end: w.end, text: text)
+            let next = i + 1 < words.count ? words[i + 1] : nil
+            let sentence = w.text.last.map { ".?!。？！".contains($0) } ?? false
+            if next == nil || sentence || next!.start - w.end >= 0.6 || text.count >= 42 || w.end - line!.start >= 6 {
+                out.append(line!)
+                line = nil
+            }
+        }
+        return out
+    }
+}
+
+public extension Array where Element == Caption {
+    /// SubRip text for the edit: each line at its composition time (cuts and speed applied). A line cut in part keeps what
+    /// is left, one in removed material is dropped.
+    func srt(clips: [ClipRange]) -> String {
+        func time(_ s: Double) -> String {
+            let ms = Int((s * 1000).rounded())
+            return String(format: "%02d:%02d:%02d,%03d", ms / 3_600_000, ms / 60_000 % 60, ms / 1000 % 60, ms % 1000)
+        }
+        let kept = compactMap { c -> (Double, Double, String)? in
+            let a = clips.compositionTime(c.start), b = clips.compositionTime(c.end)
+            return b - a > Project.frameDuration ? (a, b, c.text) : nil
+        }
+        return kept.enumerated().map { "\($0.offset + 1)\n\(time($0.element.0)) --> \(time($0.element.1))\n\($0.element.2)\n" }.joined(separator: "\n")
     }
 }
 

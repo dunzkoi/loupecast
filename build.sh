@@ -52,6 +52,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 	<string>Loupecast needs access to record your microphone.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Loupecast needs camera access to show your face in a corner of the recording.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Loupecast turns your narration into captions on this Mac. The sound is not sent anywhere.</string>
 </dict>
 </plist>
 PLIST

@@ -51,6 +51,9 @@
 //                                 the panel) before the snapshot; LOUPECAST_BACKGROUND_UNDO=1 undoes it, then closes the
 //                                 editor and lists the background files left in the recording folder
 //   LOUPECAST_MOTION_BLUR=0|1         switch 모션 블러 through the editor (one undo step) before the snapshot
+//   LOUPECAST_CAPTIONS=1              print whether 자막 만들기 is enabled, the speech recognizer's state, the microphone
+//                                 audio it would hear; then give the edit captions as if recognized and export the SRT
+//                                 (prints the file); before the snapshot
 //   LOUPECAST_QUIT_TEST=<dir>         export from that recording's editor, close the editor, then quit;
 //                                 LOUPECAST_QUIT_ANSWER=cancel|quit answers the export alert,
 //                                 LOUPECAST_QUIT_EDIT=<dir> splits a second recording right before quitting
@@ -73,6 +76,7 @@ import AppKit
 import Carbon.HIToolbox
 import LoupecastCore
 import LoupecastRender
+import Speech
 import SwiftUI
 
 @MainActor
@@ -356,6 +360,31 @@ enum DebugHooks {
                     print("LOUPECAST: menu \(type(of: b)) \(lines(menu, ""))")
                 }
             }
+        }
+        if env["LOUPECAST_CAPTIONS"] != nil {
+            func views(_ v: NSView) -> [NSView] { [v] + v.subviews.flatMap(views) }
+            // SwiftUI keeps the label off the NSView: 자막 만들기 is the leftmost bordered button (then the speaker, then 줌 추가)
+            let x = { (v: NSView) in v.convert(v.bounds, to: nil).minX }
+            let button = views(editor.window.contentView!).compactMap { $0 as? NSButton }
+                .filter { String(describing: type(of: $0)) == "SwiftUIAppKitButton" && $0.isBordered }.min { x($0) < x($1) }
+            let r = Transcriber.recognizer
+            print("LOUPECAST: captions button enabled \(button?.isEnabled.description ?? "not found"), microphone \(m.hasMicrophone), "
+                  + "recognizer \(r?.locale.identifier ?? "none") on device \(r?.supportsOnDeviceRecognition ?? false), authorization \(SFSpeechRecognizer.authorizationStatus().rawValue)")
+            do {
+                let audio = try await Transcriber.microphoneAudio(m.videoURL)
+                let a = AVURLAsset(url: audio), t = try await a.loadTracks(withMediaType: .audio).first
+                let fmt = try await t?.load(.formatDescriptions).first
+                print("LOUPECAST: microphone audio \(audio.lastPathComponent) \(String(format: "%.2f", try await a.load(.duration).seconds)) s, "
+                      + "\(fmt.flatMap { CMAudioFormatDescriptionGetStreamBasicDescription($0)?.pointee.mChannelsPerFrame } ?? 0) channel(s)")
+                try? FileManager.default.removeItem(at: audio)
+            } catch { print("LOUPECAST: microphone audio failed: \(describe(error))") }
+            let words: [(start: Double, end: Double, text: String)] = [(2.2, 2.5, "Open"), (2.55, 2.9, "the"), (2.95, 3.4, "editor."),
+                                                                       (5.0, 5.4, "Then"), (5.45, 6.0, "export.")]
+            m.edit("Create Captions") { $0.captions = Caption.lines(words) }
+            m.exportSRT()
+            if case .done(let url) = m.exportState {
+                print("LOUPECAST: srt \(url.lastPathComponent), undo \(m.undo.undoActionName)\n\((try? String(contentsOf: url, encoding: .utf8)) ?? "")")
+            } else { print("LOUPECAST: srt export \(m.exportState)") }
         }
         switch env["LOUPECAST_SELECT"] ?? "zoom" {
         case "clip": m.selection = m.project.clips.first.map { .clip($0.id) } ?? .none
