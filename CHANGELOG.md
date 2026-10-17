@@ -27,30 +27,6 @@
 * a project file can't make the app read files outside its recording folder ([f3c55f6](https://github.com/dunzkoi/loupecast/commit/f3c55f68105319ce3acee6d31fb9a99eb74630c7))
 * the camera menu's Size heading is in Korean on Korean systems ([17b46aa](https://github.com/dunzkoi/loupecast/commit/17b46aa73a3bcf0610dcc4df7dbdf26fe21fc951))
 
-
-### Changes
-
-* ⌘·⌃·⌥가 눌린 단축키만 기록해 영상 아래쪽에 키 배지로 보여 준다 ([58e7623](https://github.com/dunzkoi/loupecast/commit/58e76237b1560725236116813b99485aae2f307b))
-* CI의 Swift 6.3에서 Render 테스트가 컴파일되게 고쳐 v0.8.0 릴리스 PR을 통과시킨다 ([18d3dea](https://github.com/dunzkoi/loupecast/commit/18d3dea40ddb4c96144662810d238d59fe340cd9))
-* MP4 내보내기에 4K(2160p) 해상도 선택을 추가한다 ([a720246](https://github.com/dunzkoi/loupecast/commit/a720246cd9662725104093f8bc081ca1f1489b78))
-* MP4 내보내기에서 30fps와 목표 파일 크기(10MB·25MB 이하)를 고를 수 있게 한다 ([83c909a](https://github.com/dunzkoi/loupecast/commit/83c909a19a2117af2fcf84b56c627980a32f28f2))
-* README와 랜딩 페이지에 0.8.0 기능을 반영하고 비교표를 갱신한다 ([c54a5c5](https://github.com/dunzkoi/loupecast/commit/c54a5c549dfae761cd1d7e9f8e9a780fad9adfbc))
-* release-as 0.8.0을 지우고 0.8.0 릴리스 노트의 한국어 fsd 줄을 영어 항목으로 정리한다 ([ec52ae2](https://github.com/dunzkoi/loupecast/commit/ec52ae261256dfa485da4e0f7bbddd7dfda6756c))
-* UI 문자열마다 한국어 줄이 있는지 Core 테스트로 검사하고 빠진 'Size'를 채운다 ([17b46aa](https://github.com/dunzkoi/loupecast/commit/17b46aa73a3bcf0610dcc4df7dbdf26fe21fc951))
-* 녹화 시작 전에 3초 카운트다운을 보여 주고 Esc로 취소할 수 있게 한다 ([ab4a72a](https://github.com/dunzkoi/loupecast/commit/ab4a72a2cf184513ca02e284593b8a169cfb741f))
-* 녹화에서 시스템 커서를 빼고 합성 단계에서 부드럽고 크게 다시 그린다 ([f3c55f6](https://github.com/dunzkoi/loupecast/commit/f3c55f68105319ce3acee6d31fb9a99eb74630c7))
-* 배경을 내 이미지(배경화면·브랜드 이미지)로 고를 수 있게 한다 ([2f2fa8e](https://github.com/dunzkoi/loupecast/commit/2f2fa8e45caa7f543b209836fa3c2fda8e1271fb))
-* 세 번째 내보내기가 끝나면 한 번만 GitHub 별을 부탁하는 줄을 보여 준다 ([7683285](https://github.com/dunzkoi/loupecast/commit/768328515a7347920161729cc2aa4d9c82d330f4))
-* 영역 지정 오버레이에서 창을 클릭하면 그 창 크기로 영역이 잡히게 한다 ([5fc8611](https://github.com/dunzkoi/loupecast/commit/5fc86111108742eae6aca24b48493f83f3a4f7ed))
-* 자막 1단계: 마이크 음성을 기기 안에서 받아 적어 project.json과 SRT로 내보낸다 ([2841c81](https://github.com/dunzkoi/loupecast/commit/2841c812030ddc6c01a150acd74e1e6ba4cc0a75))
-* 자막 1단계: 마이크 음성을 기기 안에서 받아 적어 project.json과 SRT로 내보낸다 ([f89efe5](https://github.com/dunzkoi/loupecast/commit/f89efe5f947cd52836c241bad0604e39fdf8e870))
-* 줌·이동 중 카메라 속도에 비례하는 모션 블러를 넣는다 ([ed5fe76](https://github.com/dunzkoi/loupecast/commit/ed5fe761db80623a83c25859dd6d2d69214d8903))
-* 직전에 고른 비율·배경·화면 채우기·카메라 위치를 새 녹화의 기본값으로 쓴다 ([4a8cf81](https://github.com/dunzkoi/loupecast/commit/4a8cf81a7f9a11df6fff96cb81252fb49a23f057))
-* 클릭한 지점에 퍼지는 원을 그려 영상에서 클릭이 보이게 한다 ([96557de](https://github.com/dunzkoi/loupecast/commit/96557de8f907b04e040fdc33ed56cda6b7cd8844))
-* 타이핑하는 구간을 감지해 입력 위치로 자동 줌을 만든다 ([b794bfd](https://github.com/dunzkoi/loupecast/commit/b794bfd471e0e7d154de3dfcf6c9883694291ce8))
-* 편집기 단축키를 한눈에 보는 안내 팝오버를 추가한다 ([18ae90e](https://github.com/dunzkoi/loupecast/commit/18ae90e5480e95c1167746c89de15ae78700e4c7))
-* 편집기에서 녹화 이름을 바꾸고 내보낸 파일 이름에 그 이름을 쓴다 ([a863827](https://github.com/dunzkoi/loupecast/commit/a863827db7515d933141907f062664dd0480768a))
-
 ## [0.8.0](https://github.com/dunzkoi/loupecast/compare/v0.7.0...v0.8.0) (2026-10-14)
 
 

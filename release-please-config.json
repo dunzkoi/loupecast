@@ -25,7 +25,8 @@
         },
         {
           "type": "fsd",
-          "section": "Changes"
+          "section": "Changes",
+          "hidden": true
         },
         {
           "type": "docs",

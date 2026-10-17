@@ -83,10 +83,11 @@ swift build --build-tests && swift test   # Core ~0.1 s; Render 10-40 s, each ex
 - PR titles follow Conventional Commits (`pr-title.yml`); squash merges; release-please owns `CHANGELOG.md`
   sections for releases and `version.txt`.
 - Commits that land on `main` directly need a Conventional title too, or release-please skips them and no release
-  goes out. `fsd:` runner commits (title fixed by the runner) count through the `fsd` → "Changes" entry in
-  `release-please-config.json`; an English `feat: …`/`fix: …` line after a blank line in the body adds a proper
-  Features/Bug Fixes entry. Without that line the release notes carry the Korean `fsd:` title under "Changes"
-  (0.8.0 shipped 32 such lines, rewritten in English by hand afterwards). Never hand-write an Unreleased block in
+  goes out. `fsd:` runner commits (title fixed by the runner) are the hidden `fsd` section of
+  `release-please-config.json`: their Korean titles never reach the release notes and make no release on their own
+  (0.8.0 and 0.9.0 carried them under "Changes" next to the English entries). A user-visible change therefore needs an
+  English `feat: …`/`fix: …` line after a blank line in the body: that line is its Features/Bug Fixes entry and what
+  makes the release. `chore:`/`docs:`/`test:` lines stay hidden. Never hand-write an Unreleased block in
   `CHANGELOG.md`: release-please inserts each release below it, so it stays on top forever.
 
 ## Decisions
