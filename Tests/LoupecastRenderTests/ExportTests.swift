@@ -869,7 +869,10 @@ final class ExportTests: XCTestCase {
         let ctx = CGContext(data: &px, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
                             space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
         ctx.draw(cg, in: CGRect(x: -rect.minX, y: rect.maxY - Double(cg.height), width: Double(cg.width), height: Double(cg.height)))
-        return stride(from: 0, to: px.count, by: 4).map { (Int(px[$0]), Int(px[$0 + 1]), Int(px[$0 + 2])) }
+        // explicit types: the inferred tuple map timed out the CI type checker ("unable to type-check … in reasonable time")
+        return stride(from: 0, to: px.count, by: 4).map { (i: Int) -> (r: Int, g: Int, b: Int) in
+            (r: Int(px[i]), g: Int(px[i + 1]), b: Int(px[i + 2]))
+        }
     }
 
     /// The caption's box in canvas pixels, top-left origin, inset past its rounded corners.
