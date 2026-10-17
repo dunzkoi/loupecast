@@ -603,6 +603,11 @@ public extension Array where Element == ClipRange {
         zip(zip(self, dropFirst()), compositionStarts.dropFirst()).compactMap { pair, s in pair.0.end < pair.1.start - 1e-9 ? s : nil }
     }
 
+    /// What is cut out before the first clip and between clips (not after the last).
+    var gaps: [ClipRange] {
+        zip([0] + map(\.end), map(\.start)).filter { $1 > $0 }.map { ClipRange(start: $0, end: $1) }
+    }
+
     /// Material actually kept: split points (adjacent clips at the same speed) joined.
     var keptRanges: [ClipRange] {
         reduce(into: []) { out, c in

@@ -334,6 +334,15 @@ final class ClipTests: XCTestCase {
         XCTAssertEqual(cut.clips.map { [$0.start, $0.end, $0.speed] }, [[0, 2.3, 1], [2.3, 3, 4], [8, 19.2, 1]])
     }
 
+    /// Crash recovery reads the pauses back from recovery.json's clips: the gaps between them (and before the first) are
+    /// exactly the pauses, a pause at the start included.
+    func testPausesAreTheClipsGaps() {
+        for paused in [[ClipRange(start: 6, end: 7)], [ClipRange(start: 0, end: 1), ClipRange(start: 4, end: 5.5)]] {
+            let clips = Project(name: "t", duration: 12, pixelWidth: 100, pixelHeight: 50, pointPixelScale: 2, cursor: [], clicks: [], paused: paused).clips
+            XCTAssertEqual(clips.gaps.map { [$0.start, $0.end] }, paused.map { [$0.start, $0.end] })
+        }
+    }
+
     // MARK: key presses (never stored)
 
     /// A file that still lists key presses opens, a file without the field opens, and saving writes an empty list:

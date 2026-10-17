@@ -746,7 +746,8 @@ enum Library {
     @MainActor private static var usage: (changed: Date?, bytes: Int64)?
 
     /// Folders a crash left behind: no project.json. A movie that plays (the recorder writes a fragment every
-    /// 5 s) becomes a project without input events, so it shows up in 최근 녹화; anything else goes to the Trash.
+    /// 5 s) becomes a project with the events recovery.json saved by then, so it shows up in 최근 녹화; anything else goes
+    /// to the Trash.
     /// Folders written to in the last minute are skipped: another Loupecast may be recording into one.
     static func recoverCrashed() async {
         let fm = FileManager.default
@@ -765,13 +766,23 @@ enum Library {
         }
     }
 
+    /// The movie's length with recovery.json's events up to it (the movie keeps all but its last ≤ 5 s, the events their
+    /// last ≤ 5 s), its pauses cut and zooms made as for a new recording. A recovery.json from the start only (or none)
+    /// gives a project without events.
     private static func recovered(_ dir: URL, movie: URL) async -> Project? {
         guard let video = try? await AVURLAsset(url: movie).loadTracks(withMediaType: .video).first,
               let (range, size) = try? await video.load(.timeRange, .naturalSize), range.end.seconds > 0 else { return nil }
-        let base = try? Project.load(from: dir.appendingPathComponent(Recorder.recoveryFile))
-        return Project(name: String(localized: "\(base?.name ?? Recorder.name(Date())) (Recovered)"), duration: range.end.seconds,
-                       pixelWidth: base?.pixelWidth ?? Int(size.width), pixelHeight: base?.pixelHeight ?? Int(size.height),
-                       pointPixelScale: base?.pointPixelScale ?? 1, cursor: [], clicks: [])
+        let base = try? Project.load(from: dir.appendingPathComponent(Recorder.recoveryFile)), d = range.end.seconds
+        var p = Project(name: String(localized: "\(base?.name ?? Recorder.name(Date())) (Recovered)"), duration: d,
+                        pixelWidth: base?.pixelWidth ?? Int(size.width), pixelHeight: base?.pixelHeight ?? Int(size.height),
+                        pointPixelScale: base?.pointPixelScale ?? 1, cursor: (base?.cursor ?? []).filter { $0.t <= d },
+                        clicks: (base?.clicks ?? []).filter { $0.t <= d }, shortcuts: (base?.shortcuts ?? []).filter { $0.t <= d },
+                        typing: (base?.typing ?? []).filter { $0.start <= d }.map { TypingSpan(start: $0.start, end: min($0.end, d), focus: $0.focus) },
+                        paused: base?.clips.gaps ?? [])                // recovery.json cuts its pauses
+        p.cursorOverlay = base?.cursorOverlay
+        p.motionBlur = true                                          // as Recorder.stop does
+        LookDefaults.saved?.apply(to: &p)
+        return p
     }
 
     /// A debug run on LOUPECAST_RECORDINGS_DIR moves to "<that dir>-trash" instead, so tests never fill the user's Trash.

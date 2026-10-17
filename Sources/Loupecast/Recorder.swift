@@ -14,8 +14,11 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
         return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Loupecast/Recordings", isDirectory: true)
     }
-    /// An event-free project written at start: the size and name a crashed recording is recovered with.
+    /// The project so far, for crash recovery: written at start (size and name), then every 5 s like the movie's fragments
+    /// with the input events, the cursor's shapes and the pauses that ended.
     static let recoveryFile = "recovery.json"
+    /// Encodes and writes recovery.json off the main thread, one save after another.
+    static let recoverySaves = DispatchQueue(label: "loupecast.recovery", qos: .utility)
 
     let dir: URL
     var onStreamError: (@MainActor (Error) -> Void)?
@@ -31,6 +34,7 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
     private var camera: CameraRecorder?
     private let pixelSize: (Int, Int)
     private let scale: Double
+    private let recoveryName = Recorder.name(Date())
     // capture queue only
     private var sessionStart: CMTime?
     private var lastVideo = CMTime.invalid
@@ -41,6 +45,7 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
     private var log = InputLog()
     private var monitors: [Any] = []
     private var cursorTimer: Timer?
+    private var recoveryTimer: Timer?
     private var cursorShapes: CursorShapes?
     private var ticks = 0
     /// The stretch of typing in progress (host clock) and where its text goes; the last click, global coordinates.
@@ -145,7 +150,7 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
             writer.add(i)
         }
         guard writer.startWriting() else { throw writer.error ?? LoupecastError("Couldn’t create the recording file.") }
-        try Project(name: Self.name(Date()), duration: 0, pixelWidth: w, pixelHeight: h, pointPixelScale: scale, cursor: [], clicks: [])
+        try Project(name: recoveryName, duration: 0, pixelWidth: w, pixelHeight: h, pointPixelScale: scale, cursor: [], clicks: [])
             .save(to: dir.appendingPathComponent(Self.recoveryFile))
 
         super.init()
@@ -249,6 +254,41 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
         }
         RunLoop.main.add(timer, forMode: .common)
         cursorTimer = timer
+        let recovery = Timer(timeInterval: 5, repeats: true) { [weak self] _ in MainActor.assumeIsolated { self?.saveRecovery() } }
+        RunLoop.main.add(recovery, forMode: .common)
+        recoveryTimer = recovery
+    }
+
+    /// recovery.json with what was recorded so far. The main thread only copies the log (the next append then copies its
+    /// events once, ~10 MB an hour in); the start and the pauses come from the capture queue, and nothing is written before
+    /// the first frame.
+    /// ponytail: rewrites the whole log every 5 s (~13 MB an hour in); an append-only file if that ever costs too much.
+    @MainActor private func saveRecovery() {
+        let log = log, shapes = cursorShapes.map { ($0.images, $0.changes) }
+        queue.async { [self] in
+            guard let start = sessionStart?.seconds else { return }
+            let paused = pauses.filter { $0.end.isValid }.map { ClipRange(start: max(0, $0.start.seconds - start), end: $0.end.seconds - start) }
+            let now = CMClockGetTime(CMClockGetHostTimeClock()).seconds
+            Self.recoverySaves.async { [self] in
+                Self.writeRecovery(Self.project(name: recoveryName, log: log, start: start, duration: now - start, display: display, pixels: pixelSize,
+                                                scale: scale, paused: paused),
+                                   shapes: shapes.map { CursorShapes.overlay($0.0, $0.1, sessionStartHost: start) }, to: dir)
+            }
+        }
+    }
+
+    static func writeRecovery(_ project: Project, shapes: CursorOverlay?, to dir: URL) {
+        var p = project
+        p.cursorOverlay = shapes
+        do { try p.save(to: dir.appendingPathComponent(recoveryFile)) } catch { NSLog("Loupecast: recovery.json not saved: %@", describe(error)) }
+    }
+
+    /// The input log from `start` (host clock) as a project `duration` long; `paused` in recording time is cut.
+    static func project(name: String, log: InputLog, start: Double, duration: Double, display: DisplayBounds, pixels: (Int, Int), scale: Double,
+                        paused: [ClipRange]) -> Project {
+        let events = log.relativized(sessionStartHost: start, duration: duration, display: display)
+        return Project(name: name, duration: duration, pixelWidth: pixels.0, pixelHeight: pixels.1, pointPixelScale: scale,
+                       cursor: events.cursor, clicks: events.clicks, shortcuts: events.shortcuts, typing: events.typing, paused: paused)
     }
 
     /// One more key of typing: extends the current stretch, or (after 0.8 s without a key) logs it and starts a new one
@@ -319,6 +359,8 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
         let stopHost = CMClockGetTime(CMClockGetHostTimeClock())
         cursorTimer?.invalidate()
         cursorTimer = nil
+        recoveryTimer?.invalidate()
+        recoveryTimer = nil
         monitors.forEach(NSEvent.removeMonitor)
         monitors = []
         endTyping()
@@ -351,12 +393,9 @@ final class Recorder: NSObject, SCStreamOutput, SCStreamDelegate, @unchecked Sen
         #if DEBUG
         Self.lastSessionStartHost = start.seconds
         #endif
-        let events = log.relativized(sessionStartHost: start.seconds, duration: duration, display: display)
         let paused = pauses.map { ClipRange(start: max(0, ($0.start - start).seconds), end: (($0.end.isValid ? $0.end : end) - start).seconds) }
-        var project = Project(name: Self.name(Date()), duration: duration,
-                              pixelWidth: pixelSize.0, pixelHeight: pixelSize.1, pointPixelScale: scale,
-                              cursor: events.cursor, clicks: events.clicks, shortcuts: events.shortcuts, typing: events.typing,
-                              paused: paused)
+        var project = Self.project(name: Self.name(Date()), log: log, start: start.seconds, duration: duration, display: display, pixels: pixelSize,
+                                   scale: scale, paused: paused)
         project.camera = cameraStart.map { CameraOverlay(offset: $0 - start.seconds) }   // recording-relative, like everything stored
         project.cursorOverlay = cursorShapes?.overlay(sessionStartHost: start.seconds)
         project.motionBlur = true                        // new recordings blur their zooms (older files stay sharp)
@@ -408,9 +447,11 @@ final class CursorShapes {
     }
     private var keys: [Int] = []
 
+    func overlay(sessionStartHost: Double) -> CursorOverlay { Self.overlay(images, changes, sessionStartHost: sessionStartHost) }
+
     /// Recording-relative; a shape from before the first frame shows from 0. New recordings hide the resting cursor and
     /// press it on clicks.
-    func overlay(sessionStartHost: Double) -> CursorOverlay {
+    nonisolated static func overlay(_ images: [CursorOverlay.Image], _ changes: [(host: Double, image: Int)], sessionStartHost: Double) -> CursorOverlay {
         var o = CursorOverlay(images: images, shapes: changes.map { .init(t: max(0, $0.host - sessionStartHost), image: $0.image) })
         o.hideIdle = true; o.clickPress = true
         return o

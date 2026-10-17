@@ -91,9 +91,12 @@ swift build --build-tests && swift test   # Core ~0.1 s; Render 10-40 s, each ex
 
 ## Decisions
 
-- Recorder writes a movie fragment every 5 s and an event-free `recovery.json` at start; at launch, folders
-  without project.json become "… (Recovered)" projects or go to the Trash (folders touched in the last minute are
-  left alone, another instance may be recording).
+- Recorder writes a movie fragment every 5 s, and `recovery.json` (a Project) at start and then every 5 s with the events
+  so far, the cursor's shapes and the pauses that ended (cut, so they are its clips' gaps); the main thread only takes
+  the log (~2 ms an hour in, for the next append's copy), `Recorder.recoverySaves` encodes and writes it (~0.5 s, 11 MB
+  an hour in). At launch, folders without project.json become "… (Recovered)" projects with those events up to the
+  movie's end, the pauses cut and zooms made as for a new recording, or go to the Trash (folders touched in the last
+  minute are left alone, another instance may be recording). `LOUPECAST_RECOVERY_TEST` checks both.
 - An export keeps running after its editor closes (`EditorModel.exports`); the updater waits for it, quitting
   asks first and deletes the partial file if cancelled. Export names never reuse an existing or running file.
 - The synthetic test movie drives each writer input with `requestMediaDataWhenReady`; polling one input while
@@ -125,8 +128,10 @@ swift build --build-tests && swift test   # Core ~0.1 s; Render 10-40 s, each ex
 - Recording-path changes (start-failure cleanup, finishing a recording on quit, pause/resume dropping samples, area
   recording's `sourceRect`, the cursor left out of the capture with its shapes saved by `CursorShapes`) were
   verified only by reading the code and with synthetic movies here; they need a machine with the Screen Recording
-  grant. The webcam capture (`CameraRecorder`) also needs the Camera grant; only its compositing is tested. A crash while paused recovers without the pause cut (recovery.json has no pauses).
-  A recovered recording has no cursor at all: the capture leaves it out and recovery keeps no samples or shapes.
+  grant. The webcam capture (`CameraRecorder`) also needs the Camera grant; only its compositing is tested. The 5 s
+  recovery save's timer and capture-queue hop are read, not run; a pause still open at the crash isn't cut.
+  The synthetic movie with a paused gap (`gap:` in the Render tests) comes out with its audio packed back to back (8 s,
+  no gap): if the recorder's paused audio does the same, sound after a pause runs early. Check on a real recording.
 - 자막 만들기 itself (SFSpeechRecognizer on the microphone m4a) needs the Speech Recognition grant, which this process
   doesn't have: the mic extraction, the line grouping, the SRT timing and the button state are tested, the recognition and
   whether partial results carry times (the progress bar) are not. The lines are drawn on the video (Effects menu → 자막

@@ -71,6 +71,10 @@
 //                                 recording does, then the system's current one; print the overlay, quit
 //   LOUPECAST_COUNTDOWN=<png>         run the start countdown off screen: save it at 2, press Esc (prints false), then let
 //                                 it run out (prints true and how long it took); quit
+//   LOUPECAST_RECOVERY_TEST=<movie>   time one recovery.json save an hour into a recording (the main thread's share and the
+//                                 save queue's), then put <movie> (10 s) into two crashed folders in LOUPECAST_RECORDINGS_DIR:
+//                                 one with recovery.json as the recorder writes it 12 s in (cursor, clicks, a shape, a pause
+//                                 6–7 s), one with the file written at start; recover them as a launch does, print them, quit
 //   LOUPECAST_EDITOR_TEST=<dir>       trim drag + button click + Space/D/Delete/⌘Z through the window's key
 //                                 handler, off screen and without activating; logs each state change
 import AVFoundation
@@ -101,6 +105,7 @@ enum DebugHooks {
             }
         }
         if let path = env["LOUPECAST_EDITOR_TEST"] { Task { await editorTest(URL(fileURLWithPath: path)) } }
+        if let path = env["LOUPECAST_RECOVERY_TEST"] { Task { await recoveryTest(movie: URL(fileURLWithPath: path)) } }
         if let path = env["LOUPECAST_CURSOR_PROBE"] {
             let shapes = CursorShapes(dir: URL(fileURLWithPath: path))
             for c in [NSCursor.arrow, .iBeam, .arrow] { shapes.note(c) }
@@ -493,6 +498,70 @@ enum DebugHooks {
             print("LOUPECAST: no preview frame")
         }
         write(rep, to: url)
+    }
+
+    static func recoveryTest(movie: URL) async {
+        try? await Task.sleep(for: .seconds(1))                     // after the launch's own recovery pass
+        let fm = FileManager.default, display = DisplayBounds(x: 0, y: 0, width: 800, height: 500), host0 = 1000.0
+        func moves(_ seconds: Double) -> InputLog {
+            var log = InputLog()
+            for i in 0..<Int(seconds * 60) {
+                let t = Double(i) / 60
+                log.append(.init(host: host0 + t, gx: 100 + 30 * t.truncatingRemainder(dividingBy: 10), gy: 200, kind: .move))
+            }
+            return log
+        }
+        // an hour in: what saveRecovery costs the main thread (taking the log, then the next append copying its events) and the queue
+        var hour = moves(3600)
+        for i in 0..<1200 { hour.append(.init(host: host0 + Double(i) * 3, gx: 300, gy: 200, kind: .click(.left))) }
+        let scratch = fm.temporaryDirectory.appendingPathComponent("loupecast-recovery-\(UUID().uuidString)")
+        try? fm.createDirectory(at: scratch, withIntermediateDirectories: true)
+        let started = ProcessInfo.processInfo.systemUptime
+        let taken = hour
+        let saving: Double = await withCheckedContinuation { done in
+            Recorder.recoverySaves.async {
+                let t = ProcessInfo.processInfo.systemUptime
+                Recorder.writeRecovery(Recorder.project(name: "Hour", log: taken, start: host0, duration: 3600, display: display, pixels: (1600, 1000),
+                                                        scale: 2, paused: []), shapes: nil, to: scratch)
+                done.resume(returning: ProcessInfo.processInfo.systemUptime - t)
+            }
+            let dispatched = ProcessInfo.processInfo.systemUptime
+            hour.append(.init(host: host0 + 3600, gx: 0, gy: 0, kind: .move))
+            print("LOUPECAST: recovery an hour in: main thread \(String(format: "%.2f", (dispatched - started) * 1000)) ms to take the log, "
+                  + "\(String(format: "%.2f", (ProcessInfo.processInfo.systemUptime - dispatched) * 1000)) ms for the next append")
+        }
+        let bytes = (try? fm.attributesOfItem(atPath: scratch.appendingPathComponent(Recorder.recoveryFile).path)[.size] as? Int) ?? 0
+        print("LOUPECAST: recovery an hour in: save queue \(Int(saving * 1000)) ms, \(bytes / 1_000_000) MB")
+        try? fm.removeItem(at: scratch)
+
+        let root = Recorder.recordingsDir, events = root.appendingPathComponent("crashed-events"), start = root.appendingPathComponent("crashed-start")
+        for d in [events, start] {
+            try? fm.removeItem(at: d)
+            try? fm.createDirectory(at: d, withIntermediateDirectories: true)
+            try? fm.copyItem(at: movie, to: d.appendingPathComponent("recording.mov"))
+        }
+        // 12 s in (the movie kept 10): clicks at 3 and 3.5 s, one at 6.5 s inside the pause and one at 11 s past the movie
+        var log = moves(12)
+        for t in [3, 3.5, 6.5, 11] { log.append(.init(host: host0 + t, gx: 400, gy: 250, kind: .click(.left))) }
+        let shapes = CursorShapes(dir: events)
+        shapes.note(.arrow)
+        Recorder.writeRecovery(Recorder.project(name: "Crashed", log: log, start: host0, duration: 12, display: display, pixels: (1600, 1000), scale: 2,
+                                                paused: [ClipRange(start: 6, end: 7)]),
+                               shapes: shapes.overlay(sessionStartHost: host0), to: events)
+        try? Project(name: "Started", duration: 0, pixelWidth: 1600, pixelHeight: 1000, pointPixelScale: 2, cursor: [], clicks: [])
+            .save(to: start.appendingPathComponent(Recorder.recoveryFile))
+        for d in [events, start] {                                   // a minute old, or recovery leaves them to the recorder
+            for u in [d.appendingPathComponent("recording.mov"), d] { try? fm.setAttributes([.modificationDate: Date(timeIntervalSinceNow: -120)], ofItemAtPath: u.path) }
+        }
+        await Library.recoverCrashed()
+        for d in [events, start] {
+            guard let p = try? Project.load(from: d.appendingPathComponent(Project.fileName)) else { print("LOUPECAST: \(d.lastPathComponent) not recovered"); continue }
+            print("LOUPECAST: \(d.lastPathComponent) → \(p.name), \(String(format: "%.2f", p.duration)) s, \(p.cursor.count) cursor samples "
+                  + "(last \(String(format: "%.2f", p.cursor.last?.t ?? 0))), clicks \(p.clicks.map(\.t)), cursor shapes \(p.cursorOverlay?.images.map(\.file) ?? []) "
+                  + "hide idle \(p.cursorOverlay?.hideIdle.description ?? "-"), clips \(p.clips.map { String(format: "%.2f…%.2f", $0.start, $0.end) }), "
+                  + "zooms \(p.zooms.map { String(format: "%.2f…%.2f", $0.start, $0.end) }), motion blur \(p.motionBlur)")
+        }
+        exit(0)
     }
 
     /// Run as a real bundle via `open -g` (another app frontmost): the stop path's openEditor, then
