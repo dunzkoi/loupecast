@@ -819,6 +819,135 @@ final class ExportTests: XCTestCase {
         XCTAssertEqual(dark(frame(1.5)), 0, "hidden in the editor")
     }
 
+    // MARK: captions
+
+    /// sRGB 8-bit colors in `rect` (top-left origin), row by row: one draw instead of one per pixel.
+    static func pixels(_ cg: CGImage, in rect: CGRect) -> [(r: Int, g: Int, b: Int)] {
+        let w = Int(rect.width), h = Int(rect.height)
+        var px = [UInt8](repeating: 0, count: w * h * 4)
+        let ctx = CGContext(data: &px, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
+                            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        ctx.draw(cg, in: CGRect(x: -rect.minX, y: rect.maxY - Double(cg.height), width: Double(cg.width), height: Double(cg.height)))
+        return stride(from: 0, to: px.count, by: 4).map { (Int(px[$0]), Int(px[$0 + 1]), Int(px[$0 + 2])) }
+    }
+
+    /// The caption's box in canvas pixels, top-left origin, inset past its rounded corners.
+    static func captionBox(_ text: String, canvas: CGSize) -> CGRect {
+        let e = LoupecastCompositor.caption(text, canvas: canvas).extent
+        return CGRect(x: e.minX, y: canvas.height - e.maxY, width: e.width, height: e.height).insetBy(dx: e.height / 2, dy: 3).integral
+    }
+
+    static func isWhite(_ p: (r: Int, g: Int, b: Int)) -> Bool { min(p.r, p.g, p.b) > 240 }
+
+    /// Long lines wrap inside 80 % of a 9:16 canvas on at most two lines (Korean too), centered at the bottom; while a
+    /// shortcut shows with a caption, its badge sits above the caption box; with 자막 표시 off the frame is the same as
+    /// without captions.
+    func testCaptionPlate() {
+        let tall = Composer.renderSize(.portrait), short = min(tall.width, tall.height)
+        let twoLines = LoupecastCompositor.plate("A\nB", size: 0.05 * short, canvas: tall).extent.height
+        for text in ["Click Export, then pick the frame rate and a size limit for the video",
+                     "내보내기를 누르고 프레임 속도와 파일 크기 제한을 고른 다음 저장할 위치를 정합니다 그리고 확인"] {
+            let e = LoupecastCompositor.caption(text, canvas: tall).extent
+            print("caption plate 9:16: \(e) for \(text.count) characters")
+            XCTAssertLessThanOrEqual(e.width, 0.8 * tall.width + 1, "at most 80 % of the width")
+            XCTAssertLessThanOrEqual(e.height, twoLines + 1, "two lines at most")
+            XCTAssertEqual(e.midX, tall.width / 2, accuracy: 1, "centered")
+            XCTAssertEqual(e.minY, (0.07 * short).rounded(), "at the bottom")
+        }
+
+        var project = Self.makeProject()
+        project.showClicks = false
+        let text = "Open the editor"
+        project.captions = [Caption(start: 3.2, end: 4.6, text: text)]           // composition 1.2–2.6 s
+        project.shortcuts = [Shortcut(t: 3.4, label: "⌘ ⇧ S")]
+        let canvas = Composer.renderSize(project.aspect), c = LoupecastCompositor()
+        let light = CIImage(color: CIColor(red: 0.9, green: 0.9, blue: 0.9)).cropped(to: CGRect(origin: .zero, size: Self.size))
+        func frame(_ p: Project, _ t: Double) -> CIImage { c.compose(light, face: nil, at: t, canvas: canvas, Self.instruction(p)) }
+        func image(_ p: Project, _ t: Double) -> CGImage { LoupecastCompositor.context.createCGImage(frame(p, t), from: CGRect(origin: .zero, size: canvas))! }
+        let box = Self.captionBox(text, canvas: canvas), badge = LoupecastCompositor.badge("⌘ ⇧ S", canvas: canvas).extent
+        let raised = canvas.height - (LoupecastCompositor.caption(text, canvas: canvas).extent.maxY + 0.02 * min(canvas.width, canvas.height) + badge.height / 2)
+        func dark(_ cg: CGImage, row: Double) -> Int {
+            Self.pixels(cg, in: CGRect(x: badge.minX + 4, y: row, width: badge.width - 8, height: 1)).filter { $0.r + $0.g + $0.b < 500 }.count
+        }
+        let both = image(project, 1.7)
+        var captionOnly = project
+        captionOnly.shortcuts = []
+        print("caption plate 16:9: box \(box), badge row \(raised): dark \(dark(both, row: raised)) with the shortcut, \(dark(image(captionOnly, 1.7), row: raised)) without")
+        XCTAssertGreaterThan(Self.pixels(both, in: box).filter(Self.isWhite).count, 50, "white text on the box")
+        XCTAssertGreaterThan(dark(both, row: raised), Int(badge.width) / 3, "the badge moved above the caption")
+        XCTAssertEqual(dark(image(captionOnly, 1.7), row: raised), 0, "nothing there without the shortcut")
+        XCTAssertEqual(Self.pixels(image(project, 3.0), in: box).filter(Self.isWhite).count, 0, "gone after the line ends")
+
+        var hidden = project, none = project
+        hidden.showCaptions = false
+        none.captions = []
+        let noise = Self.meanDifference(frame(none, 1.7), frame(none, 1.7), canvas: canvas)
+        XCTAssertEqual(Self.meanDifference(frame(hidden, 1.7), frame(none, 1.7), canvas: canvas), noise, accuracy: 1e-9,
+                       "자막 표시 off: as if there were none (the same as rendering that twice)")
+    }
+
+    /// A caption at recording 3.2–4.6 s (composition 1.2–2.6) in the exported MP4: white text on the box at the bottom while
+    /// it shows, and after it the same frame as an export with 자막 표시 off. The GIF has it too.
+    func testCaptionExport() async throws {
+        try XCTSkipIf(ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] != nil, "no video hardware on CI VMs")
+        try await withDeadline(Self.deadline) { try await Self.captionExport(.landscape) }
+    }
+
+    /// The same in 9:16, where the line wraps.
+    func testPortraitCaptionExport() async throws {
+        try XCTSkipIf(ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] != nil, "no video hardware on CI VMs")
+        try await withDeadline(Self.deadline) { try await Self.captionExport(.portrait) }
+    }
+
+    static func captionExport(_ aspect: AspectRatio) async throws {
+        let mov = outDir.appendingPathComponent("synthetic-captions-\(aspect == .landscape ? "16x9" : "9x16").mov")
+        try await writeSyntheticMovie(to: mov)
+        let text = "Click Export, then pick the frame rate and a size limit"
+        var project = makeProject()
+        project.setTrimOut(5.2)                                              // 3.2 s: two exports and a GIF in time
+        project.showClicks = false
+        project.aspect = aspect
+        project.captions = [Caption(start: 3.2, end: 4.6, text: text)]
+        func frames(_ p: Project, _ name: String) async throws -> [CGImage] {
+            let out = outDir.appendingPathComponent("export-captions-\(name).mp4")
+            try await Exporter.export(project: p, videoURL: mov, to: out)
+            let gen = AVAssetImageGenerator(asset: AVURLAsset(url: out))
+            gen.requestedTimeToleranceBefore = .zero; gen.requestedTimeToleranceAfter = .zero
+            var images: [CGImage] = []
+            for c in [1.9, 2.9] { images.append(try await gen.image(at: CMTime(seconds: c, preferredTimescale: 600)).image) }
+            return images
+        }
+        var off = project
+        off.showCaptions = false
+        let name = aspect == .landscape ? "16x9" : "9x16"
+        let on = try await frames(project, name), plain = try await frames(off, name + "-off")
+        let box = captionBox(text, canvas: Composer.renderSize(aspect))
+        // the box darkens everything but the text (an export with captions off shows what is under it), so white pixels
+        // there are the caption's letters
+        let shown = pixels(on[0], in: box), hidden = pixels(plain[0], in: box)
+        let darkened = Double(zip(shown, hidden).filter { max($0.r, $0.g, $0.b) + 30 < max($1.r, $1.g, $1.b) }.count) / Double(shown.count)
+        let white = shown.filter(isWhite).count
+        let after = zip(pixels(on[1], in: box), pixels(plain[1], in: box)).map { abs($0.r - $1.r) + abs($0.g - $1.g) + abs($0.b - $1.b) }.max() ?? 0
+        print("caption export \(aspect.rawValue): box \(box), \(Int(darkened * 100)) % darkened and \(white) white pixels while it shows, "
+              + "\(after) levels apart from captions off after it")
+        XCTAssertGreaterThan(darkened, 0.5, "the dark box at the bottom")
+        XCTAssertGreaterThan(white, 200, "white text on the box")
+        XCTAssertLessThan(after, 30, "after the line: the same frame as without captions")
+        guard aspect == .landscape else { return }
+        func gifFrame(_ p: Project, _ name: String) async throws -> [(r: Int, g: Int, b: Int)] {
+            let gif = outDir.appendingPathComponent("export-captions\(name).gif")
+            try await GIFExporter.export(project: p, videoURL: mov, to: gif)
+            let src = try XCTUnwrap(CGImageSourceCreateWithURL(gif as CFURL, nil))
+            return pixels(try XCTUnwrap(CGImageSourceCreateImageAtIndex(src, Int(1.9 * Double(GIFExporter.fps)), nil)),
+                          in: captionBox(text, canvas: GIFExporter.size(.landscape)))
+        }
+        let gifOn = try await gifFrame(project, ""), gifOff = try await gifFrame(off, "-off")
+        let gifDarkened = Double(zip(gifOn, gifOff).filter { max($0.r, $0.g, $0.b) + 30 < max($1.r, $1.g, $1.b) }.count) / Double(gifOn.count)
+        print("caption gif: \(Int(gifDarkened * 100)) % darkened, \(gifOn.filter(isWhite).count) white pixels")
+        XCTAssertGreaterThan(gifDarkened, 0.5, "the GIF draws the caption's box too")
+        XCTAssertGreaterThan(gifOn.filter(isWhite).count, 50, "and its text")
+    }
+
     // MARK: frame rate and file size
 
     func testExportPlan() {
@@ -1093,8 +1222,9 @@ final class ExportTests: XCTestCase {
         }
         let rate = 48_000, total = Int(duration) * rate, chunk = 1024, chunks = (total + chunk - 1) / chunk
         async let video: Void = feed(vIn, count: frames.count) { k in
+            // its own buffer, not the adaptor's pool: on a busy Mac the pool crashed inside CoreVideo (SIGSEGV, 2026-10-17)
             var pb: CVPixelBuffer?
-            CVPixelBufferPoolCreatePixelBuffer(nil, adaptor.pixelBufferPool!, &pb)
+            CVPixelBufferCreate(nil, w, h, kCVPixelFormatType_32BGRA, [kCVPixelBufferIOSurfacePropertiesKey: [:]] as CFDictionary, &pb)
             draw(into: pb!, t: Double(frames[k]) / 60)
             adaptor.append(pb!, withPresentationTime: CMTime(value: CMTimeValue(frames[k]), timescale: 60))
         }

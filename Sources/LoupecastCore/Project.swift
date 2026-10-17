@@ -57,6 +57,8 @@ public struct Project: Codable, Sendable, Equatable {
     public var typing: [TypingSpan] = []
     /// The microphone transcribed on this Mac (자막 만들기), in recording time.
     public var captions: [Caption] = []
+    /// The caption lines are drawn at the bottom of the video (preview and export); on in older files, which have none.
+    public var showCaptions = true
 
     /// `paused`: recording-time ranges the recording was paused for. They start out cut, and the clicks and cursor
     /// samples in them are dropped, so the editor opens with the pauses already gone.
@@ -76,7 +78,7 @@ public struct Project: Codable, Sendable, Equatable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case version, name, renamed, videoFile, duration, pixelWidth, pixelHeight, pointPixelScale, cursor, clicks, keys, clips, zooms, aspect, style, backgroundImage, fill, systemVolume, micVolume, camera, showClicks, motionBlur, cursorOverlay, shortcuts, showShortcuts, typing, captions
+        case version, name, renamed, videoFile, duration, pixelWidth, pixelHeight, pointPixelScale, cursor, clicks, keys, clips, zooms, aspect, style, backgroundImage, fill, systemVolume, micVolume, camera, showClicks, motionBlur, cursorOverlay, shortcuts, showShortcuts, typing, captions, showCaptions
     }
     private enum V1Keys: String, CodingKey { case trimIn, trimOut }
 
@@ -107,6 +109,7 @@ public struct Project: Codable, Sendable, Equatable {
         showShortcuts = try c.decodeIfPresent(Bool.self, forKey: .showShortcuts) ?? true
         typing = try c.decodeIfPresent([TypingSpan].self, forKey: .typing) ?? []
         captions = try c.decodeIfPresent([Caption].self, forKey: .captions) ?? []
+        showCaptions = try c.decodeIfPresent(Bool.self, forKey: .showCaptions) ?? true
         if let clips = try c.decodeIfPresent([ClipRange].self, forKey: .clips) {
             self.clips = clips
         } else {                                // version 1: one trim range
@@ -376,18 +379,23 @@ public struct Caption: Codable, Equatable, Sendable {
 }
 
 public extension Array where Element == Caption {
-    /// SubRip text for the edit: each line at its composition time (cuts and speed applied). A line cut in part keeps what
-    /// is left, one in removed material is dropped.
+    /// Each line at its composition time (cuts and speed applied), as the video and the SRT show it. A line cut in part
+    /// keeps what is left, one in removed material is dropped.
+    func timed(clips: [ClipRange]) -> [(start: Double, end: Double, text: String)] {
+        compactMap { c in
+            let a = clips.compositionTime(c.start), b = clips.compositionTime(c.end)
+            return b - a > Project.frameDuration ? (a, b, c.text) : nil
+        }
+    }
+
+    /// SubRip text for the edit.
     func srt(clips: [ClipRange]) -> String {
         func time(_ s: Double) -> String {
             let ms = Int((s * 1000).rounded())
             return String(format: "%02d:%02d:%02d,%03d", ms / 3_600_000, ms / 60_000 % 60, ms / 1000 % 60, ms % 1000)
         }
-        let kept = compactMap { c -> (Double, Double, String)? in
-            let a = clips.compositionTime(c.start), b = clips.compositionTime(c.end)
-            return b - a > Project.frameDuration ? (a, b, c.text) : nil
-        }
-        return kept.enumerated().map { "\($0.offset + 1)\n\(time($0.element.0)) --> \(time($0.element.1))\n\($0.element.2)\n" }.joined(separator: "\n")
+        return timed(clips: clips).enumerated().map { "\($0.offset + 1)\n\(time($0.element.start)) --> \(time($0.element.end))\n\($0.element.text)\n" }
+            .joined(separator: "\n")
     }
 }
 

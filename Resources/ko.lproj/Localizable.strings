@@ -89,6 +89,7 @@
 "GIF (no sound, loops)" = "GIF (소리 없음, 반복)";
 "Graphite" = "짙은 회색";
 "Hide Camera" = "카메라 숨기기";
+"Hide Captions" = "자막 표시 끄기";
 "Hide Clicks" = "클릭 표시 끄기";
 "Hide Menu Bar in Video" = "영상 속 메뉴 막대 숨기기";
 "Hide Shortcuts" = "단축키 표시 끄기";
@@ -172,6 +173,7 @@
 "Set Start" = "시작 지점";
 "Shortcut unavailable: %@" = "단축키 사용 불가: %@";
 "Show Camera" = "카메라 보이기";
+"Show Captions" = "자막 표시";
 "Show Clicks" = "클릭 표시";
 "Show Shortcuts" = "단축키 표시";
 "Show Shortcuts in Video" = "영상에 단축키 표시";

@@ -105,7 +105,9 @@ swift build --build-tests && swift test   # Core ~0.1 s; Render 10-40 s, each ex
   speed and export apply to it like the screen. The circle is drawn after the zoom, so it never moves.
 - `LoupecastCompositor.compose` makes one frame: the recording through the camera, then `decorate` draws on it inside
   the frame (motion blur from camera(t − one frame) vs camera(t), click rings at `Placement.point`), then the rounded
-  mask over the background, then the webcam circle. Everything is a function of composition time, so preview = export.
+  mask over the background, then the webcam circle, the shortcut badge and the caption line (`plate`: white text on a dark
+  box at the bottom, wrapped inside 80 % of the width on at most two lines; the badge moves above it while a line shows).
+  Everything is a function of composition time, so preview = export (and the GIF).
 - The cursor is left out of new recordings (`showsCursor = false`): `CursorShapes` saves each shape as
   `cursors/<n>.png` (checked at 10 Hz), and the compositor draws it at the cursor samples, spring-smoothed with the zoom's
   spring over the last 1.5 s (`CameraPath.smoothCursor`, a pure function of time) and enlarged with the zoom. Files
@@ -122,7 +124,8 @@ swift build --build-tests && swift test   # Core ~0.1 s; Render 10-40 s, each ex
   A recovered recording has no cursor at all: the capture leaves it out and recovery keeps no samples or shapes.
 - 자막 만들기 itself (SFSpeechRecognizer on the microphone m4a) needs the Speech Recognition grant, which this process
   doesn't have: the mic extraction, the line grouping, the SRT timing and the button state are tested, the recognition and
-  whether partial results carry times (the progress bar) are not. Captions aren't drawn on the video yet (next step).
+  whether partial results carry times (the progress bar) are not. The lines are drawn on the video (Effects menu → 자막
+  표시) at the times the SRT gets; they can't be edited yet.
 - Hour-long projects: each edit rebuilds the whole camera path (~5 ms) and redraws the timeline; 화면 채우기 adds a
   cursor-following track over the whole edit (tens of ms an hour).
 - The demo's screen is drawn by a script, not recorded (no Screen Recording grant here, and a real desktop would be

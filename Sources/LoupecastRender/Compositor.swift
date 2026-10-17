@@ -53,6 +53,8 @@ final class LoupecastInstruction: NSObject, AVVideoCompositionInstructionProtoco
     let motionBlur: Bool
     /// Shortcuts on kept material at their composition time, oldest first; empty when 단축키 표시 is off in the editor.
     let shortcuts: [(time: Double, label: String)]
+    /// Caption lines at their composition time; empty when 자막 표시 is off.
+    let captions: [(start: Double, end: Double, text: String)]
     let clips: [ClipRange]
     /// The cursor to draw (nil: it is in the video): its shapes, the samples sorted by time, the folder its images are in,
     /// and recording pixels per point.
@@ -72,6 +74,7 @@ final class LoupecastInstruction: NSObject, AVVideoCompositionInstructionProtoco
         self.clips = clips
         shortcuts = !project.showShortcuts ? [] : project.shortcuts.filter { clips.index(containing: $0.t) != nil }.sorted { $0.t < $1.t }
             .map { (clips.compositionTime($0.t), $0.label) }
+        captions = project.showCaptions ? project.captions.timed(clips: clips) : []
         cursor = project.cursorOverlay.map { ($0, project.cursor.sorted { $0.t < $1.t }, folder, project.pointPixelScale) }
         clicks = !project.showClicks ? [] : project.clicks.filter { clips.index(containing: $0.t) != nil }.sorted { $0.t < $1.t }
             .map { (clips.compositionTime($0.t), Point(x: $0.x, y: $0.y), $0.button == .right) }
@@ -106,6 +109,7 @@ public final class LoupecastCompositor: NSObject, AVVideoCompositing, @unchecked
     private var lastSource: CIImage?                                            // touched only on `queue`
     private var cursorImages: [URL: CIImage] = [:]                              // touched only on `queue`
     private var badges: [String: CIImage] = [:]                                 // touched only on `queue`
+    private var caption: (key: String, image: CIImage)?                         // touched only on `queue`
 
     public var sourcePixelBufferAttributes: [String: any Sendable]? { Self.bgra }
     public var requiredPixelBufferAttributesForRenderContext: [String: any Sendable] { Self.bgra }
@@ -144,34 +148,83 @@ public final class LoupecastCompositor: NSObject, AVVideoCompositing, @unchecked
         }
         var out = image
         if let cam = ins.camera, let face { out = Self.overlay(face, on: out, canvas: canvas, cam.overlay) }
-        // the latest shortcut for 1.2 s, fading over its last 0.25 s; fixed at the bottom whatever the zoom does
+        // the caption line showing now, fixed at the bottom whatever the zoom does; one line's text image is kept
+        let line = ins.captions.last { $0.start <= t && t < $0.end }.map { l in
+            let key = "\(l.text)@\(canvas.width)x\(canvas.height)"
+            if caption?.key != key { caption = (key, Self.caption(l.text, canvas: canvas)) }
+            return caption!.image
+        }
+        // the latest shortcut for 1.2 s, fading over its last 0.25 s; fixed at the bottom, above the caption while one shows
         if let s = ins.shortcuts.last(where: { $0.time <= t }), t < s.time + Self.badgeLength {
             let key = "\(s.label)@\(canvas.width)x\(canvas.height)"
-            let badge = badges[key] ?? Self.badge(s.label, canvas: canvas)
+            var badge = badges[key] ?? Self.badge(s.label, canvas: canvas)
             badges[key] = badge
+            if let line { badge = badge.transformed(by: CGAffineTransform(translationX: 0, y: line.extent.maxY + 0.02 * min(canvas.width, canvas.height) - badge.extent.minY)) }
             let alpha = min(1, (s.time + Self.badgeLength - t) / 0.25)
             out = badge.applyingFilter("CIColorMatrix", parameters: ["inputAVector": CIVector(x: 0, y: 0, z: 0, w: alpha)]).composited(over: out)
         }
+        if let line { out = line.composited(over: out) }
         return out
     }
 
     static let badgeLength = 1.2
 
-    /// The shortcut in white on a dark rounded badge, centered 7 % of the short side above the bottom edge.
-    static func badge(_ label: String, canvas: CGSize) -> CIImage {
-        let short = min(canvas.width, canvas.height), size = 0.044 * short
+    /// The shortcut on a plate 4.4 % of the short side high.
+    static func badge(_ label: String, canvas: CGSize) -> CIImage { plate(label, size: 0.044 * min(canvas.width, canvas.height), canvas: canvas) }
+
+    /// The caption line on a plate, at most 80 % of the canvas wide: a long line wraps, and its type shrinks until it fits
+    /// on two lines (9:16 is narrow).
+    static func caption(_ text: String, canvas: CGSize) -> CIImage {
+        var size = 0.0, lines: [String] = []
+        for k in [1, 0.85, 0.72, 0.6] {
+            size = 0.05 * k * min(canvas.width, canvas.height)
+            lines = wrap(text, font: font(size), width: 0.8 * canvas.width - 1.2 * size)
+            if lines.count <= 2 { break }
+        }
+        return plate(lines.joined(separator: "\n"), size: size, canvas: canvas)
+    }
+
+    static func font(_ size: Double) -> CTFont {
         let base = CTFontCreateUIFontForLanguage(.system, size, nil)!
-        let font = CTFontCreateCopyWithSymbolicTraits(base, size, nil, .boldTrait, .boldTrait) ?? base
+        return CTFontCreateCopyWithSymbolicTraits(base, size, nil, .boldTrait, .boldTrait) ?? base
+    }
+
+    /// `text` in lines no wider than `width` pixels, where CoreText would break them.
+    static func wrap(_ text: String, font: CTFont, width: Double) -> [String] {
+        let s = NSAttributedString(string: text, attributes: [NSAttributedString.Key(kCTFontAttributeName as String): font])
+        let typesetter = CTTypesetterCreateWithAttributedString(s)
+        var lines: [String] = [], start = 0
+        while start < s.length {
+            let n = max(1, CTTypesetterSuggestLineBreak(typesetter, start, width))
+            lines.append((s.string as NSString).substring(with: NSRange(location: start, length: n)).trimmingCharacters(in: .whitespacesAndNewlines))
+            start += n
+        }
+        return lines
+    }
+
+    /// Bold white `text` (lines centered) on a dark rounded box, centered across the canvas 7 % of its short side above the
+    /// bottom edge.
+    static func plate(_ text: String, size: Double, canvas: CGSize) -> CIImage {
+        let paragraph = withUnsafePointer(to: CTTextAlignment.center) {
+            CTParagraphStyleCreate([CTParagraphStyleSetting(spec: .alignment, valueSize: MemoryLayout<CTTextAlignment>.size, value: $0)], 1)
+        }
+        let attributes: [NSAttributedString.Key: Any] = [NSAttributedString.Key(kCTFontAttributeName as String): font(size),
+                                                         NSAttributedString.Key(kCTForegroundColorAttributeName as String): CGColor(gray: 1, alpha: 1),
+                                                         NSAttributedString.Key(kCTParagraphStyleAttributeName as String): paragraph]
         let g = CIFilter.attributedTextImageGenerator()
-        g.text = NSAttributedString(string: label, attributes: [NSAttributedString.Key(kCTFontAttributeName as String): font,
-                                                                 NSAttributedString.Key(kCTForegroundColorAttributeName as String): CGColor(gray: 1, alpha: 1)])
+        g.text = NSAttributedString(string: text, attributes: attributes)
         g.scaleFactor = 1
-        let text = g.outputImage!, e = text.extent
-        let box = CGRect(x: ((canvas.width - e.width) / 2 - 0.6 * size).rounded(), y: (0.07 * short).rounded(),
-                         width: (e.width + 1.2 * size).rounded(), height: (e.height + 0.5 * size).rounded())
+        let image = g.outputImage!, e = image.extent
+        // the generator makes a multi-line image as wide as the text on one line, its lines centered in it: the box fits
+        // the widest line
+        let width = text.split(separator: "\n").map {
+            CTLineGetTypographicBounds(CTLineCreateWithAttributedString(NSAttributedString(string: String($0), attributes: attributes)), nil, nil, nil)
+        }.max() ?? 0
+        let box = CGRect(x: ((canvas.width - width) / 2 - 0.6 * size).rounded(), y: (0.07 * min(canvas.width, canvas.height)).rounded(),
+                         width: (width + 1.2 * size).rounded(), height: (e.height + 0.5 * size).rounded())
         let back = CIFilter.roundedRectangleGenerator()
-        back.extent = box; back.radius = Float(0.3 * box.height); back.color = CIColor(red: 0, green: 0, blue: 0, alpha: 0.72)
-        return text.transformed(by: CGAffineTransform(translationX: box.midX - e.midX, y: box.midY - e.midY)).composited(over: back.outputImage!)
+        back.extent = box; back.radius = Float(min(0.3 * box.height, 0.4 * size)); back.color = CIColor(red: 0, green: 0, blue: 0, alpha: 0.72)
+        return image.transformed(by: CGAffineTransform(translationX: box.midX - e.midX, y: box.midY - e.midY)).cropped(to: box).composited(over: back.outputImage!)
     }
 
     /// Blurs the recording along its on-screen motion since the previous frame's camera `before`: a zoom blur from the frame's

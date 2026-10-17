@@ -490,6 +490,15 @@ final class ClipTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: url) }
         try p.save(to: url)
         XCTAssertEqual(try Project.load(from: url).captions, lines)
+        XCTAssertTrue(try Project.load(from: url).showCaptions, "drawn on the video unless turned off")
+        p.showCaptions = false
+        try p.save(to: url)
+        XCTAssertFalse(try Project.load(from: url).showCaptions)
+        var json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(p)) as! [String: Any]
+        json["showCaptions"] = nil
+        try JSONSerialization.data(withJSONObject: json).write(to: url)
+        XCTAssertTrue(try Project.load(from: url).showCaptions, "older files: on (they have no captions to draw)")
+        XCTAssertEqual(lines.timed(clips: clips).map(\.text), ["Click the button.", "your name"], "the video's lines are the SRT's")
     }
 
     // MARK: file names
