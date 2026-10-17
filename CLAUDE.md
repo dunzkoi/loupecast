@@ -110,8 +110,10 @@ swift build --build-tests && swift test   # Core ~0.1 s; Render 10-40 s, each ex
   Everything is a function of composition time, so preview = export (and the GIF).
 - The cursor is left out of new recordings (`showsCursor = false`): `CursorShapes` saves each shape as
   `cursors/<n>.png` (checked at 10 Hz), and the compositor draws it at the cursor samples, spring-smoothed with the zoom's
-  spring over the last 1.5 s (`CameraPath.smoothCursor`, a pure function of time) and enlarged with the zoom. Files
-  without `cursorOverlay` have the cursor in the video and render as before.
+  spring over the last 1.5 s (`CameraPath.smoothCursor`, a pure function of time) and enlarged with the zoom. New
+  recordings also fade it out after a 1.5 s rest and press it at clicks on kept material (`CursorOverlay.idleAlpha` and
+  `pressScale`, pure functions of recording time; off in older files). Files without `cursorOverlay` have the cursor in
+  the video and render as before.
 - The site's `x-default` hreflang is the English page; README's Website link points there.
 
 ## Open

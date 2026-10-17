@@ -763,6 +763,47 @@ final class ExportTests: XCTestCase {
         XCTAssertEqual(Double(big.width), 56 * k, accuracy: 4, "200 %")
     }
 
+    /// Hide Idle Cursor: the synthetic cursor rests from recording 4 s (composition 2 s), so at composition 3.9 (rested
+    /// 1.9 s) nothing is drawn where it is, while at 0.3 (moving) it is. Press Cursor on Click: at the click (recording 3 s,
+    /// composition 1) it is 0.8 as wide, its hot spot in place. A project.json without the two switches renders as before.
+    func testIdleCursorAndClickPress() throws {
+        var project = Self.makeProject()
+        project.showClicks = false
+        let canvas = Composer.renderSize(project.aspect), c = LoupecastCompositor()
+        let frame = LoupecastCompositor.frameRect(source: Self.size, canvas: canvas, style: FrameStyle(project.style)), path = Composer.cameraPath(project)
+        func render(_ p: Project, _ t: Double) -> CIImage { c.compose(Self.stripes, face: nil, at: t, canvas: canvas, Self.instruction(p)) }
+        /// Whether the pixel next to the hot spot is the cursor's magenta, and the magenta run's width along a row below it.
+        func measure(_ p: Project, _ t: Double) -> (drawn: Bool, width: Int) {
+            let cg = LoupecastCompositor.context.createCGImage(render(p, t), from: CGRect(origin: .zero, size: canvas))!
+            let sample = cursorAt(p.cursor.sorted { $0.t < $1.t }, p.clips.recordingTime(t))!
+            let hot = Placement(frame: frame, camera: path.camera(composition: t), window: path.window, source: Self.size).point(sample)
+            let x = Double(hot.x), y = Double(canvas.height - hot.y)
+            return (Self.isMagenta(Self.pixel(cg, x + 6, y + 6)), (0..<200).filter { Self.isMagenta(Self.pixel(cg, x - 20 + Double($0), y + 10)) }.count)
+        }
+        project.cursorOverlay = try Self.cursorOverlay()
+        var effects = project
+        effects.cursorOverlay?.hideIdle = true
+        effects.cursorOverlay?.clickPress = true
+        let resting = measure(effects, 3.9), moving = measure(effects, 0.3), pressed = measure(effects, 1.0), plain = measure(project, 1.0)
+        print("idle cursor: drawn \(resting.drawn) after a 1.9 s rest, \(moving.drawn) while moving; at the click \(pressed.width) px wide pressed, \(plain.width) not")
+        XCTAssertFalse(resting.drawn, "rested 1.9 s: hidden")
+        XCTAssertTrue(measure(project, 3.9).drawn, "Hide Idle Cursor off: drawn")
+        XCTAssertTrue(moving.drawn, "moving: drawn")
+        XCTAssertTrue(pressed.drawn, "pressed around the hot spot: still there")
+        XCTAssertEqual(Double(pressed.width), 0.8 * Double(plain.width), accuracy: 3, "0.8 as wide at the click")
+
+        var json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(project)) as! [String: Any]
+        var overlay = json["cursorOverlay"] as! [String: Any]
+        overlay["hideIdle"] = nil; overlay["clickPress"] = nil
+        json["cursorOverlay"] = overlay
+        let old = try JSONDecoder().decode(Project.self, from: JSONSerialization.data(withJSONObject: json))
+        for t in [1.0, 3.9] {
+            let noise = Self.meanDifference(render(project, t), render(project, t), canvas: canvas)
+            XCTAssertEqual(Self.meanDifference(render(old, t), render(project, t), canvas: canvas), noise, accuracy: 1e-9,
+                           "an older file renders as before (the same as rendering it twice)")
+        }
+    }
+
     /// The export of a movie without a cursor, with an overlay: magenta at the cursor's spot in the MP4 too.
     func testDrawnCursorExport() async throws {
         try XCTSkipIf(ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] != nil, "no video hardware on CI VMs")

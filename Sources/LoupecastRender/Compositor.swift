@@ -57,8 +57,8 @@ final class LoupecastInstruction: NSObject, AVVideoCompositionInstructionProtoco
     let captions: [(start: Double, end: Double, text: String)]
     let clips: [ClipRange]
     /// The cursor to draw (nil: it is in the video): its shapes, the samples sorted by time, the folder its images are in,
-    /// and recording pixels per point.
-    let cursor: (overlay: CursorOverlay, samples: [CursorSample], folder: URL, pixelsPerPoint: Double)?
+    /// recording pixels per point, and the recording times of the clicks on kept material (sorted).
+    let cursor: (overlay: CursorOverlay, samples: [CursorSample], folder: URL, pixelsPerPoint: Double, clicks: [Double])?
 
     init(timeRange: CMTimeRange, trackID: CMPersistentTrackID, path: CameraPath, style: FrameStyle, fill: Bool,
          camera: (trackID: CMPersistentTrackID, overlay: CameraOverlay)?, project: Project, folder: URL) {
@@ -75,7 +75,8 @@ final class LoupecastInstruction: NSObject, AVVideoCompositionInstructionProtoco
         shortcuts = !project.showShortcuts ? [] : project.shortcuts.filter { clips.index(containing: $0.t) != nil }.sorted { $0.t < $1.t }
             .map { (clips.compositionTime($0.t), $0.label) }
         captions = project.showCaptions ? project.captions.timed(clips: clips) : []
-        cursor = project.cursorOverlay.map { ($0, project.cursor.sorted { $0.t < $1.t }, folder, project.pointPixelScale) }
+        cursor = project.cursorOverlay.map { ($0, project.cursor.sorted { $0.t < $1.t }, folder, project.pointPixelScale,
+                                              project.clicks.map(\.t).filter { clips.index(containing: $0) != nil }.sorted()) }
         clicks = !project.showClicks ? [] : project.clicks.filter { clips.index(containing: $0.t) != nil }.sorted { $0.t < $1.t }
             .map { (clips.compositionTime($0.t), Point(x: $0.x, y: $0.y), $0.button == .right) }
     }
@@ -251,21 +252,24 @@ public final class LoupecastCompositor: NSObject, AVVideoCompositing, @unchecked
     }
 
     /// The recorded cursor shape at its (smoothed) position, hot spot first. It is as large as it was on screen times the
-    /// zoom, times the overlay's scale.
+    /// zoom, times the overlay's scale (and the click press, around the hot spot); a resting cursor fades out if asked.
     func drawnCursor(_ ins: LoupecastInstruction, at t: Double, _ place: Placement) -> CIImage? {
         guard let c = ins.cursor else { return nil }
         let r = ins.clips.recordingTime(t)
-        guard let p = c.overlay.smooth ? CameraPath.smoothCursor(c.samples, clips: ins.clips, at: t) : cursorAt(c.samples, r),
+        let alpha = c.overlay.hideIdle ? CursorOverlay.idleAlpha(c.samples, clicks: c.clicks, at: r) : 1
+        guard alpha > 0, let p = c.overlay.smooth ? CameraPath.smoothCursor(c.samples, clips: ins.clips, at: t) : cursorAt(c.samples, r),
               let shape = c.overlay.image(at: r) else { return nil }
         let url = c.folder.appendingPathComponent(shape.file)
         guard let image = cursorImages[url] ?? CIImage(contentsOf: url) else { return nil }
         cursorImages[url] = image
         // canvas pixels per point: recording pixels per point × canvas pixels per recording pixel × the overlay's scale
         let k = c.pixelsPerPoint * place.frame.width / (place.source.width * place.window.width / place.camera.scale) * c.overlay.scale
+            * (c.overlay.clickPress ? CursorOverlay.pressScale(clicks: c.clicks, at: r) : 1)
         let e = image.extent, hot = place.point(p)
-        return image.transformed(by: CGAffineTransform(translationX: -e.minX, y: -e.minY)
+        let placed = image.transformed(by: CGAffineTransform(translationX: -e.minX, y: -e.minY)
             .concatenating(CGAffineTransform(scaleX: shape.width * k / e.width, y: shape.height * k / e.height))
             .concatenating(CGAffineTransform(translationX: hot.x - shape.hotX * k, y: hot.y - (shape.height - shape.hotY) * k)))
+        return alpha < 1 ? placed.applyingFilter("CIColorMatrix", parameters: ["inputAVector": CIVector(x: 0, y: 0, z: 0, w: alpha)]) : placed
     }
 
     static let rippleLength = 0.4

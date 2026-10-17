@@ -880,6 +880,10 @@ struct EffectsMenu: View {
                 .pickerStyle(.inline)
                 Toggle("Smooth Cursor Movement", isOn: Binding(get: { cursor.smooth },
                                                                set: { on in model.edit("Smooth Cursor Movement") { $0.cursorOverlay?.smooth = on } }))
+                Toggle("Hide Idle Cursor", isOn: Binding(get: { cursor.hideIdle },
+                                                         set: { on in model.edit("Hide Idle Cursor") { $0.cursorOverlay?.hideIdle = on } }))
+                Toggle("Press Cursor on Click", isOn: Binding(get: { cursor.clickPress },
+                                                              set: { on in model.edit("Press Cursor on Click") { $0.cursorOverlay?.clickPress = on } }))
             }
         } label: {
             Image(systemName: "cursorarrow.click.2")

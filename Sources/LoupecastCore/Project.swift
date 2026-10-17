@@ -296,12 +296,16 @@ public struct LookDefaults: Codable, Equatable, Sendable {
     /// From the last project with a drawn cursor; applied only to recordings with one.
     public var cursorScale: Double?
     public var cursorSmooth: Bool?
+    public var cursorHidesIdle: Bool?
+    public var cursorPresses: Bool?
 
     /// `p`'s look; the camera's from `previous` when `p` has no webcam.
     public init(_ p: Project, previous: LookDefaults? = nil) {
         aspect = p.aspect; style = p.style; fill = p.fill; showClicks = p.showClicks; motionBlur = p.motionBlur
         cursorScale = p.cursorOverlay?.scale ?? previous?.cursorScale
         cursorSmooth = p.cursorOverlay?.smooth ?? previous?.cursorSmooth
+        cursorHidesIdle = p.cursorOverlay?.hideIdle ?? previous?.cursorHidesIdle
+        cursorPresses = p.cursorOverlay?.clickPress ?? previous?.cursorPresses
         cameraCorner = p.camera?.corner ?? previous?.cameraCorner
         cameraSize = p.camera?.size ?? previous?.cameraSize
     }
@@ -312,6 +316,8 @@ public struct LookDefaults: Codable, Equatable, Sendable {
         if let motionBlur { p.motionBlur = motionBlur }
         if let cursorScale { p.cursorOverlay?.scale = cursorScale }
         if let cursorSmooth { p.cursorOverlay?.smooth = cursorSmooth }
+        if let cursorHidesIdle { p.cursorOverlay?.hideIdle = cursorHidesIdle }
+        if let cursorPresses { p.cursorOverlay?.clickPress = cursorPresses }
         if let cameraCorner { p.camera?.corner = cameraCorner }
         if let cameraSize { p.camera?.size = cameraSize }
     }
@@ -343,8 +349,62 @@ public struct CursorOverlay: Codable, Equatable, Sendable {
     public static let scales = [1.0, 1.5, 2.0]
     /// Spring-smoothed position (the zoom's spring) instead of the raw samples.
     public var smooth = true
+    /// Fades out while the cursor rests (`idleAlpha`); shrinks a little at each click (`pressScale`). Off in older files, on
+    /// for new recordings.
+    public var hideIdle = false
+    public var clickPress = false
 
     public init(images: [Image], shapes: [Shape]) { self.images = images; self.shapes = shapes }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        images = try c.decode([Image].self, forKey: .images)
+        shapes = try c.decode([Shape].self, forKey: .shapes)
+        scale = try c.decode(Double.self, forKey: .scale)
+        smooth = try c.decode(Bool.self, forKey: .smooth)
+        hideIdle = try c.decodeIfPresent(Bool.self, forKey: .hideIdle) ?? false
+        clickPress = try c.decodeIfPresent(Bool.self, forKey: .clickPress) ?? false
+    }
+
+    /// Still: within 0.002 of where it is now (normalized). Hidden 1.5 s into a rest, after a 0.3 s fade; back over 0.15 s.
+    static let still = 0.002, rest = 1.5, fadeOut = 0.3, fadeIn = 0.15
+
+    /// How opaque Hide Idle Cursor draws the cursor at recording time `t`: 1 while it moves, fading to 0 once it has rested
+    /// 1.5 s, and back to 1 over 0.15 s after it moves again or a click. A pure function of `t` (the samples and click times,
+    /// both sorted), like the fade-out cut short by a move rising from where it got to. The recording's start counts as a
+    /// move.
+    public static func idleAlpha(_ cursor: [CursorSample], clicks: [Double], at t: Double) -> Double {
+        // the fade-out alone jumps back to 1 on a move; rising at most 1/0.15 per second, the alpha is the lowest of these
+        var alpha = shown(cursor, clicks, at: t)
+        let moments = cursor[cursor.firstIndex(after: t - fadeIn)..<cursor.firstIndex(after: t)].map(\.t) + clicks.filter { t - fadeIn < $0 && $0 <= t }
+        for s in moments { alpha = min(alpha, shown(cursor, clicks, at: s) + (t - s) / fadeIn) }
+        return alpha
+    }
+
+    /// The fade-out: 1 until the cursor has rested `rest` seconds (no click before `t` in that time), 0 after `fadeOut` more.
+    static func shown(_ cursor: [CursorSample], _ clicks: [Double], at t: Double) -> Double {
+        var since = Swift.max(0, t - rest - fadeOut, clicks.last { $0 < t } ?? 0)
+        if let here = cursorAt(cursor, t) {
+            var i = cursor.firstIndex(after: t) - 1
+            while i >= 0, cursor[i].t > since {
+                if hypot(cursor[i].x - here.x, cursor[i].y - here.y) >= still { since = cursor[i].t; break }
+                i -= 1
+            }
+        }
+        return 1 - clamp01((t - since - rest) / fadeOut + 1e-9)            // the nudge makes a full rest exactly 0
+    }
+
+    static let pressLength = 0.2
+
+    /// Press Cursor on Click: the cursor's size at recording time `t`, 0.8 at a click, eased down over the 0.2 s before it
+    /// and springing back (a slight overshoot) over the 0.2 s after.
+    public static func pressScale(clicks: [Double], at t: Double) -> Double {
+        let press = clicks.filter { abs(t - $0) < pressLength }.reduce(0.0) { sum, c in
+            let u = (t - c) / pressLength
+            return sum + (u < 0 ? smootherstep(1 + u) : (1 - u) * (1 - u) * cos(1.5 * .pi * u))
+        }
+        return (0.8...1.05).clamp(1 - 0.2 * press)
+    }
 
     /// The shape at recording time `t` (the first one before any change).
     public func image(at t: Double) -> Image? {

@@ -408,9 +408,12 @@ final class CursorShapes {
     }
     private var keys: [Int] = []
 
-    /// Recording-relative; a shape from before the first frame shows from 0.
+    /// Recording-relative; a shape from before the first frame shows from 0. New recordings hide the resting cursor and
+    /// press it on clicks.
     func overlay(sessionStartHost: Double) -> CursorOverlay {
-        CursorOverlay(images: images, shapes: changes.map { .init(t: max(0, $0.host - sessionStartHost), image: $0.image) })
+        var o = CursorOverlay(images: images, shapes: changes.map { .init(t: max(0, $0.host - sessionStartHost), image: $0.image) })
+        o.hideIdle = true; o.clickPress = true
+        return o
     }
 }
 

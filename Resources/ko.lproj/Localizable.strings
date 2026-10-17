@@ -91,6 +91,7 @@
 "Hide Camera" = "카메라 숨기기";
 "Hide Captions" = "자막 표시 끄기";
 "Hide Clicks" = "클릭 표시 끄기";
+"Hide Idle Cursor" = "멈춘 커서 숨기기";
 "Hide Menu Bar in Video" = "영상 속 메뉴 막대 숨기기";
 "Hide Shortcuts" = "단축키 표시 끄기";
 "Hold ⌥ to delete one at a time" = "⌥를 누르면 하나씩 지울 수 있습니다";
@@ -150,6 +151,7 @@
 "Play the selected clip faster" = "선택한 클립을 빠르게 재생";
 "Plays at %lld× speed" = "%lld배속 재생";
 "Position" = "위치";
+"Press Cursor on Click" = "클릭할 때 커서 눌림";
 "Quit" = "종료";
 "Quit Loupecast" = "Loupecast 종료";
 "Reading failed" = "읽기 실패";

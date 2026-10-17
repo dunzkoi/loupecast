@@ -450,6 +450,57 @@ final class ZoomTests: XCTestCase {
         XCTAssertNil(CameraPath.smoothCursor([], clips: clips, at: 1))
     }
 
+    /// The cursor moves for 2 s, rests until 8 s (a click at 4 s), then moves again: drawn while it moves, gone once it has
+    /// rested 1.8 s, back over 0.15 s after a click or a move; at a click it is pressed to 0.8 and springs back.
+    func testIdleCursorFadesAndClicksPress() throws {
+        let cursor = (0...600).map { i -> CursorSample in
+            let t = Double(i) / 60
+            return CursorSample(t: t, x: 0.1 + 0.1 * min(t, 2) + 0.1 * max(0, t - 8), y: 0.5)
+        }
+        let clicks = [4.0]
+        func alpha(_ t: Double) -> Double { CursorOverlay.idleAlpha(cursor, clicks: clicks, at: t) }
+        XCTAssertEqual(alpha(1), 1, "moving")
+        XCTAssertEqual(alpha(0.5), 1, "the start counts as a move")
+        XCTAssertEqual(alpha(3.4), 1, "1.4 s into the rest: still there")
+        XCTAssertEqual(alpha(3.62), 0.5, accuracy: 0.06, "fading out (the rest began at 1.97 s, within 0.002 of the stop)")
+        XCTAssertEqual(alpha(3.85), 0, "rested 1.85 s: hidden")
+        XCTAssertEqual(alpha(4.075), 0.5, accuracy: 0.01, "half way back 75 ms after the click")
+        XCTAssertEqual(alpha(4.2), 1, "back after 0.15 s")
+        XCTAssertEqual(alpha(5.4), 1, "the click restarted the rest")
+        XCTAssertEqual(alpha(6), 0, "hidden again")
+        XCTAssertEqual(CursorOverlay.idleAlpha(cursor, clicks: [], at: 4.1), 0, "no click: still hidden")
+        XCTAssertEqual(alpha(7.95), 0)
+        let back = alpha(8.1)
+        XCTAssertTrue(back > 0 && back < 1, "moving again: fading in (\(back))")
+        XCTAssertEqual(alpha(8.3), 1, "moving")
+
+        XCTAssertEqual(CursorOverlay.pressScale(clicks: clicks, at: 4), 0.8, accuracy: 1e-9, "pressed at the click")
+        XCTAssertLessThan(CursorOverlay.pressScale(clicks: clicks, at: 4.03), 1, "just after it")
+        XCTAssertLessThan(CursorOverlay.pressScale(clicks: clicks, at: 3.9), 1, "going down before it")
+        XCTAssertEqual(CursorOverlay.pressScale(clicks: clicks, at: 3.7), 1)
+        XCTAssertEqual(CursorOverlay.pressScale(clicks: clicks, at: 4.25), 1, "sprung back")
+        let peak = stride(from: 4.06, to: 4.2, by: 0.01).map { CursorOverlay.pressScale(clicks: clicks, at: $0) }.max()!
+        XCTAssertTrue(peak > 1 && peak < 1.05, "a slight overshoot: \(peak)")
+
+        // older files have neither; new recordings turn both on (Recorder), and the choice carries over like the size
+        let o = CursorOverlay(images: [], shapes: [])
+        var json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(o)) as! [String: Any]
+        XCTAssertEqual(json["hideIdle"] as? Bool, false)
+        json["hideIdle"] = nil; json["clickPress"] = nil
+        let old = try JSONDecoder().decode(CursorOverlay.self, from: JSONSerialization.data(withJSONObject: json))
+        XCTAssertFalse(old.hideIdle); XCTAssertFalse(old.clickPress)
+        var edited = Project(name: "e", duration: 10, pixelWidth: 100, pixelHeight: 50, pointPixelScale: 2, cursor: [], clicks: [])
+        edited.cursorOverlay = o
+        var next = edited
+        next.cursorOverlay?.hideIdle = true; next.cursorOverlay?.clickPress = true
+        LookDefaults(edited).apply(to: &next)
+        XCTAssertEqual([next.cursorOverlay?.hideIdle, next.cursorOverlay?.clickPress], [false, false], "turned off once, new recordings start without them")
+        let savedBefore = try JSONDecoder().decode(LookDefaults.self, from: Data(#"{"aspect":"16:9","style":"pastel","fill":false}"#.utf8))
+        next.cursorOverlay?.hideIdle = true
+        savedBefore.apply(to: &next)
+        XCTAssertEqual(next.cursorOverlay?.hideIdle, true, "a look saved before the switches leaves the recorder's choice")
+    }
+
     // MARK: shortcuts
 
     /// Only combinations with ⌘, ⌃ or ⌥ are kept: typing, ⇧ included, never reaches the log.
