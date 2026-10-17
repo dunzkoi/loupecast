@@ -46,12 +46,23 @@ More:
 - Pick a background preset; in 9:16 or 1:1, **Fill Frame** fills the frame and the crop follows the cursor.
 - The speaker button sets the computer audio and microphone volumes separately.
 - Export a looping GIF from the arrow next to **Export**, and **Copy** the finished file to paste it into Slack, an issue or an email.
+- Recording starts after a 3-second countdown; **Esc** cancels it.
+- In **Record Area…**, click a window to record exactly that window.
+- The cursor is drawn over the recording, larger and smoother (**Effects** menu: **Cursor Size**, **Smooth Cursor Movement**).
+- **Show Clicks** (in **Effects**) spreads a ring from every click in the video.
+- **Motion Blur** (in **Effects**, on for new recordings) blurs zooms and pans as they move.
+- **Zoom In on Typing** zooms to where the text goes while you type (on by default, needs Accessibility).
+- **Show Shortcuts in Video** (off by default) shows ⌘ or ⌃ combinations as a badge in the video.
+- Pick your own image as the background.
+- Rename a recording in the editor; exports are named after it.
+- The arrow next to **Export** also has MP4 4K, 30 fps and a file size limit (10 MB or 25 MB).
+- The captions button turns the microphone into captions, recognized on this Mac; export them as SRT from the arrow next to **Export**.
 
 Menu toggles: **Record Microphone** (off by default), **Record Computer Audio** (on), **Hide Menu Bar in Video** (crops the menu bar out of the video, on).
 
 ## Privacy
 
-The only network request Loupecast makes is an update check against GitHub Releases at launch and then daily (`api.github.com`), plus the download when an update exists. Recordings stay in `~/Library/Application Support/Loupecast/Recordings` and exports in `~/Movies`. Nothing is uploaded, and there is no analytics or telemetry. Key presses are not recorded, with one opt-in exception: with **Show Shortcuts in Video** on (off by default), combinations held with ⌘ or ⌃ (or ⌥ on a key that types nothing, like an arrow) are saved as labels like "⌘ ⇧ S" to show them in the video; anything that types text never is, and nothing is saved while a password field is active. **Zoom In on Typing** (on by default) keeps only where each stretch of typing started and ended and where the text went, never the keys or their times.
+The only network request Loupecast makes is an update check against GitHub Releases at launch and then daily (`api.github.com`), plus the download when an update exists. Recordings stay in `~/Library/Application Support/Loupecast/Recordings` and exports in `~/Movies`. Nothing is uploaded, and there is no analytics or telemetry. Key presses are not recorded, with one opt-in exception: with **Show Shortcuts in Video** on (off by default), combinations held with ⌘ or ⌃ (or ⌥ on a key that types nothing, like an arrow) are saved as labels like "⌘ ⇧ S" to show them in the video; anything that types text never is, and nothing is saved while a password field is active. **Zoom In on Typing** (on by default) keeps only where each stretch of typing started and ended and where the text went, never the keys or their times. Captions are recognized on this Mac and never sent over the internet.
 
 ## Build from source
 
@@ -67,6 +78,8 @@ Needs Xcode 16 or later. No third-party dependencies.
 ## FAQ
 
 **Do I have to allow screen recording again after an update?** No. Since 0.3.1 every release is signed with the same certificate, so macOS keeps the permission after an update. Coming from 0.3.0 or earlier, you may have to turn it on once more: when you start recording, Loupecast clears the old entry once by itself, so just turn it on when macOS asks.
+
+**Is my voice sent anywhere to make captions?** No. Captions are recognized on this Mac and never sent over the internet.
 
 **The menu bar icon doesn't show up.** macOS may hide new menu bar items when the bar is full. Check System Settings → Menu Bar, or just press ⌘⇧2.
 

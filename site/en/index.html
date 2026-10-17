@@ -53,7 +53,7 @@
   "license": "https://opensource.org/licenses/MIT",
   "image": "https://dunzkoi.github.io/loupecast/og.png",
   "inLanguage": "en",
-  "featureList": ["Automatic zoom on click", "Cut editing from the keyboard", "16:9, 9:16 and 1:1 export", "Record an area", "Pause and resume", "Webcam overlay", "Zoom level and focus", "Speed up clips", "Background presets", "Fill the frame", "Volume", "GIF export", "Copy to clipboard"],
+  "featureList": ["Automatic zoom on click", "Cut editing from the keyboard", "16:9, 9:16 and 1:1 export", "Record an area", "Pause and resume", "Webcam overlay", "Zoom level and focus", "Speed up clips", "Background presets", "Fill the frame", "Volume", "GIF export", "Copy to clipboard", "Countdown before recording", "Record a window", "Smooth, larger cursor", "Click rings", "Motion blur", "Zoom in on typing", "Shortcut badges", "Background image", "Rename recordings", "4K, 30 fps and size limits", "On-device captions"],
   "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
   "author": { "@type": "Person", "name": "Dunz Koi", "url": "https://github.com/dunzkoi" },
   "sameAs": ["https://github.com/dunzkoi/loupecast"]
@@ -243,6 +243,17 @@
       <li><b>Volume</b><span>Set the computer audio and the microphone separately, or mute either.</span></li>
       <li><b>GIF export</b><span>A silent, looping GIF for READMEs, issues and docs.</span></li>
       <li><b>Copy to clipboard</b><span>Copy the exported video and paste it into Slack, an issue or an email.</span></li>
+      <li><b>Countdown before recording</b><span>Recording starts after a 3-second countdown; Esc cancels it.</span></li>
+      <li><b>Record a window</b><span>In Record Area…, click a window to record exactly that window.</span></li>
+      <li><b>Smooth, larger cursor</b><span>The cursor is drawn over the recording; set its size and smoothing in the Effects menu.</span></li>
+      <li><b>Click rings</b><span>A ring spreads from every click in the video.</span></li>
+      <li><b>Motion blur</b><span>Zooms and pans blur as they move, on for new recordings.</span></li>
+      <li><b>Zoom in on typing</b><span>While you type, the zoom moves to where the text goes. Needs Accessibility.</span></li>
+      <li><b>Shortcut badges</b><span>Show ⌘ and ⌃ combinations as a badge in the video. Off until you turn it on.</span></li>
+      <li><b>Background image</b><span>Use your own image as the background.</span></li>
+      <li><b>Rename recordings</b><span>Name a recording in the editor, and its exports take that name.</span></li>
+      <li><b>4K, 30 fps and size limits</b><span>Export an MP4 in 4K, at 30 fps, or under 10 MB or 25 MB.</span></li>
+      <li><b>On-device captions</b><span>The microphone is transcribed on this Mac and exported as an SRT file.</span></li>
     </ul>
   </div>
 </section>
@@ -266,6 +277,10 @@
           <tr><th scope="row">Area recording</th><td class="us">Yes</td><td>Yes</td></tr>
           <tr><th scope="row">GIF export</th><td class="us">Yes</td><td>Yes</td></tr>
           <tr><th scope="row">Speed up clips</th><td class="us">Yes (2×, 4×)</td><td>Yes</td></tr>
+          <tr><th scope="row">4K export</th><td class="us">Yes (MP4)</td><td>Yes</td></tr>
+          <tr><th scope="row">Motion blur</th><td class="us">Yes</td><td>Yes</td></tr>
+          <tr><th scope="row">Smoothed, enlarged cursor</th><td class="us">Yes</td><td>Yes</td></tr>
+          <tr><th scope="row">On-device captions</th><td class="us">Yes (SRT export)</td><td>Yes</td></tr>
           <tr><th scope="row">Network requests</th><td class="us">Update checks only, no telemetry</td><td>Varies</td></tr>
           <tr><th scope="row">Requirements</th><td class="us">macOS 15 or later, Apple Silicon</td><td>Varies</td></tr>
         </tbody>
@@ -320,7 +335,7 @@
     <div class="faq">
       <details>
         <summary>Are my recordings sent anywhere?</summary>
-        <p>No. The only network requests Loupecast makes are an update check against GitHub at launch and then daily, plus the download when an update exists. Recordings stay in <code>~/Library/Application Support/Loupecast/Recordings</code> and exports in <code>~/Movies</code>. Nothing is uploaded, and there is no analytics or telemetry.</p>
+        <p>No. The only network requests Loupecast makes are an update check against GitHub at launch and then daily, plus the download when an update exists. Recordings stay in <code>~/Library/Application Support/Loupecast/Recordings</code> and exports in <code>~/Movies</code>. Nothing is uploaded, and there is no analytics or telemetry. Captions are recognized on this Mac and never sent over the internet.</p>
       </details>
       <details>
         <summary>What permissions does it need?</summary>

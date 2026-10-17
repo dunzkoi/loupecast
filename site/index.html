@@ -53,7 +53,7 @@
   "license": "https://opensource.org/licenses/MIT",
   "image": "https://dunzkoi.github.io/loupecast/og.png",
   "inLanguage": "ko",
-  "featureList": ["클릭하면 자동 줌", "키보드로 컷 편집", "16:9, 9:16, 1:1 내보내기", "영역 지정 녹화", "일시정지와 이어서 녹화", "웹캠 오버레이", "줌 배율과 초점", "구간 가속", "배경 프리셋", "화면 채우기", "음량 조절", "GIF 내보내기", "클립보드 복사"],
+  "featureList": ["클릭하면 자동 줌", "키보드로 컷 편집", "16:9, 9:16, 1:1 내보내기", "영역 지정 녹화", "일시정지와 이어서 녹화", "웹캠 오버레이", "줌 배율과 초점", "구간 가속", "배경 프리셋", "화면 채우기", "음량 조절", "GIF 내보내기", "클립보드 복사", "녹화 전 카운트다운", "창 녹화", "크고 부드러운 커서", "클릭 표시", "모션 블러", "타이핑 구간 확대", "단축키 배지", "배경 이미지", "녹화 이름 바꾸기", "4K, 30fps, 파일 크기 제한", "기기 안에서 만드는 자막"],
   "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
   "author": { "@type": "Person", "name": "Dunz Koi", "url": "https://github.com/dunzkoi" },
   "sameAs": ["https://github.com/dunzkoi/loupecast"]
@@ -243,6 +243,17 @@
       <li><b>음량 조절</b><span>컴퓨터 소리와 마이크 음량을 따로 정하거나 끕니다.</span></li>
       <li><b>GIF 내보내기</b><span>README, 이슈, 문서에 넣을 소리 없는 반복 GIF를 만듭니다.</span></li>
       <li><b>클립보드 복사</b><span>내보낸 영상을 복사해 Slack, 이슈, 메일에 바로 붙여 넣습니다.</span></li>
+      <li><b>녹화 전 카운트다운</b><span>3초를 센 뒤에 녹화를 시작하고, Esc로 취소할 수 있습니다.</span></li>
+      <li><b>창 녹화</b><span>"영역 지정 녹화…"에서 창을 클릭하면 그 창만 정확히 녹화합니다.</span></li>
+      <li><b>크고 부드러운 커서</b><span>녹화 위에 커서를 새로 그립니다. 크기와 움직임 다듬기는 "효과" 메뉴에서 정합니다.</span></li>
+      <li><b>클릭 표시</b><span>클릭할 때마다 영상에 원이 퍼져 나갑니다.</span></li>
+      <li><b>모션 블러</b><span>줌과 화면 이동에 움직임만큼 블러가 들어갑니다. 새 녹화는 기본으로 켜집니다.</span></li>
+      <li><b>타이핑 구간 확대</b><span>타이핑하는 동안 글자가 들어가는 곳으로 줌이 옮겨 갑니다. 손쉬운 사용 권한이 필요합니다.</span></li>
+      <li><b>단축키 배지</b><span>⌘·⌃ 조합을 영상에 배지로 보여 줍니다. 직접 켜야 동작합니다.</span></li>
+      <li><b>배경 이미지</b><span>원하는 이미지를 배경으로 씁니다.</span></li>
+      <li><b>녹화 이름 바꾸기</b><span>편집 창에서 이름을 바꾸면 내보낸 파일도 그 이름을 씁니다.</span></li>
+      <li><b>4K, 30fps, 파일 크기 제한</b><span>MP4를 4K나 30fps로, 또는 10MB·25MB 이하로 내보냅니다.</span></li>
+      <li><b>기기 안에서 만드는 자막</b><span>마이크 소리를 이 Mac 안에서 받아 적어 SRT 파일로 내보냅니다.</span></li>
     </ul>
   </div>
 </section>
@@ -266,6 +277,10 @@
           <tr><th scope="row">영역 지정 녹화</th><td class="us">있음</td><td>있음</td></tr>
           <tr><th scope="row">GIF 내보내기</th><td class="us">있음</td><td>있음</td></tr>
           <tr><th scope="row">구간 가속</th><td class="us">있음 (2배, 4배)</td><td>있음</td></tr>
+          <tr><th scope="row">4K 내보내기</th><td class="us">있음 (MP4)</td><td>있음</td></tr>
+          <tr><th scope="row">모션 블러</th><td class="us">있음</td><td>있음</td></tr>
+          <tr><th scope="row">부드럽고 크게 다듬은 커서</th><td class="us">있음</td><td>있음</td></tr>
+          <tr><th scope="row">기기 안에서 만드는 자막</th><td class="us">있음 (SRT 내보내기)</td><td>있음</td></tr>
           <tr><th scope="row">네트워크 요청</th><td class="us">업데이트 확인만, 텔레메트리 없음</td><td>제품마다 다름</td></tr>
           <tr><th scope="row">지원 환경</th><td class="us">macOS 15 이상, Apple Silicon</td><td>제품마다 다름</td></tr>
         </tbody>
@@ -320,7 +335,7 @@
     <div class="faq">
       <details>
         <summary>녹화한 영상이 어딘가로 전송되나요?</summary>
-        <p>아니요. Loupecast가 하는 네트워크 요청은 실행할 때와 그 뒤 하루 한 번 GitHub에서 업데이트를 확인하고 내려받는 것뿐입니다. 녹화 원본은 <code>~/Library/Application Support/Loupecast/Recordings</code>에, 내보낸 영상은 <code>~/Movies</code>에만 저장됩니다. 업로드, 분석, 텔레메트리가 없습니다.</p>
+        <p>아니요. Loupecast가 하는 네트워크 요청은 실행할 때와 그 뒤 하루 한 번 GitHub에서 업데이트를 확인하고 내려받는 것뿐입니다. 녹화 원본은 <code>~/Library/Application Support/Loupecast/Recordings</code>에, 내보낸 영상은 <code>~/Movies</code>에만 저장됩니다. 업로드, 분석, 텔레메트리가 없습니다. 자막은 이 Mac 안에서 인식하며 인터넷으로 보내지 않습니다.</p>
       </details>
       <details>
         <summary>어떤 권한이 필요한가요?</summary>
