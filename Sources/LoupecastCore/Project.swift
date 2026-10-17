@@ -200,6 +200,39 @@ public struct Project: Codable, Sendable, Equatable {
         if let i = clips.firstIndex(where: { $0.id == id }) { clips[i].speed = ClipRange.speeds.clamp(speed) }
     }
 
+    /// 빈 구간 빠르게: recording-time stretches with no cursor movement (0.002 or more), click, shortcut, typing or `speech`
+    /// for 3 s or more, each 0.3 s short of the activity around it; the recording's start and end bound them.
+    public func idleStretches(speech: [ClipRange]) -> [ClipRange] {
+        let gap = 3.0, margin = 0.3
+        var busy = clicks.map { ($0.t, $0.t) } + shortcuts.map { ($0.t, $0.t) } + typing.map { ($0.start, $0.end) } + speech.map { ($0.start, $0.end) }
+        var anchor: CursorSample?                     // where the cursor was when it last moved
+        for s in cursor.sorted(by: { $0.t < $1.t }) {
+            if let a = anchor, hypot(s.x - a.x, s.y - a.y) < CursorOverlay.still { continue }
+            if anchor != nil { busy.append((s.t, s.t)) }
+            anchor = s
+        }
+        var out: [ClipRange] = [], free = 0.0
+        for (start, end) in busy.sorted(by: { $0.0 < $1.0 }) + [(duration, duration)] {
+            if start - free >= gap { out.append(ClipRange(start: free + margin, end: start - margin)) }
+            free = Swift.max(free, end)
+        }
+        return out
+    }
+
+    /// Plays the kept material inside `stretches` (recording time) at 4×, split off at their edges as `split` would.
+    /// Returns how many stretches changed.
+    public mutating func speedUp(_ stretches: [ClipRange]) -> Int {
+        let slack = 2 * Self.frameDuration + 1e-9                  // split leaves a clip edge this close alone
+        var changed = 0
+        for s in stretches {
+            split(at: s.start); split(at: s.end)
+            let inside = clips.filter { $0.start >= s.start - slack && $0.end <= s.end + slack && $0.speed != 4 }
+            inside.forEach { setClipSpeed(id: $0.id, 4) }
+            if !inside.isEmpty { changed += 1 }
+        }
+        return changed
+    }
+
     /// The last clip stays: an empty cut list has nothing to export.
     public mutating func removeClip(id: UUID) {
         guard clips.count > 1 else { return }

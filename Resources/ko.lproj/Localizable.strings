@@ -95,6 +95,7 @@
 "Hide Menu Bar in Video" = "영상 속 메뉴 막대 숨기기";
 "Hide Shortcuts" = "단축키 표시 끄기";
 "Hold ⌥ to delete one at a time" = "⌥를 누르면 하나씩 지울 수 있습니다";
+"Idle stretches play at 4×: %@ shorter" = "빈 구간을 4배속으로 바꿔 %@ 줄였습니다";
 "Image…" = "이미지…";
 "In System Settings › Privacy & Security › Camera, turn on Loupecast." = "시스템 설정 › 개인정보 보호 및 보안 › 카메라에서 Loupecast를 켭니다.";
 "In System Settings › Privacy & Security › Microphone, turn on Loupecast." = "시스템 설정 › 개인정보 보호 및 보안 › 마이크에서 Loupecast를 켭니다.";
@@ -128,6 +129,7 @@
 "No Padding" = "여백 없음";
 "No Recordings" = "녹화 없음";
 "No camera is connected." = "연결된 카메라가 없습니다.";
+"No idle stretches to speed up" = "빠르게 할 빈 구간이 없습니다";
 "No screen frames arrived. Check the Screen Recording permission." = "화면 프레임을 하나도 받지 못했습니다. 화면 녹화 권한을 확인해 주세요.";
 "No source frame to compose." = "합성할 원본 프레임이 없습니다.";
 "No speech was recognized." = "인식된 말소리가 없습니다.";
@@ -186,6 +188,8 @@
 "Smooth Cursor Movement" = "커서 움직임 다듬기";
 "Space" = "스페이스";
 "Speed" = "속도";
+"Speed Up Idle Stretches" = "빈 구간 빠르게";
+"Speed up idle stretches: 3 s or more without input or speech play at 4× (⌘Z undoes)" = "빈 구간 빠르게: 입력도 말소리도 없는 3초 이상 구간을 4배속으로 재생합니다 (⌘Z로 되돌립니다)";
 "Split" = "자르기";
 "Split the clip at the playhead" = "재생 위치에서 클립 자르기";
 "Sponsor…" = "후원하기…";

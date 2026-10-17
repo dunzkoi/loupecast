@@ -5,15 +5,20 @@ import Speech
 /// The microphone recognized on this Mac (requiresOnDeviceRecognition: the sound never leaves it), as caption lines in
 /// recording time. The language is the system's.
 enum Transcriber {
-    /// The microphone track alone as a temporary m4a that starts at recording time 0 (the recorder writes it mono).
-    static func microphoneAudio(_ movie: URL) async throws -> URL {
-        let asset = AVURLAsset(url: movie)
+    /// The recording's microphone track: the recorder writes it mono (computer audio is stereo).
+    static func microphoneTrack(_ asset: AVURLAsset) async throws -> AVAssetTrack? {
         var mic: AVAssetTrack?
         for t in try await asset.loadTracks(withMediaType: .audio) {
             let formats = try await t.load(.formatDescriptions)
             if formats.first.flatMap({ CMAudioFormatDescriptionGetStreamBasicDescription($0)?.pointee.mChannelsPerFrame }) == 1 { mic = t }
         }
-        guard let mic else { throw LoupecastError("The recording has no microphone sound.") }
+        return mic
+    }
+
+    /// The microphone track alone as a temporary m4a that starts at recording time 0.
+    static func microphoneAudio(_ movie: URL) async throws -> URL {
+        let asset = AVURLAsset(url: movie)
+        guard let mic = try await microphoneTrack(asset) else { throw LoupecastError("The recording has no microphone sound.") }
         let range = try await mic.load(.timeRange)
         let comp = AVMutableComposition()
         guard let track = comp.addMutableTrack(withMediaType: .audio, preferredTrackID: kCMPersistentTrackID_Invalid) else {
@@ -26,6 +31,33 @@ enum Transcriber {
         let out = FileManager.default.temporaryDirectory.appendingPathComponent("loupecast-mic-\(UUID().uuidString).m4a")
         try await session.export(to: out, as: .m4a)
         return out
+    }
+
+    /// Where the microphone is loud enough to be speech, in recording time: each 0.1 s whose loudness (RMS) is −40 dBFS
+    /// or more. Empty without a microphone track.
+    static func speech(_ movie: URL) async throws -> [ClipRange] {
+        let asset = AVURLAsset(url: movie)
+        guard let mic = try await microphoneTrack(asset) else { return [] }
+        let reader = try AVAssetReader(asset: asset)
+        let output = AVAssetReaderTrackOutput(track: mic, outputSettings: [
+            AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: 48_000, AVNumberOfChannelsKey: 1, AVLinearPCMBitDepthKey: 32,
+            AVLinearPCMIsFloatKey: true, AVLinearPCMIsBigEndianKey: false, AVLinearPCMIsNonInterleaved: false,
+        ])
+        reader.add(output)
+        guard reader.startReading() else { throw reader.error ?? LoupecastError("The recording has no microphone sound.") }
+        var power: [Double] = []                                     // sum of squares per 0.1 s (4,800 samples)
+        while let buffer = output.copyNextSampleBuffer(), let block = CMSampleBufferGetDataBuffer(buffer) {
+            var samples = [Float](repeating: 0, count: CMBlockBufferGetDataLength(block) / 4)
+            CMBlockBufferCopyDataBytes(block, atOffset: 0, dataLength: samples.count * 4, destination: &samples)
+            let first = Int((buffer.presentationTimeStamp.seconds * 48_000).rounded())
+            for (i, v) in samples.enumerated() {
+                let bin = max(0, first + i) / 4_800
+                if bin >= power.count { power += Array(repeating: 0, count: bin - power.count + 1) }
+                power[bin] += Double(v * v)
+            }
+        }
+        if reader.status == .failed { throw reader.error ?? LoupecastError("The recording has no microphone sound.") }
+        return power.indices.filter { sqrt(power[$0] / 4_800) >= 0.01 }.map { ClipRange(start: Double($0) / 10, end: Double($0 + 1) / 10) }
     }
 
     /// Asks for Speech Recognition the first time (Info.plist NSSpeechRecognitionUsageDescription).

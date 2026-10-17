@@ -54,6 +54,9 @@
 //   LOUPECAST_CAPTIONS=1              print whether 자막 만들기 is enabled, the speech recognizer's state, the microphone
 //                                 audio it would hear; then give the edit captions as if recognized and export the SRT
 //                                 (prints the file); before the snapshot
+//   LOUPECAST_IDLE=1                  print where the microphone is loud, click 빈 구간 빠르게 (the hare button), print its note
+//                                 and the clips, then press ⌘Z through the window's key handler and print whether the clips
+//                                 came back; before the snapshot
 //   LOUPECAST_QUIT_TEST=<dir>         export from that recording's editor, close the editor, then quit;
 //                                 LOUPECAST_QUIT_ANSWER=cancel|quit answers the export alert,
 //                                 LOUPECAST_QUIT_EDIT=<dir> splits a second recording right before quitting
@@ -385,6 +388,25 @@ enum DebugHooks {
             if case .done(let url) = m.exportState {
                 print("LOUPECAST: srt \(url.lastPathComponent), undo \(m.undo.undoActionName)\n\((try? String(contentsOf: url, encoding: .utf8)) ?? "")")
             } else { print("LOUPECAST: srt export \(m.exportState)") }
+        }
+        if env["LOUPECAST_IDLE"] != nil {
+            func views(_ v: NSView) -> [NSView] { [v] + v.subviews.flatMap(views) }
+            // SwiftUI keeps the label off the NSView: the hare is the last borderless button left of the bordered ones
+            let x = { (v: NSView) in v.convert(v.bounds, to: nil).minX }, buttons = views(editor.window.contentView!).compactMap { $0 as? NSButton }
+            let firstBordered = buttons.filter(\.isBordered).map(x).min() ?? 0
+            let button = buttons.filter { !$0.isBordered && x($0) < firstBordered }.max { x($0) < x($1) }
+            let loud = ((try? await Transcriber.speech(m.videoURL)) ?? []).reduce(into: [ClipRange]()) { out, r in
+                if let last = out.last, abs(last.end - r.start) < 1e-9 { out[out.count - 1].end = r.end } else { out.append(r) }
+            }
+            print("LOUPECAST: microphone loud at \(loud.map { String(format: "%.1f–%.1f", $0.start, $0.end) })")
+            let clips = m.project.clips, total = m.total
+            button?.performClick(nil)
+            for _ in 0..<200 where m.notice == nil { if case .failed = m.exportState { break }; try? await Task.sleep(for: .milliseconds(100)) }
+            print("LOUPECAST: idle button found \(button != nil): \(m.notice ?? "\(m.exportState)"), total \(timecode(total)) → \(timecode(m.total)), "
+                  + "clips \(m.project.clips.map { String(format: "%.2f…%.2f %g×", $0.start, $0.end, $0.speed) }), undo \(m.undo.undoActionName)")
+            let z = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0, windowNumber: editor.window.windowNumber,
+                                     context: nil, characters: "z", charactersIgnoringModifiers: "z", isARepeat: false, keyCode: UInt16(kVK_ANSI_Z))!
+            print("LOUPECAST: ⌘Z consumed \(editor.handle(z)), clips back \(m.project.clips == clips), total \(timecode(m.total))")
         }
         switch env["LOUPECAST_SELECT"] ?? "zoom" {
         case "clip": m.selection = m.project.clips.first.map { .clip($0.id) } ?? .none

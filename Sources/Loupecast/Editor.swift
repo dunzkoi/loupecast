@@ -36,6 +36,10 @@ final class EditorModel {
     var sizeWarning: String?
     /// 자막 만들기 in progress: the share done (0 while the recognizer hasn't said); nil when not running.
     var captionProgress: Double?
+    /// 빈 구간 빠르게 is reading the microphone.
+    private(set) var speedingUp = false
+    /// A short result shown in place of the selection hint for a few seconds.
+    var notice: String?
     /// Audio tracks in the recording; the volume controls show only these.
     private(set) var hasSystemAudio = false
     private(set) var hasMicrophone = false
@@ -442,6 +446,28 @@ final class EditorModel {
 
     func cancelCaptions() { captionTask?.cancel() }
 
+    /// 빈 구간 빠르게: every stretch of 3 s or more without input or speech plays at 4×, in one undo step. Speech is the
+    /// captions' lines, else where the microphone is loud, else nothing (input alone).
+    func speedUpIdle() {
+        guard !speedingUp, edit != nil else { return }
+        speedingUp = true
+        let video = videoURL, lines = project.captions, mic = hasMicrophone
+        Task {
+            defer { speedingUp = false }
+            var speech = lines.map { ClipRange(start: $0.start, end: $0.end) }
+            if speech.isEmpty, mic {
+                do { speech = try await Transcriber.speech(video) } catch { exportState = .failed(describe(error)); return }
+            }
+            let before = total
+            var changed = 0
+            edit("Speed Up Idle Stretches") { changed = $0.speedUp($0.idleStretches(speech: speech)) }
+            let text = changed == 0 ? String(localized: "No idle stretches to speed up")
+                                    : String(localized: "Idle stretches play at 4×: \(timecode(before - total)) shorter")
+            notice = text
+            Task { try? await Task.sleep(for: .seconds(4)); if notice == text { notice = nil } }
+        }
+    }
+
     /// The captions as SubRip next to the exports, timed for the edit (cuts and speed applied).
     func exportSRT() {
         let url = Exporter.defaultURL(name: project.renamed ? project.name : nil, in: Self.exportDir, taken: Set(Self.exports.keys), fileExtension: "srt")
@@ -693,6 +719,12 @@ struct ControlBar: View {
                 .fixedSize()
                 .help("Length cut out (D splits, Delete removes, ⌘Z undoes)")
             }
+            Button(action: model.speedUpIdle) { Image(systemName: "hare") }
+                .buttonStyle(.borderless)
+                .focusable(false)
+                .disabled(model.speedingUp || model.edit == nil)
+                .help("Speed up idle stretches: 3 s or more without input or speech play at 4× (⌘Z undoes)")
+                .accessibilityLabel("Speed Up Idle Stretches")
 
             Spacer(minLength: 12)
 
@@ -791,23 +823,27 @@ struct SelectionBar: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            switch model.selection {
-            case .zoom:
-                if let seg = model.selectedZoom { zoomControls(seg) }
-            case .clip(let id):
-                if let clip = model.project.clips.first(where: { $0.id == id }) {
-                    // here "2×" is meant: it is playback speed
-                    Picker("Speed", selection: Binding(get: { clip.speed }, set: { s in model.edit("Speed") { $0.setClipSpeed(id: id, s) } })) {
-                        ForEach(Project.clipSpeeds, id: \.self) { Text(verbatim: "\(Int($0))×").tag($0) }
+            if let notice = model.notice {
+                Text(notice).font(.callout).foregroundStyle(.secondary).lineLimit(1)
+            } else {
+                switch model.selection {
+                case .zoom:
+                    if let seg = model.selectedZoom { zoomControls(seg) }
+                case .clip(let id):
+                    if let clip = model.project.clips.first(where: { $0.id == id }) {
+                        // here "2×" is meant: it is playback speed
+                        Picker("Speed", selection: Binding(get: { clip.speed }, set: { s in model.edit("Speed") { $0.setClipSpeed(id: id, s) } })) {
+                            ForEach(Project.clipSpeeds, id: \.self) { Text(verbatim: "\(Int($0))×").tag($0) }
+                        }
+                        .pickerStyle(.segmented)
+                        .fixedSize()
+                        .focusable(false)
+                        .help("Play the selected clip faster")
                     }
-                    .pickerStyle(.segmented)
-                    .fixedSize()
-                    .focusable(false)
-                    .help("Play the selected clip faster")
+                    hint("D splits at the playhead, Delete removes the selected clip.")
+                case .none:
+                    hint("Select a zoom or a clip to change it.")
                 }
-                hint("D splits at the playhead, Delete removes the selected clip.")
-            case .none:
-                hint("Select a zoom or a clip to change it.")
             }
             Spacer(minLength: 0)
             if model.asksForStar, case .done = model.exportState { StarPrompt(model: model) }

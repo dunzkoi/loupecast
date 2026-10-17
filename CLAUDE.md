@@ -114,6 +114,9 @@ swift build --build-tests && swift test   # Core ~0.1 s; Render 10-40 s, each ex
   recordings also fade it out after a 1.5 s rest and press it at clicks on kept material (`CursorOverlay.idleAlpha` and
   `pressScale`, pure functions of recording time; off in older files). Files without `cursorOverlay` have the cursor in
   the video and render as before.
+- 빈 구간 빠르게 (the hare button) plays every 3 s or more without cursor movement, clicks, shortcuts, typing or speech at 4×
+  (`Project.idleStretches`, 0.3 s left at both ends) through `split` and `setClipSpeed`, one undo step. Speech is the
+  caption lines, else each 0.1 s of the microphone at −40 dBFS or more (`Transcriber.speech`), else input alone.
 - The site's `x-default` hreflang is the English page; README's Website link points there.
 
 ## Open

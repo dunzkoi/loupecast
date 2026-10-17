@@ -288,6 +288,52 @@ final class ClipTests: XCTestCase {
         XCTAssertFalse(undo.canRedo)
     }
 
+    // MARK: 빈 구간 빠르게
+
+    /// The cursor moves 0–2, 7–8 and 13–14 s of a 19.5 s recording and rests otherwise; someone speaks 9.5–10.5 s and
+    /// clicks at 17 s. Only the 5 s rest (2–7 s) and the 3 s one before the click (14–17 s) are idle, 0.3 s in from both ends;
+    /// playing them at 4× shortens the edit, and one undo brings the clips back.
+    @MainActor
+    func testIdleStretchesSpeedUpInOneUndo() throws {
+        let moving: [ClosedRange<Double>] = [0...2, 7...8, 13...14]
+        var x = 0.1, cursor: [CursorSample] = []
+        for i in 0...Int(19.5 * 60) {
+            let t = Double(i) / 60
+            if moving.contains(where: { $0.contains(t) }) { x += 0.002 }
+            cursor.append(CursorSample(t: t, x: x, y: 0.5))
+        }
+        let recording = Project(name: "t", duration: 19.5, pixelWidth: 100, pixelHeight: 50, pointPixelScale: 2,
+                                cursor: cursor, clicks: [ClickEvent(t: 17, x: x, y: 0.5)])
+        let stretches = recording.idleStretches(speech: [ClipRange(start: 9.5, end: 10.5)])
+        XCTAssertEqual(stretches.count, 2, "\(stretches.map { "\($0.start)–\($0.end)" })")
+        XCTAssertEqual(stretches.first?.start ?? 0, 2.3, accuracy: 0.02); XCTAssertEqual(stretches.first?.end ?? 0, 6.7, accuracy: 0.02)
+        XCTAssertEqual(stretches.last?.start ?? 0, 14.3, accuracy: 0.02); XCTAssertEqual(stretches.last?.end ?? 0, 16.7, accuracy: 1e-9)
+        XCTAssertEqual(recording.idleStretches(speech: []).count, 3, "without the speech, 8–13 s is idle too")
+
+        let doc = Doc(recording)
+        let undo = UndoManager()
+        undo.groupsByEvent = false
+        let before = doc.project
+        XCTAssertEqual(doc.project.speedUp(stretches), 2)
+        undo.beginUndoGrouping()
+        undo.registerChange(doc, \.project, before: before, name: "Speed Up Idle Stretches")
+        undo.endUndoGrouping()
+        assertWellFormed(doc.project)
+        XCTAssertEqual(doc.project.clips.map(\.speed), [1, 4, 1, 4, 1])
+        XCTAssertEqual(doc.project.clips.totalLength, before.clips.totalLength - 0.75 * (4.4 + 2.4), accuracy: 0.05, "shorter by ¾ of each stretch")
+        XCTAssertEqual(doc.project.clips.recordingTime(doc.project.clips.compositionTime(10)), 10, accuracy: 1e-9, "one mapping both ways")
+        XCTAssertEqual(doc.project.speedUp(stretches), 0, "already at 4×: nothing changes")
+        undo.undo()
+        XCTAssertEqual(doc.project.clips, before.clips, "one undo: the original clips, ids included")
+
+        // inside a removed range nothing changes; a stretch across a cut speeds up the kept part only
+        var cut = recording
+        cut.clips = [ClipRange(start: 0, end: 3), ClipRange(start: 8, end: 19.2)]
+        XCTAssertEqual(cut.speedUp([ClipRange(start: 3.5, end: 7.5)]), 0)
+        XCTAssertEqual(cut.speedUp([ClipRange(start: 2.3, end: 6.7)]), 1)
+        XCTAssertEqual(cut.clips.map { [$0.start, $0.end, $0.speed] }, [[0, 2.3, 1], [2.3, 3, 4], [8, 19.2, 1]])
+    }
+
     // MARK: key presses (never stored)
 
     /// A file that still lists key presses opens, a file without the field opens, and saving writes an empty list:
