@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Loupecast · Mac screen recorder that zooms where you click</title>
-<meta name="description" content="A free, open-source macOS menu bar screen recorder that zooms in where you click and exports an MP4 or GIF in 16:9, 9:16 or 1:1.">
+<title>Loupecast · Free, open-source Screen Studio alternative</title>
+<meta name="description" content="Loupecast is a free, open-source Screen Studio alternative for macOS. It zooms where you click, redraws the cursor, and exports an MP4 or GIF, including 4K, 30 fps and on-device captions.">
 <meta name="keywords" content="Loupecast, Mac screen recorder, macOS screen recording, auto zoom, click zoom, free screen recorder, open source, Screen Studio alternative, menu bar app, webcam overlay, GIF export">
 <link rel="canonical" href="https://dunzkoi.github.io/loupecast/en/">
 <link rel="alternate" hreflang="ko" href="https://dunzkoi.github.io/loupecast/">
@@ -18,16 +18,16 @@
 <meta property="og:site_name" content="Loupecast">
 <meta property="og:locale" content="en_US">
 <meta property="og:locale:alternate" content="ko_KR">
-<meta property="og:title" content="Loupecast · Mac screen recorder that zooms where you click">
-<meta property="og:description" content="Zooms in where you click, cuts the parts you don’t need and exports an MP4 or GIF. Free and open source for macOS.">
+<meta property="og:title" content="Loupecast · Free, open-source Screen Studio alternative">
+<meta property="og:description" content="A free, open-source Screen Studio alternative for macOS. Zooms where you click, cuts the parts you don’t need and exports an MP4 or GIF.">
 <meta property="og:url" content="https://dunzkoi.github.io/loupecast/en/">
 <meta property="og:image" content="https://dunzkoi.github.io/loupecast/og-en.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="Illustration of the Loupecast editor next to the words “Mac screen recording that zooms where you click”">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Loupecast · Mac screen recorder that zooms where you click">
-<meta name="twitter:description" content="Zooms in where you click, cuts the parts you don’t need and exports an MP4 or GIF. Free and open source for macOS.">
+<meta name="twitter:title" content="Loupecast · Free, open-source Screen Studio alternative">
+<meta name="twitter:description" content="A free, open-source Screen Studio alternative for macOS. Zooms where you click, cuts the parts you don’t need and exports an MP4 or GIF.">
 <meta name="twitter:image" content="https://dunzkoi.github.io/loupecast/og-en.png">
 
 <link rel="icon" href="../favicon.svg" type="image/svg+xml">
@@ -43,7 +43,7 @@
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
   "name": "Loupecast",
-  "description": "A free, open-source macOS menu bar screen recorder that zooms in where you click, cuts the parts you don’t need and exports an MP4 or GIF in 16:9, 9:16 or 1:1.",
+  "description": "A free, open-source Screen Studio alternative for macOS. It zooms in where you click, cuts the parts you don’t need and exports an MP4 or GIF in 16:9, 9:16 or 1:1.",
   "url": "https://dunzkoi.github.io/loupecast/en/",
   "downloadUrl": "https://github.com/dunzkoi/loupecast/releases/latest/download/Loupecast.zip",
   "applicationCategory": "MultimediaApplication",
@@ -53,7 +53,7 @@
   "license": "https://opensource.org/licenses/MIT",
   "image": "https://dunzkoi.github.io/loupecast/og.png",
   "inLanguage": "en",
-  "featureList": ["Automatic zoom on click", "Cut editing from the keyboard", "16:9, 9:16 and 1:1 export", "Record an area", "Pause and resume", "Webcam overlay", "Zoom level and focus", "Speed up clips", "Background presets", "Fill the frame", "Volume", "GIF export", "Copy to clipboard", "Countdown before recording", "Record a window", "Smooth, larger cursor", "Click rings", "Motion blur", "Zoom in on typing", "Shortcut badges", "Background image", "Rename recordings", "4K, 30 fps and size limits", "On-device captions"],
+  "featureList": ["Automatic zoom on click", "Cut editing from the keyboard", "16:9, 9:16 and 1:1 export", "Record an area", "Pause and resume", "Webcam overlay", "Zoom level and focus", "Speed up clips", "Background presets", "Fill the frame", "Volume", "GIF export", "Copy to clipboard", "Countdown before recording", "Record a window", "Smooth, larger cursor", "Click rings", "Motion blur", "Zoom in on typing", "Shortcut badges", "Background image", "Rename recordings", "4K, 30 fps and size limits", "On-device captions", "Captions drawn on the video", "Speed up idle stretches", "Cursor fades when idle and presses on click"],
   "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
   "author": { "@type": "Person", "name": "Dunz Koi", "url": "https://github.com/dunzkoi" },
   "sameAs": ["https://github.com/dunzkoi/loupecast"]
@@ -109,8 +109,8 @@
 <section class="hero">
   <div class="wrap">
     <div>
-      <h1>Mac screen recording that <em>zooms where you click</em></h1>
-      <p class="lead">Loupecast is a free, open-source macOS menu bar recorder. Cut the parts you don’t need and export an MP4 or GIF in 16:9, 9:16 or 1:1.</p>
+      <h1>A free, open-source <em>Screen Studio</em> alternative</h1>
+      <p class="lead">Loupecast is a macOS menu bar recorder. Clicks become automatic zooms, you cut the parts you don’t need, and export an MP4 or GIF in 16:9, 9:16 or 1:1.</p>
       <div class="actions">
         <a class="btn btn-primary" href="https://github.com/dunzkoi/loupecast/releases/latest/download/Loupecast.zip"><svg class="icon" aria-hidden="true"><use href="#i-download-simple"/></svg>Download</a>
         <div class="cmd">
@@ -254,6 +254,9 @@
       <li><b>Rename recordings</b><span>Name a recording in the editor, and its exports take that name.</span></li>
       <li><b>4K, 30 fps and size limits</b><span>Export an MP4 in 4K, at 30 fps, or under 10 MB or 25 MB.</span></li>
       <li><b>On-device captions</b><span>The microphone is transcribed on this Mac and exported as an SRT file.</span></li>
+      <li><b>Captions on the video</b><span>Show Captions draws those lines at the bottom of the preview, the MP4 and the GIF.</span></li>
+      <li><b>Speed up idle stretches</b><span>The hare button plays every 3 seconds or more without cursor movement, a click, a shortcut, typing or speech at 4×. ⌘Z undoes it.</span></li>
+      <li><b>Cursor fades, then presses</b><span>Hide Idle Cursor fades the cursor out after it rests, and Press Cursor on Click presses it in. Both are on for new recordings.</span></li>
     </ul>
   </div>
 </section>
@@ -261,8 +264,8 @@
 <section id="compare">
   <div class="wrap compare">
     <div class="sec-head">
-      <h2>Compared with paid recorders</h2>
-      <p>Paid apps do more. If you need to record, add zooms, cut and export, Loupecast is enough.</p>
+      <h2>A free, open-source alternative to Screen Studio</h2>
+      <p>Screen Studio does more. If you need to record, add zooms, cut and export, Loupecast is enough.</p>
     </div>
     <div class="table-scroll">
       <table>
