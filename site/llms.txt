@@ -12,7 +12,7 @@ In English: Loupecast is a free, open-source (MIT) Screen Studio alternative: a 
 
 ## Pages
 
-- [Loupecast 홈](https://dunzkoi.github.io/loupecast/): 기능, 유료 녹화 앱과 비교, 설치 방법, 자주 묻는 질문
-- [Loupecast (English)](https://dunzkoi.github.io/loupecast/en/): features, comparison with paid recorders, install, FAQ
+- [Loupecast 홈](https://dunzkoi.github.io/loupecast/): 기능, Screen Studio와 비교, 설치 방법, 자주 묻는 질문
+- [Loupecast (English)](https://dunzkoi.github.io/loupecast/en/): features, comparison with Screen Studio, install, FAQ
 - [GitHub 저장소](https://github.com/dunzkoi/loupecast): 소스 코드, README, 이슈
 - [최신 릴리스](https://github.com/dunzkoi/loupecast/releases/latest): 다운로드와 변경 내역
