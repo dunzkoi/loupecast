@@ -1,5 +1,5 @@
 <h1 align="center">Loupecast</h1>
-<p align="center">A free, open-source macOS screen recorder that zooms in where you click, lets you cut the boring parts, and exports a polished MP4 or GIF in 16:9, 9:16 or 1:1.</p>
+<p align="center">A free, open-source Screen Studio alternative for macOS. Clicks become automatic zooms, you cut the boring parts, and export a polished MP4 or GIF in 16:9, 9:16 or 1:1.</p>
 <p align="center">
   <a href="https://dunzkoi.github.io/loupecast/en/">Website</a> ·
   <a href="https://github.com/dunzkoi/loupecast/releases/latest">Download</a> ·
@@ -16,7 +16,7 @@ With Homebrew:
 brew install --cask dunzkoi/tap/loupecast
 ```
 
-Or download `Loupecast.zip` from the [latest release](https://github.com/dunzkoi/loupecast/releases/latest), unzip it, and move `Loupecast.app` to `/Applications`.
+Or download [Loupecast.zip](https://github.com/dunzkoi/loupecast/releases/latest/download/Loupecast.zip) from the [latest release](https://github.com/dunzkoi/loupecast/releases/latest), unzip it, and move `Loupecast.app` to `/Applications`.
 
 > Loupecast is not notarized yet, so macOS may say the app "is damaged" or "can't be opened". Run this once:
 >
@@ -48,7 +48,7 @@ More:
 - Export a looping GIF from the arrow next to **Export**, and **Copy** the finished file to paste it into Slack, an issue or an email.
 - Recording starts after a 3-second countdown; **Esc** cancels it.
 - In **Record Area…**, click a window to record exactly that window.
-- The cursor is drawn over the recording, larger and smoother (**Effects** menu: **Cursor Size**, **Smooth Cursor Movement**).
+- The cursor is drawn over the recording, larger and smoother (**Effects** menu: **Cursor Size**, **Smooth Cursor Movement**). **Hide Idle Cursor** fades it out after it rests, and **Press Cursor on Click** presses it in on a click. Both are on for new recordings.
 - **Show Clicks** (in **Effects**) spreads a ring from every click in the video.
 - **Motion Blur** (in **Effects**, on for new recordings) blurs zooms and pans as they move.
 - **Zoom In on Typing** zooms to where the text goes while you type (on by default, needs Accessibility).
@@ -56,7 +56,8 @@ More:
 - Pick your own image as the background.
 - Rename a recording in the editor; exports are named after it.
 - The arrow next to **Export** also has MP4 4K, 30 fps and a file size limit (10 MB or 25 MB).
-- The captions button turns the microphone into captions, recognized on this Mac; export them as SRT from the arrow next to **Export**.
+- The captions button turns the microphone into captions, recognized on this Mac; export them as SRT from the arrow next to **Export**. **Show Captions** (in **Effects**) draws those lines at the bottom of the preview, the MP4 and the GIF.
+- The hare button (**Speed Up Idle Stretches**) plays every 3 seconds or more without cursor movement, a click, a shortcut, typing or speech at 4×. **⌘Z** undoes it.
 
 Menu toggles: **Record Microphone** (off by default), **Record Computer Audio** (on), **Hide Menu Bar in Video** (crops the menu bar out of the video, on).
 
