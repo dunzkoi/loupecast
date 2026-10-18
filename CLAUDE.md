@@ -36,6 +36,11 @@ swift build --build-tests && swift test   # Core ~0.1 s; Render 10-40 s, each ex
 - CI (`ci.yml`) builds, runs Core tests, runs Render tests (they skip themselves under `GITHUB_ACTIONS`: GitHub's
   macOS VMs have no video hardware), runs `build.sh` and checks the binary for developer paths. Anything touching
   render, export or the camera path needs `swift test --filter LoupecastRenderTests` locally.
+- The CI runner type-checks several times slower than an Apple Silicon Mac, so an expression that builds locally can
+  fail CI with "the compiler is unable to type-check this expression in reasonable time" (a8f949d, b7ed00c: tuple
+  `map` closures in tests). Before pushing, build with
+  `swift build --build-tests -Xswiftc -Xfrontend -Xswiftc -warn-long-expression-type-checking=300` and give any flagged
+  expression explicit closure parameter and return types or split it.
 - `ClipTests.testRealV1FilesLoad` skips unless `LOUPECAST_V1_DIR` points at copies of version-1 project files.
 - Verification hooks: environment variables `LOUPECAST_*`, all listed at the top of `Sources/Loupecast/Debug.swift`,
   on the debug binary `$(swift build --show-bin-path)/Loupecast`. Every run sets both `LOUPECAST_RECORDINGS_DIR` and
